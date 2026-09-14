@@ -1,0 +1,9 @@
+SOURCES:
+- /Amiga-Reverse/sanity-arte/out/modules/mod_002_c05ef2_26676.bin
+  sha1 9068130f600b107388827be820d3a7b79fa3877d
+  volcado por hook IMP! (specs/imp-dump.json idx 2)
+  base 0xC05EF2
+
+GENERADO POR:
+- toolkit + capstone (m68k skipdata) → mod_2_soslibrary.asm
+- análisis en notes.md (vectores Exec, primitivas internas, tags de módulo)
