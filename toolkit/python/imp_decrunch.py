@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
-"""imp_decrunch.py — Decruncher del formato "IMP!" de la demo Sanity-Arte.
+"""imp_decrunch.py — Decruncher del formato "IMP!" (File Imploder) de la demo Sanity-Arte.
 
-Port fiel del desensamblado del cruncher residente (RAM 0xC02426, hook IMP!).
-El formato es LZH/backward: el bloque "IMP!" se descomprime hacia atrás (src y
-dst decrecen). Validado contra los bloques del ADF (coincidencia 12/12 con el
-hook por l1; decodificación verificada al reproducir los módulos).
+ESTADO: FUNCIONAL vía `ancient` (temisu/ancient, compilado en toolkit/bin/ancient).
+El port Python de abajo es WIP/referencia. El formato IMP! = File Imploder de la
+escena Amiga (firma 0x494D5021, clones ATN!/EDAM/M.H.). Sanity usa IMP! SIN
+checksum estándar (en ancient: addition=0). Ver LECCIONES_APRENDIDAS.md.
 
-Geometría del bloque:
-  start:  "IMP!" + l1(long BE) + l2(long BE)
-  [start+12, start+l2): stream comprimido (leído hacia atrás desde start+l2)
-  trailer en start+l2: [12B header][long d2][word d3][28B tree]
+Uso (recomendado, vía ancient):
+  python imp_decrunch.py --ancient <adf> <offset-hex-de-IMP!> [--out <dest.bin>]
+Uso (port Python WIP):
+  python imp_decrunch.py <adf> <offset-hex-de-IMP!> [--out <dest.bin>]
 
-El destino de salida va de `start` a `start+l1`. El header (12 B) se escribe en
-[start, start+12) invertido (el 68k usa -(a0)).
-
-ESTADO: WIP — la geometría (l1/l2/trailer, d3 como bit-buffer inicial, a3
-compartido copia+bitreader, decrunch in-place) está implementada y probada, pero
-el output aún no reproduce mod_9 exacto (falla la cabecera/orden inicial del
-destino). Pendiente: confirmar si el header del trailer se escribe al inicio del
-destino o el bloque SOS tiene un desplazamiento previo.
+Formato:
+  [0x00] "IMP!" (o clon)
+  [0x04] rawSize (tamaño descomprimido) — long BE
+  [0x08] endOffset (fin de datos comprimidos) — long BE, siempre par
+  [0x0C .. endOffset) stream comprimido
+  [endOffset+0x00] 3 longs (long3, long2, long1)  -> cabecera "reordenada"
+  [endOffset+0x0C] litLength inicial (long BE)
+  [endOffset+0x10] markerByte (1B)
+  [endOffset+0x11] anchor halfByte (1B)
+  [endOffset+0x12] tabla distancias: 8 words BE (16 B)
+  [endOffset+0x22] tabla extra bits: 12 bytes
+  [endOffset+0x2E] checksum (long BE, addition=7 para IMP!)
 
 Uso:
-  python imp_decrunch.py <adf> <offset-hex-de-IMP!>
-  python imp_decrunch.py --out <dest.bin> <adf> <offset-hex>
+  python imp_decrunch.py <adf> <offset-hex-de-IMP!> [--out <dest.bin>]
 """
 
 import sys
@@ -32,163 +35,233 @@ def u16(b, o): return b[o] << 8 | b[o + 1]
 def u32(b, o): return (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]
 
 
-class Bits:
-    """Bit reader hacia atrás. Replica d3 del 68k (add.b d3,d3 / refill addx)."""
+class IMPInputStream:
+    """Stream hacia atrás con el 'funny ordering' de los primeros 12 bytes.
+    Trabaja con offsets RELATIVOS al bloque; `base` es el offset del bloque en
+    el fichero (para acceder al buffer)."""
 
-    __slots__ = ("src", "pos", "buf")
+    __slots__ = ("buffer", "base", "currentOffset", "endOffset", "refOffset")
 
-    def __init__(self, src, pos, buf=0):
-        self.src = src      # bytearray origen
-        self.pos = pos      # índice (decrece)
-        self.buf = buf & 0xFF  # buffer de 8 bits (d3, add.b -> byte bajo)
+    def __init__(self, buffer, base, startOffset, endOffset):
+        self.buffer = buffer
+        self.base = base
+        self.currentOffset = endOffset
+        self.endOffset = startOffset
+        self.refOffset = endOffset
 
-    def getbit(self):
-        # add.b d3,d3 -> C = old bit7 ; d3 <<= 1 ; si d3==0: refill
-        bit = (self.buf >> 7) & 1
-        self.buf = (self.buf << 1) & 0xFF
-        if self.buf == 0:
-            self.pos -= 1
-            new = self.src[self.pos]
-            # addx.b d3,d3 con d3=0: d3 = new<<1 | X (X = ultimo bit leido)
-            self.buf = ((new << 1) | bit) & 0xFF
-        return bit
+    def sourceOffset(self, i):
+        if i >= 12:
+            return i
+        if i < 4:
+            return i + self.refOffset + 8
+        if i < 8:
+            return i + self.refOffset
+        return i + self.refOffset - 8
 
-    def getbyte(self):
-        # move.b -(a3), dN : lee un byte crudo del origen
-        self.pos -= 1
-        return self.src[self.pos]
+    def readByte(self):
+        if self.currentOffset <= self.endOffset:
+            raise ValueError("IMP: eof al leer byte")
+        self.currentOffset -= 1
+        return self.buffer[self.base + self.sourceOffset(self.currentOffset)]
+
+    def eof(self):
+        return self.currentOffset == self.endOffset
 
 
-def decrunch(blk, start):
-    if blk[start:start + 4] != b"IMP!":
+class MSBBitReader:
+    """Lee bits MSB-first; recarga byte del stream cuando se agota."""
+
+    __slots__ = ("stream", "bitBuffer", "bitCount")
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.bitBuffer = 0
+        self.bitCount = 0
+
+    def reset(self, value, count):
+        self.bitBuffer = value
+        self.bitCount = count
+
+    def readBits8(self, count):
+        val = 0
+        for _ in range(count):
+            if self.bitCount == 0:
+                self.bitBuffer = self.stream.readByte()
+                self.bitCount = 8
+            self.bitCount -= 1
+            val = (val << 1) | ((self.bitBuffer >> self.bitCount) & 1)
+        return val
+
+
+# Tabla Huffman estática de la longitud (lldDecoder)
+LLD = {  # code, bits -> valor
+    0b0: 0,        # 1 bit   '0'
+    0b10: 1,       # 2 bits  '10'
+    0b110: 2,      # 3 bits  '110'
+    0b1110: 3,     # 4 bits  '1110'
+    0b11110: 4,    # 5 bits  '11110'
+    0b11111: 5,    # 5 bits  '11111'
+}
+LLD_BITS = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 5}
+
+LLD2 = {  # lldDecoder2
+    0b0: 0,   # '0'
+    0b10: 1,  # '10'
+    0b11: 2,  # '11'
+}
+LLD2_BITS = {0: 1, 1: 2, 2: 2}
+
+LITERAL_LENGTHS = [6, 10, 10, 18]
+LITERAL_BITS = [
+    [1, 1, 1, 1],
+    [2, 3, 3, 4],
+    [4, 5, 7, 14],
+]
+
+
+def decode_ll(bitreader):
+    """Decodifica lldDecoder (intertwined): devuelve (selector, count)."""
+    val = 0
+    bits = 0
+    got = None
+    while got is None:
+        b = bitreader.readBits8(1)
+        val = (val << 1) | b
+        bits += 1
+        if val in LLD and bits == LLD_BITS[LLD[val]]:
+            got = LLD[val]
+    selector = got if got < 4 else 3
+    count = got + 2
+    if count == 6:
+        count += bitreader.readBits8(3)
+    elif count == 7:
+        count = bitreader.readBits8(8)
+        if not count:
+            raise ValueError("IMP: match_len=0")
+    return selector, count
+
+
+def decode_ll2(bitreader):
+    """Decodifica lldDecoder2."""
+    val = 0
+    bits = 0
+    got = None
+    while got is None:
+        b = bitreader.readBits8(1)
+        val = (val << 1) | b
+        bits += 1
+        if val in LLD2 and bits == LLD2_BITS[LLD2[val]]:
+            got = LLD2[val]
+    return got
+
+
+def decrunch(data, start):
+    """Descomprime el bloque IMP! que empieza en `start` de `data`.
+
+    Devuelve los bytes descomprimidos (rawSize de longitud).
+    """
+    if data[start:start + 4] != b"IMP!":
         raise ValueError("no IMP! en start")
-    l1 = u32(blk, start + 4)   # destino  = start + l1
-    l2 = u32(blk, start + 8)   # origen   = start + l2
-    src_end = start + l2
+    raw_size = u32(data, start + 4)
+    end_offset = u32(data, start + 8)
+    if end_offset & 1:
+        raise ValueError("endOffset impar")
 
-    # trailer
-    p = src_end
-    header = blk[p:p + 12]; p += 12
-    d2 = u32(blk, p); p += 4
-    d3 = u16(blk, p); p += 2
-    tree = blk[p:p + 28]; p += 28
+    # --- input stream con funny ordering (offsets relativos al bloque) ---
+    stream = IMPInputStream(data, start, 0, end_offset)
 
-    src = src_end
-    if not (d3 & 0x8000):
-        src -= 1
-
-    T0 = bytes([0x06, 0x0a, 0x0a, 0x12, 0x01, 0x01, 0x01, 0x01])  # 0xC02574
-    T1 = bytes([0x01, 0x01, 0x01, 0x01, 0x02, 0x03, 0x03, 0x04, 0x04, 0x05, 0x07, 0x0e])  # 0xC02578
-
-    dst = start + l1
-    dst_start = start
-    bits = Bits(blk, src)
-
-    # El 68k descomprime IN-PLACE sobre el bloque compartido. Copiamos el bloque
-    # completo a un buffer de trabajo; el destino ocupa [start, start+l1) y el
-    # origen comprimido yace más allá (los matches pueden leer de esa zona).
-    buf = bytearray(blk)
-    # header: 3 longs escritos con -(a0) quedan invertidos en [start,start+12)
-    # long0 del trailer -> start+8, long1 -> start+4, long2 -> start
-    for k in range(3):
-        buf[start + (2 - k) * 4: start + (3 - k) * 4] = header[k * 4:(k + 1) * 4]
-
-    # En el 68k, a3 es UN SOLO puntero usado tanto por la copia directa como por
-    # el bit reader. Compartimos la posición con el bit reader. d3 (buffer de
-    # bits) arranca con el word del trailer.
-    bits = Bits(blk, src, d3)
-
-    while True:
-        # copia directa: d2 veces move.b -(a3),-(a4)
-        while d2:
-            src -= 1
-            dst -= 1
-            buf[dst] = buf[src]
-            d2 -= 1
-        bits.pos = src  # a3 compartido
-        # cmpa.l a4,a0 ; bcs -> decodificar ; si a4 <= a0 -> fin
-        if dst <= dst_start:
+    # --- inicializar bit reader: anchor bit en endOffset+17 ---
+    bitreader = MSBBitReader(stream)
+    half_byte = data[start + end_offset + 17]
+    for i in range(7):
+        if half_byte & (1 << i):
+            bitreader.reset(half_byte >> (i + 1), 7 - i)
             break
 
-        # --- longitud (0xC0247E) ---
-        if bits.getbit() == 0:
-            d4 = 2; d0 = 0
-        elif bits.getbit() == 0:
-            d4 = 3; d0 = 1
-        elif bits.getbit() == 0:
-            d4 = 4; d0 = 2
-        elif bits.getbit() == 0:
-            d4 = 5; d0 = 3
-        elif bits.getbit() == 0:
-            d4 = bits.getbyte(); d0 = 3
-            src = bits.pos
-        else:
-            d4 = 6
-            for _ in range(3):
-                d4 = (d4 << 1) | bits.getbit()
-            d4 &= 0xFF
-            d0 = 3
-        src = bits.pos
+    # --- tablas de distancia desde endOffset+18 ---
+    distance_values = [[0] * 4 for _ in range(2)]
+    for i in range(8):
+        distance_values[i >> 2][i & 3] = u16(data, start + end_offset + 18 + i * 2)
+    distance_bits = [[0] * 4 for _ in range(3)]
+    for i in range(12):
+        distance_bits[i >> 2][i & 3] = data[start + end_offset + 34 + i]
 
-        # --- distancia (0xC024F0) ---
-        d5 = 0
-        d1 = d0
-        if bits.getbit() == 0:
-            pass
-        elif bits.getbit() == 0:
-            d5 = 2
-            d0 += 4
-        else:
-            d5 = T0[d0]
-            d0 += 8
-        d0 = T1[d0]
-        d2 = 0
-        for _ in range(d0):
-            d2 = (d2 << 1) | bits.getbit()
-        d2 += d5
+    # --- output: decrunch in-place sobre el bloque (el match puede leer del
+    # origen comprimido más allá del destino, como hace el 68k) ---
+    buf = bytearray(data)           # copia del bloque completo
+    o = start + raw_size            # puntero de salida (absoluto en buf), decrece
+    dst_start = start
 
-        # --- puntero de match (0xC02528) ---
-        d5 = 0
-        a2 = 0
-        d0 = d1
-        if bits.getbit() == 0:
-            pass
-        else:
-            d1 += d1
-            if bits.getbit() == 0:
-                a2 = u16(tree, d1)
-                d0 += 4
-            else:
-                a2 = u16(tree, d1 + 8)
-                d0 += 8
-        d0 = tree[0x10 + d0]
-        d5 = 0
-        for _ in range(d0):
-            d5 = (d5 << 1) | bits.getbit()
-        a2 = a2 + 1 + d5
-        # a2 += a4 ; move.b -(a2),-(a4) d4 veces (in-place)
-        a2_abs = dst + a2
-        for _ in range(d4):
-            a2_abs -= 1
-            dst -= 1
-            buf[dst] = buf[a2_abs]
-        src = bits.pos  # a3 compartido con el bit reader
+    def write_byte(v):
+        nonlocal o
+        o -= 1
+        buf[o] = v
 
-    return bytes(buf[dst_start:start + l1])
+    lit_length = u32(data, start + end_offset + 12)
+
+    while True:
+        for _ in range(lit_length):
+            write_byte(stream.readByte())
+        if o <= dst_start:
+            break
+
+        # intertwined Huffman
+        selector, count = decode_ll(bitreader)
+
+        i1 = decode_ll2(bitreader)
+        ll = i1 + i1
+        if ll == 4:
+            ll = LITERAL_LENGTHS[selector]
+        ll += bitreader.readBits8(LITERAL_BITS[i1][selector])
+
+        i2 = decode_ll2(bitreader)
+        distance = 1 + ((distance_values[i2 - 1][selector]) if i2 else 0) + \
+            bitreader.readBits8(distance_bits[i2][selector])
+
+        # copiar match: count bytes hacia atrás desde o+distance (in-place)
+        src = o + distance
+        for _ in range(count):
+            src -= 1
+            o -= 1
+            buf[o] = buf[src]
+
+        lit_length = ll
+
+    return bytes(buf[dst_start:start + raw_size])
 
 
 def main():
     args = sys.argv[1:]
     outfile = None
+    use_ancient = False
+    if args and args[0] == "--ancient":
+        use_ancient = True
+        args = args[1:]
     if args and args[0] == "--out":
-        outfile = args[1]; args = args[2:]
+        outfile = args[1]
+        args = args[2:]
     if len(args) < 2:
         print(__doc__)
         sys.exit(2)
     fn, off_s = args[0], args[1]
     off = int(off_s, 0)
-    blk = bytearray(open(fn, "rb").read())
-    result = decrunch(blk, off)
+    data = bytearray(open(fn, "rb").read())
+    if use_ancient:
+        # usa toolkit/bin/ancient/ancient.exe (compilado, verificado)
+        import subprocess, os
+        eo = u32(data, off + 8)
+        blk = bytes(data[off:off + eo + 0x32])
+        tmp_in = os.path.join(os.environ.get("TEMP", "."), "imp_in.bin")
+        tmp_out = os.path.join(os.environ.get("TEMP", "."), "imp_out.bin")
+        open(tmp_in, "wb").write(blk)
+        ancient = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "ancient", "ancient.exe")
+        r = subprocess.run([ancient, "decompress", tmp_in, tmp_out], capture_output=True, text=True)
+        if os.path.exists(tmp_out):
+            result = open(tmp_out, "rb").read()
+        else:
+            raise RuntimeError(f"ancient fallo: {r.stderr[:200]}")
+    else:
+        result = decrunch(data, off)
     print(f"descomprimido {len(result)} bytes")
     if outfile:
         open(outfile, "wb").write(result)

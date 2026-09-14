@@ -178,6 +178,17 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   entre la copia directa y el bit reader (sincronizar la posición entre ambos); (3) el decrunch es
   **in-place** sobre el bloque (el match puede leer del origen comprimido más allá del destino);
   (4) `add.b d3,d3` opera en byte bajo. Pendiente: orden del header del trailer en el destino.
+- **El formato `IMP!` es File Imploder (formato conocido de la escena Amiga)**: firma
+  `0x494D5021`, clones `ATN!/EDAM/M.H.`. No reinventar: usar la librería **`ancient`**
+  (temisu/ancient, C++17, licencia BSD) que lo descomprime verificado. Compilar:
+  `g++ -std=c++17 -O2 -Iancient -Iancient/api -Iancient/api/ancient main.cpp src/*.cpp src/common/*.cpp`.
+  Copiar `libstdc++-6.dll`/`libgcc_s_seh-1.dll`/`libwinpthread-1.dll` junto al exe.
+- **Sanity usa IMP! SIN checksum estándar**: `ancient` falla por checksum (`addition=7`); en
+  `IMPDecompressor.cpp` poner `addition=0` para los bloques SOS. Tras esto, decrunching de los 41
+  bloques del ADF **exacto** (sha1 coincide con los 12 volcados por el hook).
+- **El `size` del directorio SOS NO es el tamaño descomprimido del bloque IMP!**: ninguno de los
+  41 bloques decrunchados coincide con los `size` del directorio. El directorio es la tabla de
+  nombres/lógica del loader; los datos reales están en los bloques IMP! (mapeados por `l1`).
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).
