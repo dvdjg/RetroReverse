@@ -1,0 +1,17 @@
+{
+  "_comentario": "Spec de enganche para el trampoline de decrunch SOS (CrM!/CrM2) de Sanity-Arte. Base en Slow RAM 0xC02584 (se localiza por firma).",
+  "patternHex": "48e7fffe20184bfa0026b0bc43724d21670c4bfa0112b0bc43724d32660a4a582218241824484e95",
+  "parseOffset": "0x26",
+  "retOffset": "0x28",
+  "destReg": "A1",
+  "lenReg": "D1",
+  "metaReg": "A0",
+  "searchStart": "0xc00000",
+  "searchSize": "0x80000",
+  "maxSeconds": 90,
+  "chunk": 4096,
+  "allowed": [
+    { "start": "0x400", "end": "0x80000" },
+    { "start": "0xc00000", "end": "0xe00000" }
+  ]
+}

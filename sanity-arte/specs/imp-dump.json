@@ -1,0 +1,20 @@
+{
+  "_comentario": "Hook del cruncher IMP! (modo routine) de Sanity-Arte. Entrada 0xC02426; destino=A0 (cabecera), longitud=long en cabecera+4. Descubierto con probe-layout.mjs.",
+  "patternHex": "48e73c38264828480c98494d5021",
+  "parseOffset": "0x0",
+  "retOffset": "0x50",
+  "destReg": "A0",
+  "destOffset": "0x0",
+  "destMagicHex": "494d5021",
+  "lenHeaderReg": "A0",
+  "lenHeaderOffset": "0x4",
+  "metaReg": "A0",
+  "searchStart": "0xc00000",
+  "searchSize": "0x80000",
+  "maxSeconds": 150,
+  "chunk": 4096,
+  "allowed": [
+    { "start": "0x400", "end": "0x80000" },
+    { "start": "0xc00000", "end": "0xe00000" }
+  ]
+}

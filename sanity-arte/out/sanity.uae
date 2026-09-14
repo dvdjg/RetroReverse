@@ -1,0 +1,17 @@
+; Sanity - Arte (1993): A500 OCS, Kickstart 1.3, 512K chip + 512K slow
+quickstart=a500,1
+cpu_type=68000
+chipset=ocs
+chipmem_size=1
+bogomem_size=2
+ntsc=false
+kickstart_rom_file=C:\Amiga\KICK13.rom
+floppy0=C:\Users\dvdjg\Documents\programa\AI\Amiga\Amiga-Reverse\sanity-arte\out\disk\sanity-arte.adf
+floppy0type=0
+; No capturar el cursor del raton (no robar el raton del sistema)
+win32.start_not_captured=yes
+win32.active_capture_automatically=no
+win32.absolute_mouse=yes
+win32.nonotificationicon=yes
+absolute_mouse=none
+use_gui=no

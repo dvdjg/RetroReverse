@@ -1,0 +1,15 @@
+{
+  "_comentario": "Sondeo del cruncher IMP! de Sanity-Arte: averiguar dónde/cuánto escribe. Rutina en 0xC02426 (se localiza por firma).",
+  "entryPatternHex": "48e73c38264828480c98494d5021",
+  "retOffset": "0x50",
+  "headerReg": "A0",
+  "headerMagics": ["494d5021"],
+  "lenOffsets": ["0x4", "0x8"],
+  "searchStart": "0xc00000",
+  "searchSize": "0x80000",
+  "regions": [
+    { "start": "0x0", "end": "0x80000" },
+    { "start": "0xc00000", "end": "0xc80000" }
+  ],
+  "minRun": 16
+}
