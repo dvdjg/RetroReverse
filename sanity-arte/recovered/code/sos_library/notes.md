@@ -26,6 +26,17 @@ Implicación: los bloques pares NO contienen las rutinas de efecto por separado;
 estas librerías o en los bloques de datos (1,3,5,7,9,11). sos.library solo toca el chipset en
 `$DFF002` (VPOSR) y `$DFF09C` (reset inten) — es el **OS**, no el render.
 
+## Confirmación: sos.library es un OS por vectores (mod_004)
+
+- mod_004 (34956 B, 12220 insns) usa **0 llamadas `bsr`/`jsr` directas a subrutinas locales**:
+  toda la lógica se invoca por vectores indirectos (`jsr (a6)`, `jsr (a5)`, `jsr (a0)`). Confianza
+  **alta** (análisis de targets de salto).
+- Mismos vectores Exec que mod_2 (AllocMem/FreeMem/MakeLibrary/AllocVec/FindLibrary/FindTask/
+  Forbid/Permit) + misma resolución de módulos por tag (`-$138` con `move.l #$44425547 ("DBUG")`).
+- Conclusión: las **rutinas de efecto NO están en sos.library**. Están en los módulos SOS del
+  directorio no volcados (los `SOS*` y `main`), crunched en el ADF. Obtenerlos requiere el
+  decruncher IMP! (WIP en `toolkit/python/imp_decrunch.py`).
+
 ## Estructura
 
 ```
