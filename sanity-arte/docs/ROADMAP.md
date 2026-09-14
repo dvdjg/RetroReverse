@@ -4,6 +4,18 @@ Estados: `HECHO` · `EN CURSO` · `PENDIENTE` · `BLOQUEADO`.
 Cada fase indica su **criterio de cierre** (evidencia que la da por terminada) y las
 dependencias.
 
+## Objetivo final (visión) — CONFIRMADO
+- **Recuperar las técnicas gráficas de la demo** (no solo los datos): comprender el ensamblador
+  68k extraído, **inferir los programas C++ más aproximados**, regenerar una versión de alto
+  nivel, y **volver a construir la misma demo desde el código fuente**.
+- La reimplementación debe ser **código C++ propio** (técnicas y algoritmos, no copia literal del
+  68k). El ensamblador es la fuente de conocimiento; se usa solo para las partes críticas si es
+  imprescindible.
+- El énfasis está en **los efectos gráficos** (título, corridor, etc.) y en cómo la demo los
+  orquesta (bucle de frame, Copper, blitter, sincronía).
+- **Cierre del objetivo**: una versión reconstruida en C++ que reproduce la demo (o sus efectos
+  clave) ejecutable en el engine propio, trazable a los hallazgos de `recovered/`.
+
 ## Fase 0 — Extracción del disco — HECHO
 - Portar xDMS (`WinUAE-DBG/archivers/dms`) a `tools/dms_unpack.py` (modos NOCOMP/SIMPLE/QUICK/
   MEDIUM/DEEP/HEAVY1-2).

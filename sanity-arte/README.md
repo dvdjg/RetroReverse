@@ -3,6 +3,12 @@
 Plataforma: **Amiga 500 OCS/ECS** (Kickstart 1.3). Origen: `Sanity-Arte.dms`.
 Objetivo: recuperar las **técnicas** del demo y reimplementarlas en C++ (`reimpl/`).
 
+**Objetivo confirmado**: el interés principal son las **técnicas gráficas** de la demo. El flujo es
+comprender el ensamblador 68k extraído -> inferir los programas C++ más aproximados -> regenerar
+una versión de alto nivel -> **volver a construir la misma demo desde el código fuente** en el
+engine propio. El ensamblador se usa como fuente de conocimiento y solo para las partes críticas
+si es imprescindible (detalle en `docs/ROADMAP.md`).
+
 Estructura y reglas generales: [`../STRUCTURE.md`](../STRUCTURE.md).
 Método reutilizable: [`../LECCIONES_APRENDIDAS.md`](../LECCIONES_APRENDIDAS.md).
 
