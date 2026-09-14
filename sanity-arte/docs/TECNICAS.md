@@ -158,6 +158,24 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
 - Coste: 3 muls por componente = 9 muls por punto (sin FP). Adecuado para estrellas/polígonos en
   68000.
 
+## Túnel con textura mapeada (bloque 0x03AFFC)
+
+- Evidencia: `out/modules_all/blk_03AFFC_102852.bin` (descomprimido del ADF 0x03AFFC,
+  track 21, l1=102852). Buffer del efecto. Confianza **media** (estructura parcial).
+- Descripción (confirmada por comentarios de pouet): **texture-mapped tunnel de un solo pixel
+  a 50 Hz** — un túnel de profundidad donde cada columna/pixel del anillo se calcula con
+  trigonometría (tabla SINE) y se mapea una textura. Es el efecto de apertura de «Arte».
+- El bloque empieza con cabecera `[1d 01 ff fe]` (4 B) + configuración de display:
+  `DIWSTRT=$2981, DIWSTOP=$29C1, DDFSTRT=$38, DDFSTOP=$D0, BPLCON0=$5200` (5 planos, 320 px).
+- **Formato compacto de copperlist SOS**: los MOVE se guardan como `[00][reg][valor.word]`
+  (3 bytes) en vez del formato estándar `[0x01|reg][valor]` (4 bytes). El `00` sustituye al
+  opcode `0x01`. Confianza media (deducido de la estructura, pendiente confirmar con el loader).
+- La mayor parte del bloque (102852 B) son datos: textura del túnel + tabla de profundidad/
+  ángulos precalculada (el túnel precalcula la geometría por frame en tablas).
+- Receta para el engine: el túnel 3D se puede hacer con una tabla de ángulos por columna y una
+  textura; por frame se actualizan los punteros BPL/Copper. El pre-cálculo en tablas evita
+  trigonometría en el bucle caliente.
+
 ## Pendiente
 
 - Efectos concretos (3D, corridor, blitter) y su algoritmo.

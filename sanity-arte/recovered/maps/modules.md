@@ -119,6 +119,23 @@ Mapa completo: `recovered/maps/sos_directory.json`.
 rutina `SOSloadmodule` (cómo usa la tabla, incluyendo la semántica física de `track`/`offset`) y
 asociar el resto de bloques.
 
+## Clasificación final de los 41 bloques IMP! del ADF
+
+Los 41 bloques descomprimidos (`out/modules_all/`) se clasifican así (mapa completo en
+`out/modules_all/index.json`):
+
+| Clase | Bloques | Qué son |
+|---|---|---|
+| **sos.library (código)** | 0x02162C, 0x026A2C, 0x03242C, 0x03562C, 0x04382C, 0x04862C, 0x04BC28, 0x078A2C, 0x07E42C, 0x08B028, 0x096A28, 0x099A2C, 0x0A3C2C, 0x0A502C, 0x0B0C2C, + pequeños | runtime SOS (OS) + motores de efecto embebidos |
+| **copper+datos** | 0x01DDE8, 0x03AFFC, 0x0ADB04, 0x076844, 0x0ACE9C + pequeños | copperlist compacta + datos de efecto (texturas/tablas) |
+| **datos** | 0x00455C, 0x04EFE8, 0x08E91C, 0x0973D0 | tablas |
+| **display-data** | 0x09A940 | buffer de display (plasma) |
+| **IFF** | (ninguno confirmado) | — |
+
+Nota: todos los bloques de código son **variantes de sos.library** (mismo header jmp+"sos"),
+cada una con un subconjunto distinto de rutinas. El motor 3D está en 0x0B0C2C, el scrolltext en
+0x02162C, el fade en 0x0B0C2C.
+
 ## Asociación bloque IMP! del ADF ↔ módulo volcado (12/12 confirmado)
 
 Cada bloque IMP! del disco tiene un header con `l1` (tamaño descomprimido) y `l2` (tamaño
