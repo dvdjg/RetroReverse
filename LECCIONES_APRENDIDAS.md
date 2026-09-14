@@ -173,6 +173,11 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   (tracks del directorio 0–13 vs tracks reales de los bloques 14–69). El campo `track`/`offset`
   del directorio es un índice lógico del loader; para localizar el dato físico hay que usar la
   tabla de bloques IMP!.
+- **Detalles del decruncher `IMP!` (port a Python)**: (1) el bit-reader usa `d3` como buffer de
+  8 bits, y **arranca con el word del trailer** (no con 0); (2) `a3` es UN solo puntero compartido
+  entre la copia directa y el bit reader (sincronizar la posición entre ambos); (3) el decrunch es
+  **in-place** sobre el bloque (el match puede leer del origen comprimido más allá del destino);
+  (4) `add.b d3,d3` opera en byte bajo. Pendiente: orden del header del trailer en el destino.
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).
