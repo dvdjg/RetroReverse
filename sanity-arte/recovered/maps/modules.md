@@ -28,11 +28,26 @@ hook captura **cada** decodificación aunque el buffer se sobreescriba después.
 ### Clasificación por cabecera
 
 - **Código / librerías SOS** (empiezan `4E F9 00 00 00 10 4E F9 00 00 00 9A 73 6F 73 00` = dos
-  `jmp` + `"sos"`): bloques **0, 2, 4, 6, 8, 10**.
-- **Copperlists / datos de display** (empiezan con una lista `move.w` a `$dff08e/090/092/094/100…`):
-  bloques **1, 3, 5, 7, 9, 11**. Decodificadas en `recovered/media/copper/*.copper.txt`
-  (p. ej. `mod_003` = `BPLCON0=$5600` = 5 planos, `BPL1MOD=-40`; el demo parchea los punteros de
-  bitplanes en runtime, por eso aparecen a 0 en la copia almacenada).
+  `jmp` + `"sos"`): bloques **0, 2, 4, 6, 8, 10**. Son **la misma `sos.library`** recargada en
+  distintos destinos (los 6 primeros bytes son idénticos); difieren en tamaño = distintas
+  versiones/extensiones (mod_4 = 34956 B es la más completa). Confianza **alta** (mismo header,
+  mismos vectores Exec).
+- **Bloques de datos de display** (1, 3, 5, 7, 9, 11): NO son copperlists puras. Empiezan con un
+  **byte de cabecera** (`0x1A`/`0x08`/`0x10`/`0x1D` = nº de líneas o contador) seguido de una
+  instrucción Copper `01 ff fe` (WAIT fin) y 2-4 MOVE iniciales a `$dff08e/090/092/094/100`, pero
+  el resto del bloque son **datos** (solo 0-2% de copper moves). Confianza **media**: el inicio es
+  claramente una Copperlist corta de configuración, pero el cuerpo son datos de efecto
+  (bitplanes/tablas/música) no listas de Copper. **La clasificación previa como copperlist era
+  incorrecta** y se corrige aquí.
+  - `mod_001` (0x07B3C4, 2428 B): cabecera `0x1A`; inicio `DIWSTRT=$2981 DIWSTOP=$29C1
+    DDFSTRT=$38 DDFSTOP=$D0 BPLCON0=$5200` (5 planos, mod 0).
+  - `mod_003` (0x26614, 6108 B): cabecera `0x08`; `BPLCON0=$5600` (5 planos), `BPL1MOD=$FFD8
+    (=-40)`, `BPL2MOD=$FFD8`. Es la lista que aparecía en `COP1LC`.
+  - `mod_005` (0x07A6B4, 5764 B): cabecera `0x10`; `DDFSTRT=$50 DDFSTOP=$B8` (≈360 px), 5 planos.
+  - `mod_007` (0x26614, 102852 B): cabecera `0x1D`; bloque **mixto** — 392 copper moves dispersos
+    + 23 WAIT-fín (listas encadenadas) + datos. Candidato al buffer del efecto principal
+    (título/corridor). Confianza media.
+  - `mod_009`/`mod_011` (324/332 B): pequeños, cabecera `0x10`; fragmentos.
 - El bloque **3 (`0x26614`)** es la Copperlist que aparecía en `COP1LC` en las capturas de display.
 
 Ficheros en `out/modules/mod_<n>_<addr>_<len>.bin` + índice `out/modules/modules.json` (dest, len,

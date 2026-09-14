@@ -6,6 +6,26 @@
 - **Volcado**: hook `IMP!` (`specs/imp-dump.json`, bloque idx 2)
 - **Desensamblado**: `mod_2_soslibrary.asm` (capstone, m68k, skipdata; 8160 insns)
 
+## Variantes de sos.library (mod_0/2/4/6/8/10)
+
+Los 6 bloques "sos.library" son **la misma librería recargada en destinos distintos**, no módulos
+diferentes. Evidencia: los primeros 64 B son **byte-idénticos** (2 `jmp` + `"sos\0"` + arranque
+Exec), y todos usan el mismo conjunto de vectores `jsr -$xx(a6)` (incluida la carga de `DBUG` vía
+`-$138`). Confianza **alta**.
+
+| bloque | dest | len | notas |
+|---|---|---|---|
+| mod_0 | 0xC5CBB2 | 114408 | versión más grande (runtime completo) |
+| mod_2 | 0xC05EF2 | 26676 | la analizada aquí |
+| mod_4 | 0xC70212 | 34956 | versión extendida |
+| mod_6 | 0xC05EF2 | 1152 | fragmento/re-carga corta |
+| mod_8 | 0xC706A2 | 33784 | — |
+| mod_10 | 0xC05EF2 | 21100 | versión compacta |
+
+Implicación: los bloques pares NO contienen las rutinas de efecto por separado; están dentro de
+estas librerías o en los bloques de datos (1,3,5,7,9,11). sos.library solo toca el chipset en
+`$DFF002` (VPOSR) y `$DFF09C` (reset inten) — es el **OS**, no el render.
+
 ## Estructura
 
 ```
