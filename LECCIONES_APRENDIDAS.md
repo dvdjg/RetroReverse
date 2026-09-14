@@ -105,6 +105,17 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   `WINUAE_GDB_PORT` (default 2345 intacto). Antes de recompilar, **backup del `.exe`**; el deploy
   a extensiones en uso puede fallar (bien: no se pisa su binario).
 - **Cerrar en cuanto no se necesite**: una instancia persistente solo mientras dura la tarea.
+- **La ventana debe quedar en primer plano para que WinUAE complete el arranque**: si se lanza
+  minimizada/oculta, el boot no termina de arrancar (no abre el stub GDB/canal lateral). Lanzar
+  **sin** `-WindowStyle Minimized` y dejar la ventana visible.
+- **Las instancias solo responden si están en primer plano**: no minimizarlas mientras se trabaja
+  con GDB/canal lateral.
+- **`.session.json` puede quedar con una sesión fantasma** (PID muerto pero registrado): si los
+  puertos quedan "ocupados" por una sesión que ya no existe, las nuevas instancias no abren el
+  stub. Al detectar puertos ocupados sin proceso vivo, **limpiar `.session.json`** y relanzar.
+- **El detach de GDB (`D` o `k`) cierra el stub**: tras `detach` el proceso sigue vivo pero deja de
+  escuchar en 2445. Para sesiones largas, hacer todo el flujo (pausar -> watchpoint -> continuar
+  -> esperar hit -> leer registros) en **un único script GDB** sin detach al final.
 
 ## 5. Trampas de entorno (Windows/PowerShell)
 
@@ -140,6 +151,23 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **Los buffers se reutilizan**: un mismo destino con longitudes distintas = módulos distintos que
   comparten hueco. Enganchar la rutina captura cada decodificación aunque luego se sobreescriba;
   deduplicar por `sha1`.
+- **Formato de módulo SOS en el disco (bloques `IMP!`)**: en el ADF los módulos se guardan
+  comprimidos y empiezan con un header previo a la firma:
+  `[long tipo 0x40000000/0] [long tamaño? 0x03/0x3F2] [long 0x04E9 const] [long tamañoX] "IMP!" [long1] [long2] ...`
+  `0x04E9` (1257) es una constante que precede a cada bloque `IMP!`. El decruncher (0xC02426)
+  hace `cmpi.l #'IMP!',(a0)+; adda.l (a0)+,a4; adda.l (a0)+,a3` (los 2 longs tras la firma son
+  offset de destino y origen relativos al bloque). Los tamaños post-`IMP!` son
+  `long1`≈destino/descomprimido, `long2`≈origen/comprimido.
+- **El directorio SOS en RAM es una copia del directorio del disco (track 1, offset 0x2C00)**:
+  mismo formato pero expandido (track pasa de word→long, nombre pasa de +0x08 a +0x0A).
+  Confirmar la semántica de `track`/`offset`/`size` leyendo la rutina que lo recorre o con el
+  watchpoint en la tabla, no asumiendo.
+- **Los módulos SOS se referencian por tag de 32 bits, no por string**: sos.library carga p. ej.
+  `DBUG.soslibrary` con `move.l #$44425547 ("DBUG"), d0; jsr -$138(a6)`. El tag son los 4
+  primeros caracteres del nombre en mayúsculas. Al portar, usar un mapa `tag → módulo`.
+- **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
+  firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
+  decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).
 
 ## 6bis. Extraer el estado de vídeo
 
