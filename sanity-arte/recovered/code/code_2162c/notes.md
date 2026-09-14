@@ -17,12 +17,14 @@
 
 ## Texto del scrolltext (contenido)
 
-Diario del desarrollo escrito por el coautor de Sanity: menciona que piensa publicar un
-**source-code** de uno de estos efectos: **"den tunel, oder diesen plasma-effekt oder nur die
-3d-sterne"** (el túnel, el plasma, o las **estrellas 3D**, "la rutina más optimizada"). También:
-fuente heredada de la demo WOC-92, avance "al 80%", saludos a Arne/Jester/Dierk, la party WC-93
-(6.11.93), y detalles personales (26.10.93). Es la **hoja de ruta de los efectos a reimplementar**:
-túnel, plasma, estrellas 3D.
+Diario del desarrollo escrito por el coautor de Sanity (**procedencia: ingeniería inversa** del
+módulo; es el texto que él mismo escribió dentro de la demo, no documentación externa). Menciona
+que piensa publicar un **source-code** de uno de estos efectos: **"den tunel, oder diesen
+plasma-effekt oder nur die 3d-sterne"** (el túnel, el plasma, o las **estrellas 3D**, "la rutina
+más optimizada"). También: fuente heredada de la demo WOC-92, avance "al 80%", saludos a
+Arne/Jester/Dierk, la party WC-93 (6.11.93), y detalles personales (26.10.93). Es la **hoja de
+ruta de los efectos a reimplementar**: túnel, plasma, estrellas 3D. Original + traducción al
+español en `recovered/media/scrolltext/` (`scrolltext.txt`, `scrolltext-es.md`, `README.md`).
 
 ## Pistas para la fuente (glifos)
 
