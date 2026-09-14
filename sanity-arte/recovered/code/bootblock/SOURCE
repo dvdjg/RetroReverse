@@ -1,0 +1,2 @@
+out/disk/bootblock.bin sha1=196861e025d8755e5178fa109f133c6d5af8654e
+regenerar: objdump -D -b binary -m m68k --adjust-vma=0 out/disk/bootblock.bin

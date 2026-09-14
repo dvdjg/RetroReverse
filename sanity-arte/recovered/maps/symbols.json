@@ -1,0 +1,11 @@
+{
+  "_comentario": "Símbolos conocidos de Sanity-Arte (A500, KS1.3). Direcciones en la ejecución volcada; el layout se localiza por firma por si hay relocación.",
+  "bootblock": { "addr": "0x000000", "desc": "bootblock SOS1 (loader por pistas)" },
+  "imp_decrunch": { "addr": "0xC02426", "desc": "cruncher IMP! (LZ+Huffman), usado en carga de módulos" },
+  "imp_decrunch_ret": { "addr": "0xC02476", "desc": "retorno de IMP! (D0=0 ok / -1 error)" },
+  "crm_trampoline": { "addr": "0xC02584", "desc": "trampoline CrM!/CrM2 (por firma)" },
+  "crm_decrunch1": { "addr": "0xC025B2", "desc": "de-cruncher CrM!" },
+  "crm_decrunch2": { "addr": "0xC026AA", "desc": "de-cruncher CrM2" },
+  "sos_strings": { "addr": "0xC02B55", "desc": "strings del kernel SOS V2.4 R11" },
+  "sos_module_table": { "addr": "0xC03700", "desc": "tabla de nombres de módulos (aprox.)" }
+}

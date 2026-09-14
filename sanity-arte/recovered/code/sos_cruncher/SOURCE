@@ -1,0 +1,2 @@
+out/ram/slowc00000.bin sha1=3b9c43f2f486357626a835256c9a622a51318089
+regenerar: objdump -D -b binary -m m68k --adjust-vma=0xC00000 --start-address=0xC02380 --stop-address=0xC026E0 out/ram/slowc00000.bin
