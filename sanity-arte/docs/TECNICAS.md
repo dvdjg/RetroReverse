@@ -243,6 +243,39 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
   planos fuente al bitplane destino, y avanzar los punteros BPL por fila. El zoom se logra
   escalando el avance de filas fuente.
 
+## Motor de blobs/sprites con lookup tables (0x0B0C2C, zona 0x34C6-0x5342)
+
+- Evidencia: `out/modules_all/blk_0B0C2C_63064.bin`, desensamblado en
+  `recovered/code/code_b0c2c/`. Confianza **alta** (rutina completa desensamblada).
+- Es el **render de blobs** de la demo: dibuja sprites/blobs en **3 bitplanes** usando una
+  **tabla de lookup precalculada** para expandir cada byte de sprite a su patrón de 16 bits sin
+  calcular en el bucle caliente.
+
+### Estructura del render
+
+- **Tabla de lookup** en `$318dc`: 256 entradas × 4 bytes. La construye el código (0x3318):
+  cada byte de sprite (0-255) → el patrón de 2 words (16 píxeles) expandido en el bitplane.
+  En el disco está a ceros (se genera en runtime).
+- **Render por byte** (0x34A0-0x34C8):
+  1. `move.w (a0)+, d2` = byte del sprite; `move.b (a7)+, d2` = byte de máscara (combinados).
+  2. `moveq #$fc, d3; and.w d2, d3` = índice de 6 bits para la tabla de píxeles.
+  3. `move.l (a5, d3.l), d0` = patrón de píxel precalculado (16 bits).
+  4. `add.w d2,d2 x2; move.l (a5, d2.l), d2` = máscara precalculada (tabla por máscara).
+  5. `lea (a2, d0.w), a3` = posición en el bitplane; `a4 = a3+$20`, `a1 = a4+$20` = 3 planos.
+  6. `swap d0; jmp (a6,d0.w)` = **dispatch** a la variante de copia (según ancho: 1/2/3 words).
+- **Variantes del switch** (0x34DC, 0x3504, 0x3524, 0x3544...): copian 1-3 words por plano con
+  `and.w` (máscara) + `move.w d5` (dato), `swap d2; not.w d2` para invertir máscara, `dbra`.
+- Stride entre filas del blob: `mulu.w #$60, d5` (96 bytes); 3 planos separados 0x20 por fila.
+
+### Receta para el engine
+
+- Precalcular una tabla `sprite_lut[256]` que expande cada byte a su patrón de 16 píxeles
+  (`patrón = expandir bits 1-a-1`). En el bucle, cada byte del blob → lookup → write a los
+  bitplanes con máscara AND + dato OR.
+- Es el mismo truco de "byte a palabra" que usan los juegos para blobs: evita iterar píxel a
+  píxel (8x más rápido). En C++: `uint32_t lut[256]` y un bucle por fila.
+- Coste: ~2 lookups + 3 writes por byte de blob.
+
 ## Pendiente
 
 - Efectos concretos (3D, corridor, blitter) y su algoritmo.

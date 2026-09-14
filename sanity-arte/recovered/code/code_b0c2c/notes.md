@@ -15,8 +15,16 @@
 | `0x0E1E-0x0E86` | matriz ortonormal por cross-product (camera system) | alta |
 | `0x0E88+` | proyección/uso de la matriz | media |
 | `0x31C-0x3E2` | **fade de paleta por nibbles** (B,G,R por separado) | alta |
-| `0x34C6-0x5342` | otra rutina con muchos swap (7804 B) | media (sin analizar) |
+| `0x34C6-0x5342` | **motor de blobs** con lookup tables (3 bitplanes) | alta |
 | `0x2DC-0x31A` | bucle principal con sincronía VBL (`$dff004` vs `$12900/$13000`) | media |
+
+## Motor de blobs (0x34C6-0x5342)
+
+- Tabla de lookup `$318dc` (256 × 4 B): expande cada byte de sprite a su patrón de 16 bits.
+  Se construye en runtime (0x3318); en disco está a ceros.
+- Render por byte: lookup de píxel + lookup de máscara → writes a 3 bitplanes (a3/a4/a1,
+  separados 0x20 por fila) con dispatch por ancho (1/2/3 words).
+- Ver `docs/TECNICAS.md` → "Motor de blobs/sprites con lookup tables".
 
 ## Notas
 
