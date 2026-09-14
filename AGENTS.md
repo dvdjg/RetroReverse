@@ -11,6 +11,12 @@ los expedientes de desensamblado, no solo a `sanity-arte`.
 4. **Volver a construir la misma demo desde el código fuente** en el engine propio, usando el
    ensamblador solo para las partes críticas si es imprescindible.
 
+**Nota del usuario (2026)**: las **rutinas optimizadas** del ensamblador (p. ej. aritmética Q15
+con `muls.w`/`swap` del motor 3D) **serán las que se usen en la reconstrucción** — aunque sea
+"casi imposible" que C++ genere una optimización equivalente, la versión canónica de esas rutinas
+es la referencia a portar. Se guarda la versión canónica (desensamblado + notas) y se usa como
+base del port.
+
 El orden de prioridad del trabajo es: **ensamblador → comprensión → documentación → reimpl C++**.
 La extracción del framebuffer/bitplanes de una demo en marcha es **poco fiable e inútil** (los
 registros y buffers cambian por frame); la clave está en el código.
