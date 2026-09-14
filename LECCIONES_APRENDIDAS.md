@@ -165,6 +165,14 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **Los módulos SOS se referencian por tag de 32 bits, no por string**: sos.library carga p. ej.
   `DBUG.soslibrary` con `move.l #$44425547 ("DBUG"), d0; jsr -$138(a6)`. El tag son los 4
   primeros caracteres del nombre en mayúsculas. Al portar, usar un mapa `tag → módulo`.
+- **Asociación bloque IMP! del ADF ↔ módulo volcado por `l1`**: cada bloque `IMP!` del disco lleva
+  `l1` (tamaño descomprimido) y `l2` (tamaño comprimido) tras la firma. El hook de runtime capturó
+  `len` = `l1`; la coincidencia es exacta (12/12 en «Arte»). Permite mapear cada bloque del disco a
+  su módulo descomprimido **sin decrunchar** (`recovered/maps/imp_blocks.json`).
+- **El `track`/`offset` del directorio SOS NO es la posición física del bloque IMP!** en el disco
+  (tracks del directorio 0–13 vs tracks reales de los bloques 14–69). El campo `track`/`offset`
+  del directorio es un índice lógico del loader; para localizar el dato físico hay que usar la
+  tabla de bloques IMP!.
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).

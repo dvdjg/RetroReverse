@@ -104,3 +104,32 @@ Mapa completo: `recovered/maps/sos_directory.json`.
 rutina `SOSloadmodule` (cómo usa la tabla, incluyendo la semántica física de `track`/`offset`) y
 asociar el resto de bloques.
 
+## Asociación bloque IMP! del ADF ↔ módulo volcado (12/12 confirmado)
+
+Cada bloque IMP! del disco tiene un header con `l1` (tamaño descomprimido) y `l2` (tamaño
+comprimido) tras la firma `IMP!`. El hook de runtime capturó `len` de cada descompresión; la
+coincidencia `l1 == len(hook)` es **exacta en 12/12** módulos:
+
+| mod_ | len (hook) | bloque ADF (l1) | track | l2 (comprimido) |
+|---|---|---|---|---|
+| 0 | 114408 | `0x026A2C` | 14 | 46218 |
+| 1 | 2428 | `0x03201C` | 18 | 480 |
+| 2 | 26676 | `0x03242C` | 18 | 11362 |
+| 3 | 6108 | `0x0352F0` | 19 | 312 |
+| 4 | 34956 | `0x03562C` | 19 | 20676 |
+| 5 | 5764 | `0x03A93C` | 21 | 258 |
+| 6 | 1152 | `0x03AC2C` | 21 | 676 |
+| 7 | 102852 | `0x03AFFC` | 21 | 34250 |
+| 8 | 33784 | `0x04382C` | 24 | 18670 |
+| 9 | 324 | `0x0483D4` | 26 | 194 |
+| 10 | 21100 | `0x04862C` | 26 | 11754 |
+| 11 | 332 | `0x04B968` | 27 | 198 |
+
+- **41 bloques IMP!** en total en el ADF (mapa completo en `recovered/maps/imp_blocks.json`).
+- **`l1` = tamaño descomprimido** (confirma la interpretación del `size` del directorio SOS);
+  `l2` = tamaño del stream comprimido.
+- Los tracks de los bloques (14, 18, 19, 21, 24, 26, 27, …) **no coinciden con los `track` del
+  directorio** (0–13): el `track`/`offset` del directorio NO es la posición física del bloque IMP!.
+  La posición real es la de los bloques IMP! (tabla de `imp_blocks.json`). La semántica de
+  `track`/`offset` del directorio sigue **pendiente** (podría ser un índice lógico del loader).
+
