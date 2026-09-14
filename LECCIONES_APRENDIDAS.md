@@ -203,6 +203,10 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   SINE, el buffer en disco está vacío); el **túnel** tiene paleta (asset) + textura (layout
   incierto). No intentar decodificar un buffer procedural como imagen estática: buscar la rutina
   de cálculo en el código.
+- **Los efectos de Chaos de «Arte» comparten la misma técnica**: según los créditos, el
+  rubber-rotator, la esfera de 16 colores y el túnel "look all the same" → los tres son
+  **texture mapping** (distinta forma de superficie, misma rutina de mapeo). El efecto lente
+  clásico precalcula una tabla de offsets y en runtime solo copia la textura desplazada.
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).

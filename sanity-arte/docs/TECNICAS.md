@@ -199,6 +199,26 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
   mapeado a la paleta. En Amiga: se calcula el índice por píxel y se escribe el bitplane planar.
   La rutina de cálculo está en el código (módulos SINE), no en los datos.
 
+## Esfera de 16 colores / efecto lente (efecto de Chaos)
+
+- Evidencia: créditos de «Arte» (texto de scene.org) listan como efectos de Chaos:
+  **rubber-rotator, 16 color sphere y color tunnel**, y añaden "look all the same" — es decir,
+  los tres usan la **misma técnica de texture mapping** (solo cambia la forma de la superficie).
+  La "vector routine" (motor 3D) la escribieron Chaos y McDeal. Confianza alta en la técnica.
+- Identificación de la rutina concreta: **pendiente** (los bloques de código son variantes de
+  sos.library con el código de efecto embebido; no se ha localizado la rutina exacta de la
+  esfera con certeza). Confianza baja-media.
+- **Técnica clásica del efecto lente** (estándar en demos Amiga, hay mucho código público):
+  1. **Precálculo**: para cada píxel dentro del círculo de la esfera, se calcula el
+     desplazamiento `(dx,dy)` que simula la curvatura de la lente (offset desde el centro,
+     escalado por la distancia al centro). Se guarda en una **tabla de offsets**.
+  2. **Runtime**: por cada píxel del círculo, leer la textura en `(x+dx, y+dy)` y copiarla al
+     bitplane. La tabla evita trigonometría/división en el bucle caliente (solo sumas y copias).
+- Receta para el engine: precalcular la tabla de offset (una vez), luego por frame copiar la
+  textura desplazada al buffer. La esfera "looks all the same" como el túnel → misma rutina de
+  mapeo, distinta forma (círculo vs anillos).
+- Coste: el precálculo es O(r²) una vez; el runtime es O(píxeles) con sumas + copia de bytes.
+
 ## Pendiente
 
 - Efectos concretos (3D, corridor, blitter) y su algoritmo.
