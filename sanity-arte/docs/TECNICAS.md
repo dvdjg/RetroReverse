@@ -219,6 +219,30 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
   mapeo, distinta forma (círculo vs anillos).
 - Coste: el precálculo es O(r²) una vez; el runtime es O(píxeles) con sumas + copia de bytes.
 
+## Zoom / render de imagen a 4 planos (módulo 0x07E42C)
+
+- Evidencia: `out/modules_all/blk_07E42C_20268.bin` (descomprimido del ADF), desensamblado en
+  `recovered/code/mod_07e42c/` (por hacer). Confianza **media-alta** (rutina desensamblada).
+- Contexto: el bloque 0x07E42C es una variante de sos.library con **107 `jmp`** (dispatch grande)
+  y muchas rutinas de dibujo (122 `dbra`, 104 `bset.b`). Es el candidato a las rutinas de
+  **zoom de imágenes / distorsión** ("zooming-pictures" del scrolltext).
+- **Rutina de render a 4 planos (0x146A-0x14F0)**:
+  - Puntero a imagen en `$13f4`; tablas de 4 planos en `$414a` (a1, a2=a1+$370, a3=a2+$370,
+    a4=a3+$370 = 4 planos separados 0x370 bytes).
+  - Bucle por fila (0x1482): `clr.l (a0)+` (margen) + `move.w #$6d, d6` (110 words) copiando
+    `move.w (a1),(a0)+; move.w (a2),(a0)+` (2 planos a la vez), `lea $8(a1),a1` (columna),
+    `dbra d6`. Al final `clr.l (a0)+; clr.l (a0)+`.
+  - Repite con a3/a4 (planos 3 y 4) y `dbra d7` (4 filas/planos).
+  - **Actualización de punteros BPL** (0x14CA-0x14F0): escribe los punteros de bitplane
+    (BPLxPTH/PTL) con `swap` y `addi.l #$1c0` (avance entre filas), en la tabla de display.
+- Interpretación: copia una imagen desde tablas planares (4 planos) al display, con estructura
+  de fila de 110 words. El patrón `lea $8` por columna + separación `$370` entre planos es el
+  layout planar interleaved por fila. La actualización de punteros BPL sugiere que cada fila de
+  la imagen es un "scanline" que se coloca en el display (zoom vertical por filas).
+- Receta para el engine: render planar por filas — por cada fila, copiar las words de los 4
+  planos fuente al bitplane destino, y avanzar los punteros BPL por fila. El zoom se logra
+  escalando el avance de filas fuente.
+
 ## Pendiente
 
 - Efectos concretos (3D, corridor, blitter) y su algoritmo.
