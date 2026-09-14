@@ -1,0 +1,24 @@
+# --- Estado de sesión del toolkit (runtime, no versionar) ---
+.session.json
+
+# --- Generado / regenerable ---
+# out/ es desechable (volcados de RAM, módulos, capturas, logs). Se regenera con toolkit/.
+# Se conservan solo las configuraciones del emulador (*.uae), que son entradas, no salidas.
+**/out/*
+!**/out/*.uae
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Binarios compilados ---
+*.exe
+*.o
+*.obj
+*.dll
+
+# --- Sistema / editor ---
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
