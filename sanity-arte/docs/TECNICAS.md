@@ -101,6 +101,63 @@ no con volcado de código ajeno.
 - Coste: 3 planos × 8 bytes × nº chars visibles por frame; la limpieza de bitplane es
   `0x3C00` longs (rápida en CPU o Blitter).
 
+## Motor 3D (módulo 0x0B0C2C) — transformación de puntos con matriz Q15
+
+- Evidencia: `out/modules_all/blk_0B0C2C_63064.bin` (descomprimido del ADF), desensamblado en
+  `recovered/code/code_b0c2c/code_b0c2c.asm`. Confianza **alta** (rutinas completas).
+- Contenido: motor 3D de la demo (estrellas 3D / vectorización, la rutina que el autor del
+  scrolltext llama "la más optimizada"), más rutinas de fade de paleta y render.
+
+### Transformación de punto (0x0CBA)
+
+Entrada: punto `d0,d1,d2` (x,y,z) desde `(a0)+`; matriz 3×3 en `a1`; salida en `(a2)+`.
+
+Layout de la matriz (9 words Q15): `[m00 m10 m20][m01 m11 m21][m02 m12 m22]` (offsets de fila
+`$0,$6,$c`; columnas `$2,$8,$e` y `$4,$a,$10`).
+
+Por cada componente (ej. X'):
+```
+move.w (a1),d3    ; m00
+move.w $6(a1),d4  ; m01
+move.w $c(a1),d5  ; m02
+muls.w d0,d3      ; m00*x
+muls.w d1,d4      ; m01*y
+muls.w d2,d5      ; m02*z
+add.l  d3,d4
+add.l  d4,d5      ; suma acumulada
+add.l  d5,d5      ; <<1 (Q15)
+swap   d5         ; >>16
+move.w d5,(a2)+   ; X'
+```
+La matriz se aplica 3 veces (3 líneas repetidas idénticas para X, Y, Z).
+
+### Construcción de matriz de rotación (0x0C46)
+
+Entrada: `d0-d5` = senos/cosenos de los ejes. Salida: 9 elementos de la matriz en `(a0)+`,
+usando el mismo patrón `muls.w + add/sub + add.l d,d + swap` (aritmética Q15 fija).
+
+### Construcción de matriz ortonormal (0x0E1E)
+
+Calcula una matriz de rotación 3×3 con **cross-product** de las filas para mantener
+ortonormalidad (camera system): `muls.w d5,d6; muls.w d4,d7; sub.l d7,d6; ...` por fila.
+Usado para la cámara (evita drift de la matriz).
+
+### Fade de paleta por nibbles (0x31C-0x3E2)
+
+Interpolación de color 12-bit OCS hacia un objetivo trabajando los 4 nibbles (RGB) por separado:
+cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`, `+$10`, `+$100`
+(componentes B, G, R) según sea menor o mayor. Controlado por un contador de frames (`$3f0`).
+
+### Receta para el engine
+
+- La aritmética Q15 fija: `producto32 = mul(x16, y16); resultado = (producto32 + producto32) >> 16`
+  (equivalente a `add.l d,d` + `swap`). En C++: `int r = (int32_t)(a*b) >> 15;` (Q15×Q15 → Q15).
+- Matriz 3×3 `int16_t m[9]`; transformar punto: `x' = m00*x + m01*y + m02*z` (Q15).
+- Mantener la cámara con cross-product para ortonormalidad (evita escalado acumulado).
+- Fade: para cada color, `for k in {B,G,R}: aprox=(color==dest)?color:(color<dest?color+(1<<k):color-(1<<k))`.
+- Coste: 3 muls por componente = 9 muls por punto (sin FP). Adecuado para estrellas/polígonos en
+  68000.
+
 ## Pendiente
 
 - Efectos concretos (3D, corridor, blitter) y su algoritmo.
