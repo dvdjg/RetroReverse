@@ -189,6 +189,12 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **El `size` del directorio SOS NO es el tamaño descomprimido del bloque IMP!**: ninguno de los
   41 bloques decrunchados coincide con los `size` del directorio. El directorio es la tabla de
   nombres/lógica del loader; los datos reales están en los bloques IMP! (mapeados por `l1`).
+- **SOS está documentado por el propio autor**: Dierk Ohlerich publicó SOS 2.6 en Aminet
+  (`dev/asm/SanityOperationSystem.lha`, 1994) con docs, includes y ejemplos. Confirma: (1) el
+  `IMP!` del disco es **Imploder** ("ripped out of beermon"); (2) las librerías
+  `DBUG/SINE/TEXT/AGAC.soslibrary`; (3) `main` es el loader; (4) el "effect handler" interpreta
+  un `script` (los `.scr` del paquete). Referencia guardada en
+  `sanity-arte/recovered/reference/sanity-os-v26/`.
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).
