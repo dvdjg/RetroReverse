@@ -70,8 +70,39 @@ no con volcado de código ajeno.
 - Receta para el engine (PORTADO): `reimpl/sine_table/` — tabla Q1.14 de 1024 entradas, fase de 16
   bits con wrap natural, `sin_q14`/`cos_q14` O(1). Test host `make test`.
 
+## Scrolltext con fuente de 3 planos (módulo 0x02162C)
+
+- Evidencia: bloque `out/modules_all/blk_02162C_45924.bin` (descomprimido del ADF),
+  desensamblado en `recovered/code/code_2162c/code_2162c.asm`. Confianza **alta** (rutina
+  completa desensamblada, fuente y texto extraídos).
+- Contenido del módulo:
+  - `0x1A80`: **mapa de caracteres** `" abcdefghijklmnopqrstuvwxyz0123456789.,!?:"-` (43 chars).
+  - `~0x2800-0x3400`: **glifos** (cada char: 3 planos × 8 filas × 2 bytes = 16 px de ancho).
+  - `0x352A`: **texto del scroll** (alemán: "Gefällt, sondern... will sie nicht die erste ist...").
+  - `0x1AAC`: rutina de **limpieza de bitplanes** (`lea $60000.l,a0; move.w #$3bff,d7;
+    clr.l (a0)+; dbf d7` = limpia 0x3C00 longs = 61440 B).
+- Rutina de render (0x196E-0x1A70):
+  1. Si no hay texto pendiente (`$1a7e`), lee el siguiente char: `lea $352a.l,a0` +
+     offset `$1a72`, busca el char en el mapa (bucle `cmp.b (a1)+,d0; dbeq`).
+  2. Índice del char → base de glifos `$30e9(pc)` + índice → puntero al glifo.
+  3. Bitplane destino `$60000.l` + offset `$1a76` (scroll horizontal) + `$1a7a` (contador).
+  4. **Bucle de 3 planos** (`moveq #$2,d7; dbf`):
+     - Copia 8 filas del glifo al bitplane: `move.b $0(a2),$0(a3); $2c→$50; $58→$a0;
+       $84→$f0; $b0→$140; $dc→$190; $108→$1e0; $134→$230`.
+     - `lea $160(a2),a2` (siguiente plano del glifo), `lea $5000(a3),a3` (siguiente bitplane).
+  5. Avance: `$1a7a` llega a `$50` (80) → `$1a72++`, `$1a7a=0`, `$1a76 += $320` (800).
+     `$1a76` llega a `$4e20` (20000) → reset scroll (`$1a76=0`, `$1a7e=1`).
+- Parámetros: 3 bitplanes en Chip RAM `0x60000` (stride `0x5000` entre planos), fuente de
+  16 px de ancho × 8 de alto, glifo por char = 3 × `0x160` bytes.
+- Receta para el engine: mantener un **buffer de texto** con el índice de cada char; el scroll
+  horizontal se hace moviendo un **offset dentro del buffer** y refrescando la columna de bytes
+  que entra; el glifo es un mapa `char → 3 planos de 8 filas`. En C++: tabla de glifos
+  `uint8_t glyph[43][3][8][2]`, y un bucle que copia a la textura/bitplane.
+- Coste: 3 planos × 8 bytes × nº chars visibles por frame; la limpieza de bitplane es
+  `0x3C00` longs (rápida en CPU o Blitter).
+
 ## Pendiente
 
-- Efectos concretos (3D, scroll, blitter) y su algoritmo.
+- Efectos concretos (3D, corridor, blitter) y su algoritmo.
 - Música (`mod.elekfunk`, `mod.livin' insanity`, `mod.mobyle`).
 - Gráficos (`drwho96.raw`, `hloadpic.raw.im`).
