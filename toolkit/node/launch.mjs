@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
- * launch.mjs — lanza WinUAE-DBG UNA vez y lo deja en marcha (detached, sin GDB).
+ * launch.mjs — lanza una instancia WinUAE-DBG y la registra (PID + puertos).
  *
- * Registra el PID en `.session.json` para poder cerrarlo despues con `stop.mjs`
- * SIN afectar a otras instancias de otros proyectos. No lanza una segunda si ya
- * hay una viva.
+ * Permite VARIAS instancias en paralelo: si no se indican puertos, elige el
+ * primer par libre (2445/2446, 2447/2448, ...). Cierra solo las registradas con
+ * `stop.mjs`.
  *
  * Uso:
  *   node launch.mjs --config out\game.uae --adf out\disk\game.adf
+ *   node launch.mjs --config out\game.uae --gdb-port 2447 --side-port 2448
  */
 
 import { WinUAE, sleep } from './winuae-session.mjs';
-import { saveSession, loadSession, isAlive } from './session.mjs';
+import { addSession, loadSessions, pruneSessions, pickPorts } from './session.mjs';
 
 function parseArgs(argv) {
   const a = {};
@@ -25,23 +26,18 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv);
 if (!args.config) { console.error('falta --config'); process.exit(2); }
 
-const prev = loadSession();
-if (prev && isAlive(prev.pid)) {
-  console.log(`ya hay una instancia viva (pid ${prev.pid}, gdb ${prev.gdbPort}, side ${prev.sidePort}).`);
-  console.log('usa "node stop.mjs" para cerrarla antes de lanzar otra.');
-  process.exit(0);
+pruneSessions();
+let gdbPort = args['gdb-port'] ? parseInt(args['gdb-port'], 10) : null;
+let sidePort = args['side-port'] ? parseInt(args['side-port'], 10) : null;
+if (!gdbPort || !sidePort) {
+  const p = pickPorts(loadSessions());
+  gdbPort = gdbPort || p.gdbPort;
+  sidePort = sidePort || p.sidePort;
 }
 
-const uae = new WinUAE({ configFile: args.config, adf: args.adf, winuaeDir: args.winuae, exe: args.exe });
+const uae = new WinUAE({ configFile: args.config, adf: args.adf, winuaeDir: args.winuae, exe: args.exe, gdbPort, sidePort });
 const pid = await uae.launchDetached();
-saveSession({
-  pid,
-  gdbPort: uae.opts.gdbPort,
-  sidePort: uae.opts.sidePort,
-  configFile: args.config,
-  adf: args.adf || null,
-  exe: uae.opts.exe,
-});
-console.log(`winuae-dbg lanzado (pid ${pid}); GDB ${uae.opts.gdbPort}, canal lateral ${uae.opts.sidePort}`);
-console.log('estado:  node side.mjs state     cerrar:  node stop.mjs');
+addSession({ pid, gdbPort, sidePort, configFile: args.config, adf: args.adf || null, exe: uae.opts.exe });
+console.log(`winuae-dbg lanzado (pid ${pid}); GDB ${gdbPort}, canal lateral ${sidePort}`);
+console.log('estado:  node side.mjs state     cerrar:  node stop.mjs --pid ' + pid);
 await sleep(200);

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * stop.mjs — cierra SOLO la instancia WinUAE lanzada por Amiga-Reverse (PID registrado).
+ * stop.mjs — cierra SOLO instancias lanzadas por Amiga-Reverse (PIDs registrados).
  *
- * NO usa `Get-Process winuae-gdb | Stop-Process` (eso mataria instancias de otros
- * proyectos). Solo termina el PID de `.session.json`, verificando antes que sea un
- * proceso winuae-gdb.
+ * Nunca usa kill global. Verifica que cada PID sea winuae-gdb antes de terminarlo.
  *
  * Uso:
- *   node stop.mjs            # cierra la sesion registrada
- *   node stop.mjs --pid 1234 # cierra un PID concreto (comprobando que sea winuae-gdb)
+ *   node stop.mjs                 # cierra la ultima sesion registrada
+ *   node stop.mjs --pid 1234      # cierra ese PID (debe estar registrado o ser winuae-gdb)
+ *   node stop.mjs --side-port 2446# cierra la sesion de ese puerto
+ *   node stop.mjs --all           # cierra TODAS las sesiones registradas (solo las nuestras)
  */
 
 import { spawnSync } from 'node:child_process';
-import { loadSession, clearSession, isAlive } from './session.mjs';
+import { loadSessions, saveSessions, isAlive, removeSession } from './session.mjs';
 
 function parseArgs(argv) {
   const a = {};
@@ -21,24 +21,29 @@ function parseArgs(argv) {
 }
 const args = parseArgs(process.argv);
 
-const session = loadSession();
-const pid = args.pid ? parseInt(args.pid, 10) : (session && session.pid);
+function isWinuae(pid) {
+  const tl = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' });
+  return /winuae-gdb/i.test((tl.stdout || '').trim());
+}
+function kill(pid) {
+  if (!isWinuae(pid)) { console.error(`pid ${pid}: no es winuae-gdb (no lo toco)`); return false; }
+  const r = spawnSync('taskkill', ['/PID', String(pid), '/F'], { encoding: 'utf8' });
+  console.log(`cerrada ${pid}: ${(r.stdout || '').trim() || (r.stderr || '').trim()}`);
+  removeSession(pid);
+  return true;
+}
 
-if (!pid) { console.log('no hay instancia registrada'); process.exit(0); }
-if (!isAlive(pid)) {
-  console.log(`pid ${pid} ya no existe; limpio sesion`);
-  clearSession();
+const sessions = loadSessions().filter((s) => isAlive(s.pid));
+
+if (args.all) {
+  if (!sessions.length) { console.log('no hay sesiones vivas registradas'); process.exit(0); }
+  for (const s of sessions) kill(s.pid);
   process.exit(0);
 }
+let target = null;
+if (args.pid) target = sessions.find((s) => s.pid === parseInt(args.pid, 10)) || { pid: parseInt(args.pid, 10) };
+else if (args['side-port']) target = sessions.find((s) => s.sidePort === parseInt(args['side-port'], 10));
+else target = sessions[sessions.length - 1];
 
-// Verificar que el PID es un winuae-gdb (no reutilizar un PID ajeno).
-const tl = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' });
-const line = (tl.stdout || '').trim().split(/\r?\n/)[0] || '';
-if (!/winuae-gdb/i.test(line)) {
-  console.error(`el pid ${pid} no es winuae-gdb (o no existe): ${line || '(vacio)'}`);
-  process.exit(1);
-}
-
-const r = spawnSync('taskkill', ['/PID', String(pid), '/F'], { encoding: 'utf8' });
-console.log(`cerrada instancia ${pid}: ${(r.stdout || '').trim() || (r.stderr || '').trim()}`);
-clearSession();
+if (!target) { console.log('no hay sesion viva registrada'); process.exit(0); }
+kill(target.pid);

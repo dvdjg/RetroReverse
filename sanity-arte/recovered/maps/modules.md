@@ -1,20 +1,7 @@
 # Módulos del demo — Sanity-Arte
 
-Nombres extraídos de la tabla de SOS (Slow RAM ~`0xC037xx`). Direcciones/tamaños se rellenarán
-cuando el volcado de módulos (`IMP!`) funcione; entonces se indexarán por `sha1`.
-
-| Módulo | Tipo | Dirección | Tamaño | sha1 | Estado |
-|---|---|---|---|---|---|
-| `SINE.soslibrary` | librería (senos) | — | — | — | pendiente |
-| `DBUG.soslibrary` | librería (debug) | — | — | — | pendiente |
-| `mod.livin' insanity` | música | — | — | — | pendiente |
-| `mod.elekfunk` | música | — | — | — | pendiente |
-| `mod.mobyle` | música (Moby) | — | — | — | pendiente |
-| `drwho96.raw` | gráfico | — | — | — | pendiente |
-| `hloadpic.raw.im` | gráfico (imagen) | — | — | — | pendiente |
-| `txt.Scrolltext` | texto scroll | — | — | — | pendiente |
-| `SOSchaos1/2/3` | módulos SOS | — | — | — | pendiente |
-| `lSOSloadmodule` | rutina de carga | — | — | — | pendiente |
+Directorios de módulos descifrados en `recovered/maps/sos_directory.json` (ver tabla debajo).
+Cada bloque volcado en `out/modules/` sigue pendiente de asociación nombre↔sha1.
 
 ## Bloques descomprimidos (hook `IMP!`)
 
@@ -54,21 +41,66 @@ sha1). Identificación por módulo **pendiente** (cruzar con la tabla de nombres
 > Nota: algunos `dest` (p. ej. `0x26614`) coinciden con buffers reutilizados por varias cargas;
 > conservar todos permite no perder los módulos que luego se sobreescriben.
 
-## Nombres de la tabla de módulos SOS
+## Directorio SOS (nombre → dirección/tamaño)
 
-Extraídos de la tabla en Slow RAM (aprox. `0xC036FA`–`0xC03ABA`); cada entrada tiene un prefijo
-binario (con un tamaño aparente en 4 bytes) seguido de un nombre terminado en `\0`:
+La tabla de módulos se confirmó **en el disco** (ADF) y **en RAM** (copia en runtime). Formato por
+entrada (32 bytes):
 
-```
-SINE.soslibrary   DBUG.soslibrary   mod.livin' insanity   SOSsab    SOStt   SOSfp   SOSgz
-SOSdk   SOSspa   SOSst   SOSdt   SOSchaos1   SOSes   SOSloadmodule   mod.elekfunk   SOSeled
-SOSls   SOScp   SOSb   SOSchaos3   SOSch   SOSchaos2   drwho96.raw   SOSman   SOSwl
-SOSdig   SOSea   hloadpic.raw.im   main   mod.mobyle   txt.Scrolltext
-```
+| | ADF (disco) | RAM (copia) |
+|---|---|---|
+| base | track 1 `0x2C00` (32 entradas: `loader` + 31 módulos) | `0xC036D2` (raw `loader`) y `0xC036F0`+ (módulos) |
+| prefijo | 8 B | 10 B |
+| campos | `track` word BE + `offset` word LE + `size` long BE | `track` long BE + `offset` word LE + `size` long BE |
+| nombre | en `+0x08` | en `+0x0A` |
 
-- Los `SOS*` son módulos internos del sistema (cargadores, formatos/compresión, `chaos1..3`, etc.).
-- Los assets del demo: `SINE.soslibrary` (senos), `mod.elekfunk` / `mod.livin' insanity` /
-  `mod.mobyle` (música), `drwho96.raw` / `hloadpic.raw.im` (gráficos), `txt.Scrolltext`, `main`.
-- **Pendiente**: mapear cada nombre a su dirección/tamaño (el prefijo de 10 B lleva un tamaño
-  aparente en big-endian, aún por confirmar) y cruzarlo con los bloques volcados.
+Referencias al puntero `0xC036D2` en código residente: `0xC0300A` y `0xC03634`.
+
+**Semántica** (verificada por consistencia RAM↔ADF y plausibilidad):
+- `track` / `offset`: posición del módulo crunched en el disco (track + desplazamiento LE en
+  bytes dentro del track). Los `SOS*` van en tracks correlativos ~0–13 (el boot/loader y el
+  directorio ocupan tracks 0–1); hay gaps (tracks 6 y 12) → igualmente válidos.
+- `size`: **tamaño descomprimido** en bytes. Evidencia: `drwho96.raw` = `9216` = 96×96 exacto
+  (imagen raw `drwho96`), `txt.Scrolltext` = 2502, los `mod.*` de música son los mayores
+  (138394/99114/89876).
+
+Mapa completo: `recovered/maps/sos_directory.json`.
+
+| # | Módulo | RAM | track | offset | size (descomp.) |
+|---|---|---|---|---|---|
+| 0 | `SINE.soslibrary` | `0xC036F0` | 0 | 72 | 1260 |
+| 1 | `DBUG.soslibrary` | `0xC03710` | 0 | 78 | 1236 |
+| 2 | `mod.livin' insanity` | `0xC03730` | 0 | 84 | 99114 |
+| 3 | `SOSsab` | `0xC03750` | 1 | 216 | 15816 |
+| 4 | `SOStt` | `0xC03770` | 2 | 22 | 21212 |
+| 5 | `SOSfp` | `0xC03790` | 2 | 106 | 47176 |
+| 6 | `SOSgz` | `0xC037B0` | 3 | 36 | 12404 |
+| 7 | `SOSdk` | `0xC037D0` | 3 | 86 | 21640 |
+| 8 | `SOSspa` | `0xC037F0` | 3 | 172 | 35344 |
+| 9 | `SOSst` | `0xC03810` | 4 | 56 | 19680 |
+| 10 | `SOSdt` | `0xC03830` | 4 | 134 | 13432 |
+| 11 | `SOSchaos1` | `0xC03850` | 4 | 188 | 15004 |
+| 12 | `SOSes` | `0xC03870` | 4 | 248 | 18284 |
+| 13 | `SOSloadmodule` | `0xC03890` | 5 | 64 | 1132 |
+| 14 | `mod.elekfunk` | `0xC038B0` | 5 | 70 | 138394 |
+| 15 | `SOSeled` | `0xC038D0` | 7 | 100 | 9680 |
+| 16 | `SOSls` | `0xC038F0` | 7 | 138 | 22744 |
+| 17 | `SOScp` | `0xC03910` | 7 | 228 | 11960 |
+| 18 | `SOSb` | `0xC03930` | 8 | 20 | 39904 |
+| 19 | `SOSchaos3` | `0xC03950` | 8 | 176 | 16940 |
+| 20 | `SOSch` | `0xC03970` | 8 | 244 | 30160 |
+| 21 | `SOSchaos2` | `0xC03990` | 9 | 106 | 2776 |
+| 22 | `drwho96.raw` | `0xC039B0` | 9 | 118 | 9216 |
+| 23 | `SOSman` | `0xC039D0` | 9 | 154 | 41460 |
+| 24 | `SOSwl` | `0xC039F0` | 10 | 60 | 4768 |
+| 25 | `SOSdig` | `0xC03A10` | 10 | 80 | 33988 |
+| 26 | `SOSea` | `0xC03A30` | 10 | 214 | 5524 |
+| 27 | `loadpic.raw.im` | `0xC03A50` | 10 | 236 | 7784 |
+| 28 | `main` | `0xC03A70` | 11 | 12 | 53956 |
+| 29 | `mod.mobyle` | `0xC03A90` | 11 | 224 | 89876 |
+| 30 | `txt.Scrolltext` | `0xC03AB0` | 13 | 64 | 2502 |
+
+**Cruce provisional con bloques volcados (por tamaño descomprimido)**: `SOSdig` ≈ `mod_8`
+(33988 vs 33784) y `SOStt` ≈ `mod_10` (21212 vs 21100). Queda **pendiente** confirmar leyendo la
+rutina `SOSloadmodule` (cómo usa la tabla, incluyendo la semántica física de `track`/`offset`) y
+asociar el resto de bloques.
 
