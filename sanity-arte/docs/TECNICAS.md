@@ -42,6 +42,27 @@ no con volcado de código ajeno.
 - Receta para el engine: el patrón es el estándar (Copper instala modo + punteros + paleta); sirve
   como referencia de un display OCS de 5 planos.
 
+## Display OCS de 5 planos (título) — bitplanes decodificados
+
+- Evidencia: `mod_007` (102852 B, dest Chip `0x26614`) contiene los bitplanes del título;
+  copperlist `mod_003` (también en `0x26614`) configura el display.
+- Parámetros de pantalla (de la copperlist): `DIWSTRT=$5981`, `DIWSTOP=$59C1` (PAL 320×200~256),
+  `DDFSTRT=$38`, `DDFSTOP=$D0`, `BPLCON0=$5600` (5 planos lowres), `BPL1MOD=$FFD8` (=-40).
+  `BPL1MOD=-40` ⇒ **ancho 320 px** (40 B/línea/plano × 8 = 320 bits); módulo negativo = sin
+  relleno entre líneas (bitplanes contiguos).
+- Paleta `arte-title-palette.json`: fondo `#330000`, texto `#99aaaa`, rampa `#556666/#334444/
+  #223333`. En la captura de referencia dominan `(51,0,0)` y `(170,170,170)` → paleta confirmada.
+- Layout planar OCS: 5 planos de 40 B × 200 líneas = 200 B/línea; 102852 B ≈ 514 líneas =
+  ~2.5 pantallas apiladas (el buffer se reutiliza para varios estados/efectos del título).
+- Imágenes decodificadas: `recovered/media/gfx/mod7_block0_320x200.png` (título lleno, 56%
+  datos), `mod7_block1_320x200.png` (28%), `block2` (8%). Bloque 0 = frame principal.
+- Receta para el engine: el demo pinta en planares OCS (5 planos) y deja que el Copper parchee los
+  punteros BPL1PT..BPL5PT por frame (por eso en la copia almacenada los punteros están a 0).
+  Al portar: mantener el bitplane como `uint32_t[5]` por línea o pasar a RGB y reutilizar una
+  textura; el módulo negativo es equivalente a un stride exacto de `ancho_bytes*planos`.
+- Coste: bitplanes planares = un `memcpy` de `40×planos` por línea; sin coste de Copper por frame
+  si los punteros no cambian.
+
 ## Seno precalculado (`SINE.soslibrary`)
 
 - Evidencia: módulo `SINE.soslibrary` referenciado por SOS; el demo mueve objetos/ángulos por frame.
