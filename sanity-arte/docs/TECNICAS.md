@@ -167,14 +167,37 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
   trigonometría (tabla SINE) y se mapea una textura. Es el efecto de apertura de «Arte».
 - El bloque empieza con cabecera `[1d 01 ff fe]` (4 B) + configuración de display:
   `DIWSTRT=$2981, DIWSTOP=$29C1, DDFSTRT=$38, DDFSTOP=$D0, BPLCON0=$5200` (5 planos, 320 px).
-- **Formato compacto de copperlist SOS**: los MOVE se guardan como `[00][reg][valor.word]`
-  (3 bytes) en vez del formato estándar `[0x01|reg][valor]` (4 bytes). El `00` sustituye al
-  opcode `0x01`. Confianza media (deducido de la estructura, pendiente confirmar con el loader).
-- La mayor parte del bloque (102852 B) son datos: textura del túnel + tabla de profundidad/
-  ángulos precalculada (el túnel precalcula la geometría por frame en tablas).
+- El bloque contiene **4 copperlists encadenadas** (marcadores `[01 ff fe]` en 0x1, 0x119, 0x5969,
+  0x178F7) — una por zona/banda de la pantalla (el túnel usa listas por anillo).
+- **Formato de copperlist SOS**: MOVE = `[opcode 0][reg][valor]` (igual que el estándar pero con
+  opcode `0` en vez de `01`). Los punteros BPL/SPR y colores van a 0 (el demo los parchea por
+  frame). Confianza alta (decodificada: 69 moves en la primera lista).
+- **Paleta del túnel extraída** (32 colores 12-bit): `recovered/media/palettes/tunnel-palette.json`.
+  Degradado de profundidad blanco→rojo→grises→negro (`FFF,FFC,FD9,...,911,800,700,600,...,000`).
+  Confianza alta.
+- La textura mapeada está en la zona de datos (0x119-0x5969 y 0x5969-0x178F7) pero su layout
+  exacto (resolución/planos/stride) no se ha confirmado; quedan candidatos sin validar
+  (WIP). El túnel es **procedural + textura**: los anillos se calculan con SINE y se mapea la
+  textura.
 - Receta para el engine: el túnel 3D se puede hacer con una tabla de ángulos por columna y una
   textura; por frame se actualizan los punteros BPL/Copper. El pre-cálculo en tablas evita
   trigonometría en el bucle caliente.
+
+## Plasma (bloque 0x09A940) — efecto procedural
+
+- Evidencia: `out/modules_all/blk_09A940_51648.bin` (descomprimido del ADF). Buffer de display.
+  Confianza **media**.
+- **El plasma es un efecto PROCEDURAL**: el buffer no contiene una imagen estática (está vacío/
+  denso sin coherencia al decodificar). Se genera en runtime calculando ondas de seno 2D
+  (usa `SINE.soslibrary`) y escribiendo los bitplanes. El encabezado del buffer es una tabla de
+  punteros/colores a 0 (el demo los parchea por frame).
+- Estructura del buffer: `[01 00 02 00]` cabecera + pares `[00][reg][00][00]` (BPL1-6PTH/PTL,
+  COLOR00..31, todos a 0 en disco) + zona de bitplanes densa.
+- Layout probable: 4 planos interleaved, 320 px (avg_dx bajo = 2.3, suave). La paleta exacta se
+  aplica en runtime.
+- Receta para el engine: el plasma clásico = `color(x,y,t) = sin(x/a+t) + sin(y/b+t) + sin((x+y)/c+t)`,
+  mapeado a la paleta. En Amiga: se calcula el índice por píxel y se escribe el bitplane planar.
+  La rutina de cálculo está en el código (módulos SINE), no en los datos.
 
 ## Pendiente
 

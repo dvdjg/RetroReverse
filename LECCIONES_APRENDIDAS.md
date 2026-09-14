@@ -195,6 +195,14 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   `DBUG/SINE/TEXT/AGAC.soslibrary`; (3) `main` es el loader; (4) el "effect handler" interpreta
   un `script` (los `.scr` del paquete). Referencia guardada en
   `sanity-arte/recovered/reference/sanity-os-v26/`.
+- **Formato de copperlist SOS**: MOVE = `[opcode 0][reg][valor]` (4 bytes, igual que el estándar
+  `0x01xx` pero con opcode `0`). Los punteros BPL/SPR y colores van a 0 en el bloque (el demo los
+  parchea por frame). Un bloque de efecto puede contener **varias copperlists encadenadas**
+  (marcador `[01 ff fe]` + cabecera de 1 byte `[0xXX]`).
+- **Efectos procedurales vs assets**: el **plasma** es procedural (se calcula en runtime con
+  SINE, el buffer en disco está vacío); el **túnel** tiene paleta (asset) + textura (layout
+  incierto). No intentar decodificar un buffer procedural como imagen estática: buscar la rutina
+  de cálculo en el código.
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).
