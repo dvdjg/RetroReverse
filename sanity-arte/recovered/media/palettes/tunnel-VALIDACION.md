@@ -254,6 +254,38 @@ geométricos.
 **Conclusión:** la **estructura del corridor está validada** (el remake de Tornblad reproduce bien
 la geometría); lo que falta es afinar **paleta y texturas** del original.
 
+### Cuantificación de color (paso 1)
+
+Analizada la zona central de `corridor-live.png`, la **cobertura de la paleta de `0x03AFFC` es del
+100 %** → el corridor usa **exactamente** esa paleta (negro + rampa roja/marrón/gris). No hay una
+segunda paleta.
+
+Comparación de la distribución de índices (original vs `anim_arte`):
+
+| índice | color | original | reimpl |
+|---|---|---|---|
+| 31 | `#000000` | **34,1 %** | **58,6 %** |
+| 18 | `#330000` | 11,4 % | 7,0 % |
+| 17 | `#440000` | 10,5 % | 3,7 % |
+| 19 | `#663333` | 8,8 % | 12,8 % |
+| 22 | `#886666` | 7,4 % | 3,4 % |
+| 24 | `#AA9999` | 5,6 % | 1,4 % |
+| 13 | `#880000` | 4,3 % | 0,1 % |
+
+La reimpl usa la paleta correcta pero tiene **demasiado negro** (59 % vs 34 %) y menos tonos medios
+→ por eso parece «apagada». El original llena más el túnel (menos huecos). **Ajuste pendiente:**
+reducir las filas en negro (huecos del script de tiles y fade del fondo).
+
+### Datos adyacentes al bloque en RAM (`cor9-chip.bin`, corridor activo)
+
+Con el corridor activo (paleta en `0x2675A`, bloque en `0x26614`) se inspeccionó qué sigue al
+bloque (termina en `0x3F7D8`). Aparece una **tabla de offsets** (`18 00 00 00`, `38`, `78`, `F8`,
+`F8`, …): valores 24, 56, 120, 248 (progresión `×2+8`) que saturan en `248` — compatible con la
+tabla de **extensión/distancia** de un efecto de texture-mapping. **Candidata al mapa del
+corridor** (aún sin confirmar; podría pertenecer al siguiente módulo cargado).
+
+
+
 
 
 
