@@ -76,7 +76,16 @@ Cerrar esa instancia por **su PID** (`Stop-Process -Id <pid>`), solo el propio.
 
 ## Receta: capturar un efecto concreto en vivo (una sola invocación)
 
-Evitar relanzar en bucle: lanzar **una vez** y sondear dentro de esa sesión.
+Evitar relanzar en bucle: lanzar **una vez** y sondear dentro de esa sesión. Automatizado en
+**`toolkit/capture-live.ps1`** (lanza en primer plano, sondea una firma, vuelca RAM + screenshot y
+cierra por PID):
+
+```powershell
+./capture-live.ps1 -Config ../sanity-arte/out/sanity.uae `
+  -Adf ../sanity-arte/out/disk/sanity-arte.adf `
+  -ProbeAddr 0x26758 -ProbePattern 0fff0ffc0fd9 -OutDir ./shots
+```
+
 
 1. Lanzar en primer plano (`Start-Process`, ver arriba). Comprobar que `node side.mjs state`
    muestra `pc`/`cycles` **avanzando**.
