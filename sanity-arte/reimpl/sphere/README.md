@@ -44,9 +44,27 @@ Ludlam; ver su README para el detalle del chunky-to-planar y el truco de BPLCON1
 | Fichero | Descripción |
 |---|---|
 | `src/sphere.hpp` / `src/sphere.cpp` | generador del mapa + render (fiel al original) |
+| `src/motion.hpp` / `src/motion.cpp` | el **tumble** (4 fases + senos + integradores) |
 | `src/tables.hpp` | `extent`/`profile` (256 B c/u, del generador original) |
-| `src/test_sphere.cpp` | test: verifica FNV-1a contra los checksums de referencia |
+| `src/test_sphere.cpp` | test: verifica FNV-1a + genera la animación (64 frames) |
+| `sphere_frame_d4936.png` | frame renderizado (rotation `$4936`) |
+| `sphere_anim.gif` | animación del tumble (64 frames, 192×180) |
 | `Makefile` | `make test` |
+
+## Movimiento (tumble)
+
+Recuperado por Jon Ludlam del código de la parte (fase en `$2de950`, velocidad en
+`$2de9c2`). Una vez por vblank (50 Hz), cuatro contadores de fase avanzan por pasos fijos
+(`$50,$2c,$12,$2e`) y dos sumas de senos escaladas integran en dos acumuladores; la rotación
+toma su byte vertical de uno y el horizontal (doblado) del otro. La demo renderiza a 25 fps desde
+un movimiento a 50 Hz (**2 steps por frame**).
+
+```
+rotation = (acc_v & 0xff00) | (((acc_h >> 8) * 2) & 0xff)
+```
+
+Validado: la rotación evoluciona (`$0000` → … → `$88c6` en 64 frames) y los frames se validan
+visualmente como una esfera con textura mapeada.
 
 ## Validación
 

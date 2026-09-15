@@ -4,10 +4,12 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
 #include "sphere.hpp"
+#include "motion.hpp"
 
 using namespace rein;
 static int fails = 0;
@@ -60,6 +62,27 @@ int main(int argc, char** argv) {
     auto f3 = sphere_render(tex, map, 0x4936);
     out.write((const char*)f3.data(), f3.size());
     std::printf("  frame 0x4936 -> sphere_frame_d4936.raw\n");
+
+    // Animacion: N frames con el movimiento (2 steps por frame = 25 fps de 50 Hz).
+    {
+        int n = 64;
+        std::filesystem::create_directories("anim");
+        Motion m;
+        std::uint16_t first = m.rotation(), last = first;
+        for (int f = 0; f < n; f++) {
+            std::uint16_t rot = m.rotation();
+            last = rot;
+            auto fr = sphere_render(tex, map, rot);
+            char path[64];
+            std::snprintf(path, sizeof(path), "anim/frame%04d.raw", f);
+            std::ofstream of(path, std::ios::binary);
+            of.write((const char*)fr.data(), fr.size());
+            m.step();
+            m.step();  // 2 steps: la demo renderiza a 25 fps desde 50 Hz
+        }
+        std::printf("  animacion: %d frames -> anim/ (rot %04x .. %04x)\n", n, first, last);
+        check(first != last, "la rotacion cambia con el movimiento (tumble)");
+    }
 
     if (fails == 0) { std::printf("\nTODOS LOS TESTS OK\n"); return 0; }
     std::printf("\n%d TEST(S) FALLARON\n", fails);
