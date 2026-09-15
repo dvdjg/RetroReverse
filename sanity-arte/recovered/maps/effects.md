@@ -67,7 +67,7 @@ Los strings binarios tipo glifo (`BAHA0`, `BBHB2` en 0x03242C; `D4DeD`, `FEFuF`,
 
 | Bloque | l1 | Identificación | Conf. |
 |---|---|---|---|
-| `0x03AFFC` | 102852 | **túnel** (copperlist + paleta + textura) | media |
+| `0x03AFFC` | 102852 | buffer del efecto **corridor/túnel**: copperlist (5 planos, `BPLCON0=$5200`) + paleta (offset `0x146`) + datos. El túnel de Arte = **corridor de Chaos** (32 colores). Validación: `../media/palettes/tunnel-VALIDACION.md` | alta (paleta) |
 | `0x09A940` | 51648 | **plasma/render** (procedural; buffer de display) | media |
 | `0x0ADB04` | 61660 | copperlist + datos (efecto) | baja |
 | `0x01DDE8` | 59616 | copperlist + datos | baja |

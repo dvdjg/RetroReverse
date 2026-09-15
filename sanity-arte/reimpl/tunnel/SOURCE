@@ -1,0 +1,29 @@
+ORIGEN (código de referencia + assets):
+- Código: remake JS "artsy" de Anders Tornblad (bitmap-tunnel-scene.js):
+  https://github.com/atornblad/artsy
+  - mecánica raytraced (rayo por fila -> intersección con suelo/techo -> Z de pared).
+- Assets recuperados (en data/, PNG + RGBA raw):
+  - tunnelBits.png   80x30  (textura: 4 tiles "a".."d" de 20 px)
+  - tunnelWall.png   128x64 (pared del fondo)
+  - tunnelHanger.png 160x30 (colgantes del techo)
+  Los gráficos son OBRA DE SANITY (1993), distribuidos en el repo artsy. NO cubiertos
+  por la licencia de este expediente.
+
+GENERADO POR:
+- reimplementación C++ en src/tunnel.cpp (fiel a la mecánica del JS de referencia).
+- conversión PNG -> RGBA raw con toolkit (Pillow); los .rgba son regenerables desde los .png.
+- VARIANTE PALETA DE ARTE: *-arte.rgba = palette swap de los assets a los 32 colores de la
+  paleta real de Arte (data/palette-arte.json). Geometría idéntica, color del original.
+
+VERIFICACIÓN:
+- estructura (tamaños, scripts, contenido de frames, avance temporal). Sin checksums
+  byte-exactos del original (los parámetros exactos de la demo tienen confianza MEDIA).
+- validación visual de los frames volcados (anim/*.raw -> PNG) + overlay (pared/colgantes).
+
+VALIDACIÓN CONTRA EL ORIGINAL (ver ../../recovered/media/palettes/tunnel-VALIDACION.md):
+- la paleta del bloque 0x03AFFC (offset 0x146) coincide con tunnel-palette.json (32 colores,
+  rampa) y el efecto es de 5 bitplanes (BPLCON0=$5200) -> el túnel de Arte es el "corridor"
+  de Chaos (texture mapping), NO un túnel bitmapped.
+- tunnelBits/Wall/Hanger.png son gráficos del remake de Tornblad, NO assets originales:
+  sus colores (azules/verdes/magentas) no están en la paleta de Arte. Este módulo reproduce
+  el remake, no (todavía) el original.
