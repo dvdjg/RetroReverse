@@ -1,0 +1,16 @@
+ORIGEN (ingeniería inversa + assets recuperados):
+- Técnica y assets recuperados por Jon Ludlam (reimplementación "ocaml-arte-sphere"):
+  https://tangled.org/jon.recoil.org/ocaml-arte-sphere
+  - generador del mapa: $2de7ea del módulo de Arte
+  - tablas: extent $2e2b02, profile $2e2c02
+  - movimiento: $2de950 / $2de9c2
+- textura (data/texture-256x256-4bit.bin): OBRA DE RA/SANITY, recuperada de la demo en ejecución.
+  NO cubierta por la licencia MIT de este expediente.
+- checksums de referencia: FNV-1a de 263 rotaciones (data/reference-checksums.txt).
+
+GENERADO POR:
+- reimplementación C++ en src/ (sphere.cpp) fiel al algoritmo recuperado.
+- tablas.hpp generadas desde lib/sphere_map.ml del repo original.
+
+VERIFICACIÓN:
+- byte-exacto: FNV-1a coincide con los checksums de referencia en las rotaciones probadas.

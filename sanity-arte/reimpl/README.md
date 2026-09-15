@@ -18,7 +18,12 @@ la **referencia funcional** equivalente.
 | `sine_wobble` — distorsión por scanlines (8 osciladores) | 0x096A28 (0x150-0x82E) | PORTADO (test OK) | `reference/sine_wobble_amiga.asm` |
 | `scrolltext` — scrolltext con fuente de 3 planos | 0x02162C (0x196E-0x1A70) | PORTADO (test OK) | `reference/scrolltext_amiga.asm` |
 | `palette_fade` — fade de paleta por nibbles (R/G/B) | 0x0B0C2C (0x031C-0x03E2) | PORTADO (test OK) | `reference/palette_fade_amiga.asm` |
-| (pendiente) túnel / esfera-lente / plasma / zoom | 0x03AFFC / 0x07E42C / 0x09A940 | PENDIENTE | — |
+| `sphere` — esfera con textura mapeada (**byte-exacta**, con assets reales) | módulo (gen. mapa $2de7ea) | PORTADO (checksums OK) | (assets de Ra/Sanity + técnica recuperada) |
+| (pendiente) túnel / plasma / zoom | 0x03AFFC / 0x09A940 / 0x07E42C | PENDIENTE | — |
+
+> **`sphere`** es especial: se recuperaron los **assets reales** (textura de Ra + tablas) y la
+> técnica exacta publicados por la reimplementación de Jon Ludlam, y el render C++ reproduce el
+> original **byte a byte** (verificado con los checksums FNV-1a de 263 rotaciones).
 
 ## Construir
 

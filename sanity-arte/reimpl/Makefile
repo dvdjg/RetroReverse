@@ -7,7 +7,7 @@ CXX ?= g++
 CXXFLAGS ?= -O2 -std=c++17 -Wall -Wextra
 LDFLAGS ?= -static
 
-MODULES := sine_table motor_3d blob_render sine_wobble scrolltext palette_fade
+MODULES := sine_table motor_3d blob_render sine_wobble scrolltext palette_fade sphere
 
 .PHONY: test-all asm clean
 

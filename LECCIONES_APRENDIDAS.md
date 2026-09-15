@@ -211,6 +211,18 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   rubber-rotator, la esfera de 16 colores y el túnel "look all the same" → los tres son
   **texture mapping** (distinta forma de superficie, misma rutina de mapeo). El efecto lente
   clásico precalcula una tabla de offsets y en runtime solo copia la textura desplazada.
+- **Antes de reimplementar, buscar reimplementaciones existentes y sus assets**: existen trabajos
+  públicos que recuperaron los assets y la técnica de «Arte»:
+  - **`jon.recoil.org/ocaml-arte-sphere`** (OCaml): esfera con textura **byte-exacta**, con la
+    **textura real de Ra** (`texture-256x256-4bit.bin`), las tablas `extent`/`profile`, el mapa
+    extraído (`offmap-A/B`) y **checksums FNV-1a de 263 rotaciones**. Documenta la técnica
+    (mapa separable, sentinelas, chunky-to-planar, truco de BPLCON1).
+  - **`atornblad/artsy`** (JS): remake completo de la demo.
+  Estos aportan el **aspecto visual exacto** sin tener que adivinar la alineación. La reimpl C++
+    de la esfera (`reimpl/sphere`) reproduce el original byte a byte.
+- **Detalle crítico de la esfera**: el `profile_table` se lee como **byte CON SIGNO** y se
+  extiende a 16 bits; leerlo sin signo altera todas las rotaciones (el bug que rompió el
+  bit-exacto hasta corregirlo).
 - **Capstone necesita `skipdata=True` en bloques con datos intercalados** (headers de librería,
   firmas ASCII): sin él, el disassembler se detiene tras la primera zona de datos (p. ej. solo
   decodificaba 2 insns de un bloque de 26676 B en lugar de 8160).
