@@ -74,6 +74,27 @@ $p=Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -ArgumentLis
 
 Cerrar esa instancia por **su PID** (`Stop-Process -Id <pid>`), solo el propio.
 
+## Receta: capturar un efecto concreto en vivo (una sola invocación)
+
+Evitar relanzar en bucle: lanzar **una vez** y sondear dentro de esa sesión.
+
+1. Lanzar en primer plano (`Start-Process`, ver arriba). Comprobar que `node side.mjs state`
+   muestra `pc`/`cycles` **avanzando**.
+2. **Sondear** la "señal" del efecto con lecturas pequeñas (`mem` limita a 4096 B), p. ej. que la
+   paleta del efecto aparezca en su dirección de RAM:
+   `node side.mjs mem 0x26758 0x40 --out probe.bin` y comprobar los bytes.
+3. Al detectar la señal, **volcar la RAM** una vez:
+   `node side.mjs mem 0x0 0x80000 --out chip.bin` (chip) y `mem 0xC00000 0x40000` (slow).
+4. **Screenshot** con **ruta ABSOLUTA** (las relativas a veces no se escriben):
+   `node side.mjs screenshot "C:\...\shots\fx.png"`.
+5. Cerrar por PID.
+
+Notas: `screenshot` responde `{status,id}` y escribe el PNG de forma asíncrona (esperar ~2-4 s);
+`side.mjs` sólo espera si la respuesta trae `action`, así que no bloqueará. La RAM no siempre
+contiene el módulo del efecto (se carga bajo demanda): si no está, capturar en el momento correcto
+o usar un breakpoint (sólo Z0 disponible).
+
+
 ## Flujo recomendado (evitar relanzar el emulador)
 
 Lanzar WinUAE **una sola vez** y trabajar contra él por el **canal lateral** (sin pausar la CPU,

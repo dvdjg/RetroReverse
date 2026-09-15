@@ -89,3 +89,21 @@ Los strings binarios tipo glifo (`BAHA0`, `BBHB2` en 0x03242C; `D4DeD`, `FEFuF`,
 - Motor 3D (Chaos + McDeal), rubber-rotator, esfera 16 colores, color tunnel (Chaos), scrolltext,
   zooming-pictures, plasma. Todos los de Chaos comparten la técnica de texture mapping.
 - **Distorsión/ondas**: efecto SINE con 8 osciladores.
+
+## Paletas candidatas por bloque (método aplicado a los efectos restantes)
+
+Búsqueda de runs de words 12-bit (`$0RGB`) a continuación de la cabecera de cada bloque de efecto
+(heurística; los que empiezan con `000` suelen ser **Copperlist**, no paleta):
+
+| Bloque | Efecto | Paleta candidata | Notas |
+|---|---|---|---|
+| `0x07E42C` | zoom/créditos | @`0x232` (17) — dudosa | contiene "MR.PET" |
+| `0x078A2C` | ¿? | @`0xE0A`: `23C,478,6B3,8EE,B28,D61,F99` | **rampa clara** (candidata real) |
+| `0x0B0C2C` | motor 3D + fade | @`0x8B6` (32) | alterna `000` → **Copper**, no paleta |
+| `0x09A940` | plasma (buffer) | — | datos de display (procedural) |
+| `0x0ACE9C` / `0x076844` | copper+datos | `092,038,094,100,200…` | **Copperlist** |
+| `0x0A3C2C` | ¿? | @`0x817A` (953) | probablemente datos |
+
+**Pendiente (siguiente fase):** para cada efecto (plasma, rubber-rotator, zoom) hay que
+**capturar su frame en vivo** (receta en `toolkit/README.md`) y localizar su paleta/estructura
+antes de reimplementar — igual que se hizo con el túnel.

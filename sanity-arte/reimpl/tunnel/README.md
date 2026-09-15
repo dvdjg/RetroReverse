@@ -44,6 +44,18 @@ tile         = script[(trueY / altura / 4) & 0xff] ; script de suelo/techo
 
 Los `.rgba` son la conversión sin comprimir (RGBA) de los `.png`; el test lee los `.rgba`.
 
+## Límite: el mapa del original no está recuperado
+
+Este módulo reproduce la **geometría del remake público** (`artsy`) con la **paleta real** de Arte
+aplicada. El **mapa/gráficos exactos del corridor original NO se han recuperado** por ninguna vía
+probada (ADF, bloques PowerPacker, RAM en vivo, ni decodificación del bloque `0x03AFFC`). Ver el
+detalle y los intentos en `../../recovered/media/palettes/tunnel-VALIDACION.md`.
+
+Por tanto **no se debe esperar byte-exactitud** contra el original: la **estructura sí** está
+validada (Ollama: «strongly resembles» la captura real `corridor-live.png`) y la **paleta** coincide
+al 100%, pero las texturas son las del remake.
+
+
 ## Confianza
 
 - **Mecánica raytraced, avance, veer, slope, script de tiles: ALTA.** Verificada por el perfil de
