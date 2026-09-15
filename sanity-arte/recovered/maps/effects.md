@@ -40,16 +40,28 @@ arranque (es el patrón común de un programa SOS). Lo diferenciador es `Fade`, 
 | `0x099A2C` | 12472 | DBUG | efecto con **mensaje coloquial** ("ich bin einfach geiler ficker !!") | media |
 | `0x04BC28` | 20100 | DBUG, SINE | efecto que usa **SINE** (rotación/ondas) | media |
 | `0x08B028` | 19484 | DBUG, SINE | efecto que usa **SINE** (rotación/ondas) | media |
-| `0x03242C` | 26676 | DBUG | efecto (pendiente) | baja |
-| `0x03562C` | 34956 | DBUG | efecto (pendiente) | baja |
-| `0x04382C` | 33784 | DBUG | efecto (pendiente) | baja |
-| `0x04862C` | 21100 | DBUG | efecto (pendiente) | baja |
-| `0x0A3C2C` | 38628 | DBUG | efecto (pendiente) | baja |
-| `0x0A502C` | 32500 | DBUG | efecto (pendiente; muchos bset.b = dibujo de píxeles) | baja |
+| `0x03242C` | 26676 | DBUG | efecto (22 rutinas, 25 muls); strings tipo glifo `BAHA0/BBHB2` → ¿fuente/tiles? | baja |
+| `0x03562C` | 34956 | DBUG | efecto (23 rutinas, 46 muls); configura **5 planos** ($5200) | media |
+| `0x04382C` | 33784 | DBUG | efecto (23 rutinas, 16 muls); strings `ZlTZy/CBCrC/D4DeD/FEFuF` → ¿glifos de fuente? | baja |
+| `0x04862C` | 21100 | DBUG | efecto (21 rutinas, 14 muls) | baja |
+| `0x0A3C2C` | 38628 | DBUG | efecto **sin SetCopperAdr** (¿blitter/dibujo directo?) | baja |
+| `0x0A502C` | 32500 | DBUG | efecto (11 rutinas, **77 muls**, 4 dbra) → motor matemático/3D | media |
 | `0x01D82C` | 1688 | DBUG | fragmento pequeño | baja |
 | `0x03AC2C` | 1152 | DBUG | fragmento | baja |
 | `0x07642C` | 1172 | DBUG | fragmento | baja |
 | `0x0AD62C` | 1428 | DBUG | fragmento | baja |
+
+## Notas de densidad (código vs datos)
+
+Los bloques "sos.library" varían mucho en proporción código/datos:
+
+- **Pocos `rts`** (código escaso, mayormente tablas/datos): `0x026A2C` (10 rts / 34849 insns),
+  `0x0A502C` (11 rts / 12131 insns). Son **datos + poco código**.
+- **Muchos `rts`** (código de efecto denso): `0x03242C` (22), `0x03562C` (23), `0x04382C` (23),
+  `0x04862C` (21), `0x07E42C` (zoom), `0x096A28` (distorsión).
+
+Los strings binarios tipo glifo (`BAHA0`, `BBHB2` en 0x03242C; `D4DeD`, `FEFuF`, `M5MbM`,
+`NENsN`, `RFRqR` en 0x04382C) sugieren **fuentes/tilesets** (patrones de bits que forman letras).
 
 ## Bloques de datos (efectos/assets)
 
