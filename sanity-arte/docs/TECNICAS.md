@@ -158,30 +158,33 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
 - Coste: 3 muls por componente = 9 muls por punto (sin FP). Adecuado para estrellas/polígonos en
   68000.
 
-## Túnel con textura mapeada (bloque 0x03AFFC)
+## Túnel / corridor (bloque 0x03AFFC)
 
-- Evidencia: `out/modules_all/blk_03AFFC_102852.bin` (descomprimido del ADF 0x03AFFC,
-  track 21, l1=102852). Buffer del efecto. Confianza **media** (estructura parcial).
-- Descripción (confirmada por comentarios de pouet): **texture-mapped tunnel de un solo pixel
-  a 50 Hz** — un túnel de profundidad donde cada columna/pixel del anillo se calcula con
-  trigonometría (tabla SINE) y se mapea una textura. Es el efecto de apertura de «Arte».
-- El bloque empieza con cabecera `[1d 01 ff fe]` (4 B) + configuración de display:
-  `DIWSTRT=$2981, DIWSTOP=$29C1, DDFSTRT=$38, DDFSTOP=$D0, BPLCON0=$5200` (5 planos, 320 px).
-- El bloque contiene **4 copperlists encadenadas** (marcadores `[01 ff fe]` en 0x1, 0x119, 0x5969,
-  0x178F7) — una por zona/banda de la pantalla (el túnel usa listas por anillo).
-- **Formato de copperlist SOS**: MOVE = `[opcode 0][reg][valor]` (igual que el estándar pero con
-  opcode `0` en vez de `01`). Los punteros BPL/SPR y colores van a 0 (el demo los parchea por
-  frame). Confianza alta (decodificada: 69 moves en la primera lista).
-- **Paleta del túnel extraída** (32 colores 12-bit): `recovered/media/palettes/tunnel-palette.json`.
-  Degradado de profundidad blanco→rojo→grises→negro (`FFF,FFC,FD9,...,911,800,700,600,...,000`).
-  Confianza alta.
-- La textura mapeada está en la zona de datos (0x119-0x5969 y 0x5969-0x178F7) pero su layout
-  exacto (resolución/planos/stride) no se ha confirmado; quedan candidatos sin validar
-  (WIP). El túnel es **procedural + textura**: los anillos se calculan con SINE y se mapea la
-  textura.
-- Receta para el engine: el túnel 3D se puede hacer con una tabla de ángulos por columna y una
-  textura; por frame se actualizan los punteros BPL/Copper. El pre-cálculo en tablas evita
-  trigonometría en el bucle caliente.
+- Evidencia: `out/modules_all/blk_03AFFC_l1_102852.bin` (descomprimido del ADF `0x03AFFC`,
+  track 21, l1=102852). Es el **buffer del efecto «corridor»** (= el túnel de Arte). **No contiene
+  código** (rts=0). Confianza **alta** en la identificación; ver
+  `recovered/media/palettes/tunnel-VALIDACION.md` para el detalle.
+- Cabecera `[1d 01 ff fe]` + display: `DIWSTRT=$2981, DIWSTOP=$29C1, DDFSTRT=$38, DDFSTOP=$D0,
+  BPLCON0=$5200` → **5 bitplanes / 32 colores**, 320 px. `DMACON=$802F`.
+- **Carga en RAM confirmada en vivo:** el bloque se copia a **chip RAM `0x26614`** (la paleta
+  aparece en `0x2675A = +0x146`). El efecto **parchea la Copperlist en runtime** (95 bytes): copia
+  los 32 colores de la paleta en los registros COLORxx.
+- **Paleta del túnel** (32 colores 12-bit): `recovered/media/palettes/tunnel-palette.json`
+  (`FFF,FFC,FD9,…,000`, degradado de profundidad). En la captura real del efecto, la cobertura de
+  esta paleta es del **100 %**. Confianza **alta**.
+- Técnica: **texture-mapped tunnel** (efecto de Chaos), como el resto de efectos del grupo; el
+  look de la demo lo confirma. La captura en vivo (`reference/corridor-live.png`) muestra el túnel
+  con pilares y convergencia al centro.
+- **Reimpl:** `reimpl/tunnel/` reproduce la geometría del **remake público** (`artsy`) —raycast por
+  filas— con la **paleta real** de Arte y el compositing del canvas. Validado con Ollama: la
+  estructura «strongly resembles» el original.
+- **LÍMITE (mapa de textura):** el **mapa/gráficos exactos del original NO se han recuperado** por
+  ninguna vía (ni ADF/PP20, ni RAM en vivo, ni decodificación del bloque —no tiene patrón radial—).
+  Se documentan los intentos; la reimpl con paleta real se toma como **versión final** del efecto.
+- Receta para el engine: túnel texture-mapped con tabla de ángulos/profundidad + textura, punteros
+  BPL/Copper actualizados por frame y **paleta cargada en la Copperlist** (cubierto por
+  `reimpl/palette_fade`).
+
 
 ## Plasma (bloque 0x09A940) — efecto procedural
 
