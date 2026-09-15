@@ -4,6 +4,28 @@ Identificación de los 41 bloques IMP! del ADF (descomprimidos en `out/modules_a
 se ha podido determinar. Confianzas: alta (desensamblado/código leído), media (inferido),
 baja (pendiente).
 
+## Clasificación por uso de la API de SOS (LVOs)
+
+Con el mapa de LVOs (`reference/sanity-os-v26/LVO_MAP.md`) se ve qué funciones SOS usa cada
+bloque, lo que ayuda a clasificarlo:
+
+| Bloque | Funciones SOS destacadas | Pista |
+|---|---|---|
+| `0x078A2C` (main) | AllocMem, **Randomize×4**, **AltKick×2** | loader con gestión de memoria alterna (cambia entre efectos) |
+| `0x05402C` | **Load** | carga un archivo (música) |
+| `0x0B0C2C` | **Load + LoadDecrunch**, SetCopperAdr×7, SetCopperCol×3, Fade | motor con carga de assets + display complejo |
+| `0x04BC28` | **Fade×5**, SetCopperAdr×4, SetCopperCol×3 | efecto con **fade de paleta intenso** |
+| `0x08B028` | **Fade×4**, SetCopperAdr×6, SetCopperCol×2 | efecto con fade + copperlist compleja |
+| `0x096A28` | SetCopperAdr×5, SetCopperCol, Fade, LoadDecrunch | efecto de distorsión SINE |
+| `0x02162C` | AllocMem×5, SetCopperAdr | scrolltext |
+| `0x07E42C` | AllocMem, AllocBlock | zoom/render imagen + créditos |
+| `0x0A3C2C` | (sin SetCopperAdr) | efecto sin copperlist propia (¿blitter/dibujo directo?) |
+| resto | perfil estándar (GetPISS, AllocMem, SetInt, SetCopperAdr) | efectos gráficos estándar |
+
+Nota: todos los bloques llaman a `GetPISS`/`AllocMem`/`StartIt`/`FastRand`/`SetInt` en el
+arranque (es el patrón común de un programa SOS). Lo diferenciador es `Fade`, `SetCopperCol`,
+`Load`/`LoadDecrunch`, `Randomize`/`AltKick`.
+
 ## Bloques de código (sos.library + efecto embebido)
 
 | Bloque | l1 | Tags | Identificación | Conf. |
