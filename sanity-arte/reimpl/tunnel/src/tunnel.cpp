@@ -217,4 +217,43 @@ std::vector<u8> render_tunnel(const TunnelAssets& a, const TunnelOffsets& off, d
     return out;
 }
 
+static void fill_rect_rgba(std::vector<u8>& buf, int w, int h, int x, int y, int rw, int rh, u8 r,
+                           u8 g, u8 b) {
+    for (int yy = y; yy < y + rh; ++yy) {
+        if (yy < 0 || yy >= h) continue;
+        for (int xx = x; xx < x + rw; ++xx) {
+            if (xx < 0 || xx >= w) continue;
+            u8* p = &buf[((std::size_t)yy * w + xx) * 4];
+            p[0] = r; p[1] = g; p[2] = b; p[3] = 255;
+        }
+    }
+}
+
+std::vector<u8> render_tunnel_canvas(const TunnelAssets& a, const TunnelOffsets& off, double time) {
+    const int W = kCanvasWidth, H = kCanvasHeight;
+    std::vector<u8> out((std::size_t)W * H * 4, 0);
+    // bandas del JS
+    fill_rect_rgba(out, W, H, 0, 0, W, 50, 0x35, 0x00, 0x00);
+    fill_rect_rgba(out, W, H, 0, H - 50, W, 50, 0x35, 0x00, 0x00);
+    fill_rect_rgba(out, W, H, 0, 50, W, 14, 0x46, 0x05, 0x1e);
+    fill_rect_rgba(out, W, H, 0, H - 64, W, 14, 0x46, 0x05, 0x1e);
+    fill_rect_rgba(out, W, H, 0, 64, W, H - 128, 0x00, 0x00, 0x00);
+    // tunel escalado 2x en y=64
+    const std::vector<u8> t = render_tunnel(a, off, time);
+    for (int y = 0; y < kTunnelHeight; ++y) {
+        for (int x = 0; x < kTunnelWidth; ++x) {
+            const u8* s = &t[((std::size_t)y * kTunnelWidth + x) * 4];
+            for (int dy = 0; dy < 2; ++dy) {
+                for (int dx = 0; dx < 2; ++dx) {
+                    const int ty = 64 + y * 2 + dy, tx = x * 2 + dx;
+                    if (ty < 0 || ty >= H || tx < 0 || tx >= W) continue;
+                    u8* d = &out[((std::size_t)ty * W + tx) * 4];
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = 255;
+                }
+            }
+        }
+    }
+    return out;
+}
+
 }  // namespace rein

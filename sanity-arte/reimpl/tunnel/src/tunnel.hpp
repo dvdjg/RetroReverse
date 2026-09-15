@@ -48,6 +48,13 @@ TunnelOffsets tunnel_offsets();
 // Render del túnel a `time` ms. Devuelve kTunnelWidth*kTunnelHeight*4 bytes RGBA.
 std::vector<u8> render_tunnel(const TunnelAssets& a, const TunnelOffsets& off, double time);
 
+// Compositing del "canvas" completo (como el JS): 640x512 con las bandasde fondo
+// (#350000 / #46051e) y el túnel escalado 2x en y=64. Reduce el negro respecto al
+// original capturado (corridor-live.png). Devuelve 640*512*4 bytes RGBA.
+constexpr int kCanvasWidth = 640;
+constexpr int kCanvasHeight = 512;
+std::vector<u8> render_tunnel_canvas(const TunnelAssets& a, const TunnelOffsets& off, double time);
+
 }  // namespace rein
 
 #endif  // REIN_TUNNEL_HPP

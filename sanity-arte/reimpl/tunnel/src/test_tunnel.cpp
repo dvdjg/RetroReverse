@@ -113,6 +113,18 @@ int main(int argc, char** argv) {
     }
     std::printf("  variante paleta de Arte: 32+5 frames -> anim_arte/*.raw\n");
 
+    // Canvas completo (bandas de fondo + tunel escalado 2x), como el JS.
+    std::filesystem::create_directories("canvas");
+    for (int f = 0; f < 8; ++f) {
+        auto c = render_tunnel_canvas(arte, off, 1920.0 + f * 3600.0);
+        if (c.size() != (std::size_t)kCanvasWidth * kCanvasHeight * 4) { ++fails; break; }
+        char path[64];
+        std::snprintf(path, sizeof(path), "canvas/c%02d.raw", f);
+        std::ofstream(path, std::ios::binary).write((const char*)c.data(), (std::streamsize)c.size());
+    }
+    std::printf("  canvas: 8 frames 640x512 -> canvas/*.raw\n");
+
+
 
     if (fails == 0) { std::printf("\nTODOS LOS TESTS OK\n"); return 0; }
     std::printf("\n%d TEST(S) FALLARON\n", fails);

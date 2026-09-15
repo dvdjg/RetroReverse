@@ -281,8 +281,25 @@ reducir las filas en negro (huecos del script de tiles y fade del fondo).
 Con el corridor activo (paleta en `0x2675A`, bloque en `0x26614`) se inspeccionó qué sigue al
 bloque (termina en `0x3F7D8`). Aparece una **tabla de offsets** (`18 00 00 00`, `38`, `78`, `F8`,
 `F8`, …): valores 24, 56, 120, 248 (progresión `×2+8`) que saturan en `248` — compatible con la
-tabla de **extensión/distancia** de un efecto de texture-mapping. **Candidata al mapa del
-corridor** (aún sin confirmar; podría pertenecer al siguiente módulo cargado).
+tabla de **extensión/distancia** de un efecto de texture-mapping.
+
+**Esa tabla NO está en ningún bloque del ADF** (ni IMP!/PP20) → se **genera en runtime** (o está en
+un módulo aún no extraído). No se puede analizar offline.
+
+### Compositing del canvas (paso 2) — reduce el negro
+
+Se añadió `render_tunnel_canvas` (640×512): bandas de fondo del JS (`#350000`, `#46051e`) + el
+túnel escalado 2× en `y=64`. Efecto sobre el «negro»:
+
+| zona | negro |
+|---|---|
+| túnel solo (320×192, reimpl) | 59 % |
+| **canvas completo (reimpl)** | **40 %** |
+| zona del túnel del original (`corridor-live.png`) | 48 % |
+
+El canvas acerca la distribución al original (40 % vs 34 % global). Ollama lo valida: «tunnel with
+perspective… deep red, maroon border framing the tunnel».
+
 
 
 
