@@ -31,11 +31,12 @@ estas librerías o en los bloques de datos (1,3,5,7,9,11). sos.library solo toca
 - mod_004 (34956 B, 12220 insns) usa **0 llamadas `bsr`/`jsr` directas a subrutinas locales**:
   toda la lógica se invoca por vectores indirectos (`jsr (a6)`, `jsr (a5)`, `jsr (a0)`). Confianza
   **alta** (análisis de targets de salto).
-- Mismos vectores Exec que mod_2 (AllocMem/FreeMem/MakeLibrary/AllocVec/FindLibrary/FindTask/
-  Forbid/Permit) + misma resolución de módulos por tag (`-$138` con `move.l #$44425547 ("DBUG")`).
-- Conclusión: las **rutinas de efecto NO están en sos.library**. Están en los módulos SOS del
-  directorio no volcados (los `SOS*` y `main`), crunched en el ADF. Obtenerlos requiere el
-  decruncher IMP! (WIP en `toolkit/python/imp_decrunch.py`).
+- Mismos vectores que mod_2. **CORRECCIÓN (con `sos.includes`)**: los `jsr -$XX(a6)` son la
+  **API de SOS**, no de Exec. Ver `recovered/reference/sanity-os-v26/LVO_MAP.md`. En particular
+  `-$138(a6)` = **OpenLibrary** (carga librería por nombre; `move.l #$44425547 ("DBUG")`), NO una
+  "resolución de módulos por tag".
+- Conclusión: los bloques de código son **variantes de sos.library** con un efecto embebido cada
+  uno (ver `recovered/maps/effects.md`).
 
 ## Estructura
 
@@ -47,32 +48,39 @@ estas librerías o en los bloques de datos (1,3,5,7,9,11). sos.library solo toca
           ...
 ```
 
-## Vectores Exec usados (jsr -$xx(a6), A6 = ExecBase)
+## Vectores SOS usados (jsr -$XX(a6), A6 = base de sos.library)
 
-| Offset | Función | Frec. | Ejemplo |
-|---|---|---|---|
-| `-$180` | AllocMem | 1 | 0xC05F14 |
-| `-$174` | FreeMem | 1 | 0xC05F1C |
-| `-$228` | MakeLibrary | 1 | 0xC05F34 |
-| `-$1E` | OpenLibrary | 1 | 0xC05F46 |
-| `-$19E` | CloseLibrary | 1 | 0xC05F50 |
-| `-$84` | Forbid | 1 | 0xC05F5E |
-| `-$17A` | Permit | 1 | 0xC05F64 |
-| `-$BA` | FindLibrary | 1 | 0xC05F90 |
-| `-$2A` | AllocVec | 6 | 0xC05FB2 |
-| `-$54` | FindTask | 1 | 0xC06070 |
+Mapa completo en `recovered/reference/sanity-os-v26/LVO_MAP.md`. Los más usados:
 
-Base por registro: `jsr (a6)` x20, `jsr (a5)` x5, `jsr (a0)` x3, `jsr (a4)` x1.
+| Offset | Función SOS | Ejemplo |
+|---|---|---|
+| `-$180` | PutScreen | 0xC05F14 |
+| `-$174` | OpenScreen | 0xC05F1C |
+| `-$228` | Save | 0xC05F34 |
+| `-$1E` | StartIt | 0xC05F46 |
+| `-$19E` | — (CloseLibrary/compat) | 0xC05F50 |
+| `-$84` | SetInt (IRQ+copper) | 0xC05F5E |
+| `-$2A` | AllocMem | 0xC05FB2 |
+| `-$54` | SetInt | 0xC06070 |
+| `-$11A` | GetPISS | 0xC05FA0 |
+| `-$138` | **OpenLibrary** (por nombre) | 0xC05FE2 |
+| `-$72` | SetCopperAdr | 0xC046xx |
+| `-$9C` | SetCopperCol | 0xC046xx |
+| `-$A2` | Fade | — |
 
-## Primitivas internas (offsets negativos no-Exec)
+Base por registro: `jsr (a6)` (SOS), `jsr (a5)` (variables), `jsr (a0)` (job/replay).
 
-- `-$138(a6)` (1 uso, 0xC05FE2): resuelve/carga un módulo SOS por **tag de 32 bits** en D0.
-  P. ej. `move.l #$44425547 ("DBUG"), d0; jsr -$138(a6)` abre `DBUG.soslibrary`.
-- `-$11A(a6)` (3 usos, ej 0xC05FA0): primitiva interna (probablemente alloc/init de estructura de librería).
-- `-$72(a6)` (1 uso, 0xC06ECE): primitiva interna.
+## Corrección de interpretaciones previas
 
-El tag `DBUG` = `0x44425547` es la única etiqueta ASCII cargada como inmediato en todo el bloque;
-los módulos se referencian por **tag de 32 bits** (4 primeros chars del nombre en mayúsculas).
+- `-$138(a6)` = **OpenLibrary** (no "resolución de módulos por tag"). El tag `"DBUG"`/`"SINE"` es
+  el nombre de la librería a abrir (4 letras).
+- `-$11A(a6)` = **GetPISS** (no "primitiva interna").
+- `-$54(a6)` = **SetInt** (no FindTask); `-$72` = SetCopperAdr; `-$9C` = SetCopperCol.
+- `-$228(a6)` = **Save** (no MakeLibrary); `-$180` = PutScreen; `-$174` = OpenScreen.
+- `-$c(a4)` en contexto DBUG = **CheckDBUG**.
+
+El nombre `DBUG` = `0x44425547` es una etiqueta ASCII de 4 letras (nombre de la librería a abrir
+con OpenLibrary). Los demás nombres (`SINE`, `AGAC`, …) siguen el mismo patrón.
 
 ## Constantes de configuración de la demo (presentes en sos.library)
 
@@ -83,10 +91,8 @@ los módulos se referencian por **tag de 32 bits** (4 primeros chars del nombre 
 
 ## Observaciones para el port a C++
 
-- La librería SOS gestiona módulos por **tags de 32 bits**, no por strings: al portar, basta
-  con un mapa `tag → módulo`.
-- El arranque es una librería clásica Amiga (MakeLibrary + dependencias vía OpenLibrary /
-  FindLibrary de `sos.library`). El equivalente host puede ignorar Exec y sustituirlo por
-  construcción directa del objeto.
-- `jsr (a5)` x5 sugiere un **segundo puntero de base** (quizá la librería SOS abierta en A5),
-  y `jsr (a0)` son jump-through de vectores ya resueltos.
+- La librería SOS carga sus librerías por **nombre de 4 letras** (OpenLibrary): al portar, basta
+  con un mapa `nombre → módulo`.
+- El arranque es una librería tipo Amiga, pero usa **la API propia de SOS** (no Exec). El
+  equivalente host ignora Exec y construye el objeto directamente.
+- `jsr (a5)` = llamadas con A5 = variables; `jsr (a0)` = job/replay (punteros resueltos).

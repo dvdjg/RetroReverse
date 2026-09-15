@@ -162,9 +162,13 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   mismo formato pero expandido (track pasa de word→long, nombre pasa de +0x08 a +0x0A).
   Confirmar la semántica de `track`/`offset`/`size` leyendo la rutina que lo recorre o con el
   watchpoint en la tabla, no asumiendo.
-- **Los módulos SOS se referencian por tag de 32 bits, no por string**: sos.library carga p. ej.
-  `DBUG.soslibrary` con `move.l #$44425547 ("DBUG"), d0; jsr -$138(a6)`. El tag son los 4
-  primeros caracteres del nombre en mayúsculas. Al portar, usar un mapa `tag → módulo`.
+- **SOS carga sus librerías por nombre de 4 letras (OpenLibrary), no por tag**: `jsr -$138(a6)`
+  (= `_OpenLibrary` en el mapa de LVOs) con `move.l #$44425547 ("DBUG"), d0` abre
+  `DBUG.soslibrary`. El mapa completo de LVOs de SOS está en
+  `sanity-arte/recovered/reference/sanity-os-v26/LVO_MAP.md` (extraído de `sos.includes`).
+  **Corrección**: interpretaciones previas de `-$138` como "resolución de módulos por tag",
+  `-$11A` como "primitiva" y `-$54` como "FindTask" eran incorrectas (son OpenLibrary, GetPISS y
+  SetInt respectivamente).
 - **Asociación bloque IMP! del ADF ↔ módulo volcado por `l1`**: cada bloque `IMP!` del disco lleva
   `l1` (tamaño descomprimido) y `l2` (tamaño comprimido) tras la firma. El hook de runtime capturó
   `len` = `l1`; la coincidencia es exacta (12/12 en «Arte»). Permite mapear cada bloque del disco a

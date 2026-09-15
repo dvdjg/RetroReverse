@@ -20,7 +20,8 @@ expediente.
 
 - `sos.maindoc` — documentación principal (este resumen viene de aquí).
 - `sos.autodoc` — autodocs de las funciones SOS (103 KB).
-- `sos.includes` — includes de ensamblador.
+- `sos.includes` — includes de ensamblador (**incluye el mapa de LVOs**; volcado a `LVO_MAP.md`).
+- `LVO_MAP.md` — mapa completo de Library Vector Offsets de SOS (para descifrar los `jsr -$XX(a6)`).
 - `SOS_RUN` / `SOS_HYB` / `SOS_RAM2MB` / `SOS_RAM3MB` — variaciones del sistema.
 - `DBUG.soslibrary` / `SINE.soslibrary` / `TEXT.soslibrary` / `AGAC.soslibrary` — librerías
   compiladas (para comparar con las de Arte).
