@@ -140,6 +140,26 @@ está decrunchado. Por tanto la semántica de `track`/`offset` **sigue sin resol
 efecto (`SOSchaos*`)**. Para desbloquear: (a) extraer el cruncher IMP! y localizar el directorio
 real de datos (no ya el de metadatos), o (b) desensamblar el `main`/`SOSloadmodule` completos.
 
+## Intento desde el volcado de RAM (paso 1 revisado)
+
+`out/ram/live-slow.bin` (RAM en `0xC00000`, 0x80000 B) **sí** contiene el runtime y el directorio:
+
+- Directorio en `0xC036F0` (32 B/entrada: `track` long BE + `offset` word LE + `size` long BE,
+  nombre en `+0x0A`). **No guarda direcciones de carga.**
+- Cabeceras de módulo en RAM = `4E F9 <abs> "sos\0"` (jmp absoluto; por eso no las detectaba la
+  firma de disco `...00 10 4E F9`). Solo hay **3**, y las tres son `sos.library`
+  (`0xC03B80`, `0xC05EF8`, `0xC70218`).
+- **Los módulos `SOSchaos*` NO están cargados** en el momento del volcado (se cargan/descargan bajo
+  demanda). El chip RAM tampoco los contiene.
+
+**El cruncher está en RAM** (`0xC02280`): reconoce por firma de 4 bytes **`PP20` (PowerPacker)**,
+`CrM!`, `CrM2`, `Crm!` e `IMP!` → es un **descompresor multi-formato**. Pista: algunos módulos
+podrían usar **PowerPacker**, no solo IMP!.
+
+**Resultado:** no se pudo extraer el corridor de este volcado. Para lograrlo hace falta capturar la
+RAM **durante** el efecto (breakpoint en el `corridor`), o resolver el cargador.
+
+
 
 
 
