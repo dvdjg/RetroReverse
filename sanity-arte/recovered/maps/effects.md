@@ -107,3 +107,9 @@ Búsqueda de runs de words 12-bit (`$0RGB`) a continuación de la cabecera de ca
 **Pendiente (siguiente fase):** para cada efecto (plasma, rubber-rotator, zoom) hay que
 **capturar su frame en vivo** (receta en `toolkit/README.md`) y localizar su paleta/estructura
 antes de reimplementar — igual que se hizo con el túnel.
+
+**Nota sobre `0x078A2C`** (candidato a rubber-rotator): es una variante de `sos.library` con **64
+`mul` / 61 `div`** (coherente con texture-mapping) y una **paleta de 16 colores** en `0xE0A`
+(`23C,478,6B3,8EE,B28,D61,F99` sobre 9 negros). Confianza **baja** en la identificación del efecto
+(no confirmado en vivo).
+
