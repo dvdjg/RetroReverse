@@ -1,0 +1,13 @@
+ORIGEN:
+- Amiga-Reverse/sanity-arte/out/modules_all/blk_0B0C2C_63064.bin
+  sha1 b37f140c32... (descomprimido del ADF 0x0B0C2C con toolkit/bin/ancient)
+  rutinas: 0x0C16-0x0CB8 (build matrix), 0x0CBA-0x0D58 (transform point)
+
+GENERADO POR:
+- desensamblado con capstone (m68k); analisis manual de la aritmetica Q15
+- reimpl C++ en src/ (implementacion de referencia, no copia de codigo)
+- rutina asm canonica preservada en reference/transform3d_q15_amiga.asm
+
+NOTA:
+- No se redistribuye codigo fuente del autor; el .asm es el desensamblado del
+  binario original, conservado como referencia tecnica (ver LECCIONES_APRENDIDAS §legales).
