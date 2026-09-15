@@ -234,6 +234,27 @@ avanza y el canal lateral responde.
 usa `0x26614`** (sus referencias en slow RAM son datos, no punteros de código), o capturar el
 **framebuffer** de ese instante para comparar con la reimpl.
 
+## Validación visual contra el original en vivo
+
+Se capturaron **40 pantallazos** de la demo corriendo (cada 3 s) y se midió la fracción de píxeles
+pertenecientes a la paleta del túnel. Los frames con más contenido: `f1` (33 %), `f8` (56 %),
+`f38-40` (≈34 %). Analizados con Ollama:
+
+- **`f1` = el corridor/túnel** (rojos/púrpuras/dorados, pilares verticales, borde marrón oscuro,
+  fondo negro, convergencia al centro) → guardado como **`reference/corridor-live.png`**.
+- `f8` = retrato de **Einstein**; `f38` = la **esfera** (→ `reference/sphere-live.png`). Confirma que
+  la **misma paleta** sirve a varios efectos (imágenes y túnel).
+
+**Comparación directa** original (`f1`) vs reimpl (`anim_arte/`): Ollama concluye que **se parecen
+mucho** — «the overall composition, including the vertical pillars and the receding floor/ceiling
+patterns, is nearly identical» — con estas diferencias: el original tiene colores más **vibrantes**
+(rojos/púrpuras/dorados) y texturas más **orgánicas**; la reimpl, colores apagados y patrones más
+geométricos.
+
+**Conclusión:** la **estructura del corridor está validada** (el remake de Tornblad reproduce bien
+la geometría); lo que falta es afinar **paleta y texturas** del original.
+
+
 
 
 
