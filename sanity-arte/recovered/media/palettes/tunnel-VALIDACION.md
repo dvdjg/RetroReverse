@@ -112,5 +112,34 @@ Dato sí confirmado: `blk_08B028` y `blk_096A28` son **variantes de `sos.library
 `4E F9 00 00 00 10 4E F9 00 00 00 9A "sos"` y mismas instrucciones iniciales), con efectos
 embebidos. El corridor debe estar en una de esas variantes, **pendiente de desensamblar**.
 
+### Corrección: los bloques de código grandes son el runtime SOS + cruncher
+
+Clasificación de los bloques de código por instrucciones características (capstone m68k):
+
+| bloque | len | muls | divs | rot | strings clave |
+|---|---|---|---|---|---|
+| `0A502C` | 32500 | 77 | **185** | 37 | `IMP!`, `sos.library`, `DBUG`, `SINE` |
+| `0B0C2C` | 63064 | 161 | 85 | 1 | motor 3D + fade (idioma previo) |
+| `026A2C` | 114408 | 84 | 137 | 30 | `sos.library` (runtime completo) |
+| `08B028` | 19484 | 28 | 49 | 2 | `sos.library`, `DBUG`, `SINE` |
+| `0A3C2C` | 38628 | 16 | 21 | 3 | — |
+
+`0A502C` (el más intensivo en divisiones) contiene el string **`IMP!`** → es el **decruncher**, no
+el corridor. Todos los bloques comparten los strings del runtime (`sos.library`, `DBUG`, `SINE`),
+así que **los efectos reales NO están en estos bloques**: están en los módulos `SOSchaos*` del
+directorio, **inaccesibles sin resolver el cargador** (paso 2 bloqueado).
+
+### Paso 2 (cargador) — bloqueado por falta de código
+
+El bootblock lee el **cilindro 0** completo (`io_Offset=0`, `io_Length=11264`, vía
+`trackdisk.device`) y salta al `main`. Pero el `main` desensamblado (`main_cand.asm`, 579 KB) **no
+contiene** la rutina de disco (sin referencias a `trackdisk`/`11264`), y `SOSloadmodule` (1132 B) no
+está decrunchado. Por tanto la semántica de `track`/`offset` **sigue sin resolver**.
+
+**Conclusión:** ambas vías quedan bloqueadas por la misma causa raíz — **faltan los módulos de
+efecto (`SOSchaos*`)**. Para desbloquear: (a) extraer el cruncher IMP! y localizar el directorio
+real de datos (no ya el de metadatos), o (b) desensamblar el `main`/`SOSloadmodule` completos.
+
+
 
 
