@@ -276,6 +276,46 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
   píxel (8x más rápido). En C++: `uint32_t lut[256]` y un bucle por fila.
 - Coste: ~2 lookups + 3 writes por byte de blob.
 
+## Efecto de distorsión/ondas con SINE (módulo 0x096A28)
+
+- Evidencia: `out/modules_all/blk_096A28_3260.bin` (descomprimido del ADF), desensamblado en
+  `recovered/code/mod_096a28/effect_sine_0x150-0x950.asm`. Confianza **alta** (rutinas completas).
+- Es un efecto que **carga la librería SINE** (`move.l #$53494e45 ("SINE"), d0; jsr -$138(a6)`)
+  y aplica **8 osciladores de fase** para distorsionar la imagen por bandas/scanlines.
+
+### Inicialización (0x0164-0x0260)
+
+- Carga SINE (`-$138`) y reserva buffers (`AllocVec -$2a`): 0x22F0 ×2, 0x818, 0x8000 (32 KB
+  display), 0x20000 (128 KB), 0x4000, 0x1CCEA.
+- Configura display (`SetInt -$c`) y llama a las subrutinas del efecto.
+
+### Construcción de la tabla de distorsión (0x0400)
+
+- Reserva 0x20000 (128 KB) y genera una **tabla de offsets** combinando dos patrones de 16
+  entradas (`lea $47a(pc)`) con `or.l` + `lsl.l #$4` (×16). Limpia con patrón `$AAAAAAAA`.
+- Stride de fila 0x780 (1920 B).
+
+### Bucle por frame (0x07B6)
+
+- **8 osciladores**: `addi.w #velocidad, $38(a5)+...` — cada uno avanza su fase con velocidad
+  distinta (+10, +4, +0x48, +0x52, +6, +9, +5, +4).
+- `move.w #$200, d0; add.w d0, $36(a5)` — avanza el tiempo global.
+- Parchea la **copperlist** (`-$72`) con los nuevos valores de fase.
+- `bsr $848` ×2 (dibuja).
+
+### Parcheo de copperlist (0x0702)
+
+- Escribe 9 words por fila con máscara `and.w #$FE` en la tabla de copperlist; bucle 42 filas ×
+  11 registros (462 valores) → **distorsión por scanlines** (la copperlist mueve los punteros de
+  bitplane/color por franja).
+
+### Receta para el engine
+
+- 8 acumuladores de fase (enteros), cada uno incrementado por su velocidad por frame.
+- Por cada scanline, `offset = sin_table[fase] >> N`; el offset desplaza horizontalmente la fila
+  (o cambia el color). Con 8 ondas superpuestas se obtiene un patrón orgánico (ripple/wobble).
+- En C++: `int phase[8]`, y por fila sumar los `sin(phase[i] + row*algo)` (con tabla precalculada).
+
 ## Pendiente
 
 - Efectos concretos (3D, corridor, blitter) y su algoritmo.
