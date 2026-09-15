@@ -335,6 +335,23 @@ La tabla (`0x3F7F8`, 80 B / 20 longs) leída en **little-endian** es:
 parte de otro módulo contiguo en RAM). El mapa de textura del corridor queda **sin localizar** — la
 vía que resta es un **breakpoint puntual** en el código que escribe en `0x26614`.
 
+### Breakpoint (paso 1) — no viable con el toolkit actual
+
+- El toolkit solo expone **breakpoints software (Z0)** (`setBreakpoint`/`clearBreakpoint`), **sin
+  watchpoints** → no se puede enganchar directamente la **escritura** en `0x26614`.
+- Para un breakpoint de código hace falta la **dirección** de la rutina del corridor, que **no se
+  conoce** (el módulo no aparece cargado con cabecera `jmp`+`"sos"`; solo hay 2 variantes de
+  `sos.library` en slow RAM durante el efecto).
+- Comprobado también que el **bloque `0x03AFFC` no contiene un mapa radial**: la correlación de sus
+  bytes con el radio y con el ángulo respecto a su centro es ≈ 0 en todas las regiones probadas
+  (320×160 y 256×256 en varios offsets) → **no es un mapa de coordenadas de túnel**.
+
+**Estado final del túnel (límite aceptado):** el mapa de textura del original **no se ha podido
+recuperar** por las vías disponibles (ni en ADF, ni en PP20, ni en RAM, ni por decodificación del
+bloque). La reimpl del remake con la **paleta real** (validada visualmente y al 100 % de cobertura)
+se toma como **versión final** del efecto para la reconstrucción.
+
+
 
 
 
