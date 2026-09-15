@@ -300,6 +300,24 @@ túnel escalado 2× en `y=64`. Efecto sobre el «negro»:
 El canvas acerca la distribución al original (40 % vs 34 % global). Ollama lo valida: «tunnel with
 perspective… deep red, maroon border framing the tunnel».
 
+## Captura completa del corridor activo (paso 1) — qué parchea el efecto
+
+Capturada la RAM **una sola vez** con el corridor activo (esperando a que aparezca la paleta en
+`0x2675A`): `out/ram/corridor-full-chip.bin` y `corridor-full-slow.bin`.
+
+Los **95 bytes** que el efecto escribe sobre el bloque del disco son la **carga de la paleta en la
+Copperlist**:
+
+- En `+0x9E` y siguientes aparecen, cada 4 bytes, los valores de la paleta en orden:
+  `0FFF, 0FFC, 0FD9, 0FB8, 0F96, 0F85, 0F74, 0E63, 0D53, 0C42, 0B32, 0A22, …` → son los **COLORxx**
+  que el efecto copia desde la tabla de la paleta al listado de Copper.
+- En `+0x2B` y siguientes (cada 8 bytes) hay MOVE de color (`02 01`, `67 38`, `38 01`, …).
+
+**Conclusión:** el corridor **carga su paleta de 32 colores en la Copperlist en runtime** (lo que ya
+cubre `reimpl/palette_fade`). La tabla de offsets adyacente y el mapa de textura **siguen sin
+identificarse** (no están en el ADF).
+
+
 
 
 
