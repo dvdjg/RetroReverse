@@ -1,0 +1,8 @@
+ORIGEN:
+- sanity-arte/out/modules_all/blk_096A28_l1_3260.bin
+  sha1 79cdb836cd66e522ae7d034c5ea9add92604a0d5
+  rutinas 0x150-0x2B0 (init), 0x400-0x478 (tabla), 0x766-0x82E (bucle)
+
+GENERADO POR:
+- desensamblado capstone; reimpl C++ en src/ (referencia)
+- asm canonico en reference/sine_wobble_amiga.asm
