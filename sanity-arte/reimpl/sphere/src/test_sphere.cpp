@@ -57,6 +57,23 @@ int main(int argc, char** argv) {
     std::printf("  rotation 0232 -> fnv1a %08x (esperado e3a4c201)\n", h2);
     check(h2 == 0xe3a4c201u, "rotation 0x0232 coincide con el checksum");
 
+    // Verificacion EXHAUSTIVA: todas las rotaciones del manifest (263).
+    {
+        std::ifstream mf(dir + "/reference-checksums.txt");
+        int total = 0, ok = 0;
+        std::string line;
+        while (std::getline(mf, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            unsigned rot, exp;
+            if (std::sscanf(line.c_str(), "%x %x", &rot, &exp) != 2) continue;
+            auto fr = sphere_render(tex, map, (u16)rot);
+            if (fnv1a(fr) == exp) ok++;
+            total++;
+        }
+        std::printf("  manifest: %d/%d rotaciones coinciden\n", ok, total);
+        check(total > 0 && ok == total, "todas las rotaciones del manifest coinciden");
+    }
+
     // Volcar un frame raw (192x90 indices) para inspeccion visual.
     std::ofstream out("sphere_frame_d4936.raw", std::ios::binary);
     auto f3 = sphere_render(tex, map, 0x4936);

@@ -68,15 +68,23 @@ visualmente como una esfera con textura mapeada.
 
 ## Validación
 
+**Exhaustiva**: las **263 rotaciones** del manifest de referencia (`reference-checksums.txt`)
+coinciden byte a byte (FNV-1a) con el render de `reimpl/sphere`.
+
 ```
 rotation 0x0000 -> fnv1a d73572b1  (esperado d73572b1) OK
 rotation 0x0119 -> fnv1a de4efa35  (esperado de4efa35) OK
 rotation 0x0232 -> fnv1a e3a4c201  (esperado e3a4c201) OK
+manifest: 263/263 rotaciones coinciden
 ```
 
-**Byte-exacto** al original en 3 rotaciones (over los 65536 valores posibles). El detalle que
-decidía el bit-exacto: el `profile_table` se lee como **byte con signo** (`-128..127`) y se
-extiende a 16 bits — leerlo sin signo corrompe todas las rotaciones.
+Es **byte-exacto** al original. El detalle que decidía el bit-exacto: el `profile_table` se lee
+como **byte con signo** (`-128..127`) y se extiende a 16 bits — leerlo sin signo corrompe todas
+las rotaciones.
+
+> Nota: los `frames/*.png` publicados junto al código original se generaron con una versión de
+> **208 columnas** (el buffer completo); la salida actual (y la verificada por el manifest) es de
+> **192 columnas**. Por eso se compara contra el manifest, no contra esos PNG.
 
 ## Reproducir / validar
 
