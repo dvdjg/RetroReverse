@@ -1,0 +1,7 @@
+ORIGEN:
+- sanity-arte/out/modules_all/blk_0B0C2C_l1_63064.bin
+  sha1 b37f140c327309db4e8f2894ad100b9018144302
+  rutina 0x031C-0x03E2 (fade de paleta por nibbles)
+
+GENERADO POR:
+- desensamblado capstone; reimpl C++ en src/ (referencia)
