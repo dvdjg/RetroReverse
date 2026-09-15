@@ -1,0 +1,7 @@
+ORIGEN:
+- sanity-arte/out/modules_all/blk_02162C_l1_45924.bin
+  sha1 198b23f547b7d3bef3c47999aad8177394d78a88
+  rutina 0x196E-0x1A70 (render scrolltext), mapa de chars 0x1A80
+
+GENERADO POR:
+- desensamblado capstone; reimpl C++ en src/ (referencia)
