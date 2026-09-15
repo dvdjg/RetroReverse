@@ -159,6 +159,34 @@ podrían usar **PowerPacker**, no solo IMP!.
 **Resultado:** no se pudo extraer el corridor de este volcado. Para lograrlo hace falta capturar la
 RAM **durante** el efecto (breakpoint en el `corridor`), o resolver el cargador.
 
+## Módulos adicionales: 10 bloques PowerPacker (`PP20`) en el ADF
+
+La pista del cruncher multi-formato da fruto: el ADF contiene **10 bloques `PP20`** además de los 41
+`IMP!` (que no habíamos visto). Decrunchados con `ancient` (7/10 OK), volcados en `out/pp20/`:
+
+| offset ADF | comprimido | descomprimido |
+|---|---|---|
+| `0x0503F8` | 3856 | 6264 |
+| `0x051308` | 4760 | 20800 |
+| `0x0525A0` | 3368 | 18000 |
+| `0x08FBD0` | 3808 | **61456** |
+| `0x090AB0` | 4352 | **61456** |
+| `0x091BB0` | 4272 | **61456** |
+| `0x092C60` | 14112 | 48664 |
+
+(`0x001B78` cae dentro del cruncher del bootblock; `0x0532C8` y `0x096380` no decruncharon con
+`ancient` — reintentar con otro tamaño de bloque.)
+
+**Interpretación (confianza media):** 61456 = 61440 + 16 → tres **mapas de 320×192** (1 byte/píxel),
+candidatos a los **mapas de coordenadas de texture-mapping** de los efectos de Chaos. El de 48664
+tiene words claramente ordenados (`2370,2097,1841,1570,1296,1024,1860,2133,…`: decreciente y luego
+creciente → ¿tabla de distancias/curva?). **No son imágenes visibles** (probado 320/160/240 de ancho
+y 8/16 bits; Ollama: «random noise») → son **tablas**, no gráficos.
+
+**Pendiente:** casar estos 7 bloques con los nombres del directorio (por tamaño/posición) para saber
+cuál es el mapa del **corridor**.
+
+
 
 
 
