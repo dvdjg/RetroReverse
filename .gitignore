@@ -22,3 +22,8 @@ Thumbs.db
 desktop.ini
 *.tmp
 *.log
+
+# --- Salidas generadas de reimpl (tests) ---
+sanity-arte/reimpl/**/anim/
+sanity-arte/reimpl/**/sphere_frame_*.raw
+
