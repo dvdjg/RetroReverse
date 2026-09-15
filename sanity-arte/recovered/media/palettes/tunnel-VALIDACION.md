@@ -317,6 +317,25 @@ Copperlist**:
 cubre `reimpl/palette_fade`). La tabla de offsets adyacente y el mapa de textura **siguen sin
 identificarse** (no están en el ADF).
 
+### Interpretación de la «tabla adyacente» (paso 1)
+
+La tabla (`0x3F7F8`, 80 B / 20 longs) leída en **little-endian** es:
+
+```
+24, 56, 120, 248, 248, 248, … (×14), 524536, 224, 4194496
+```
+
+- `24, 56, 120, 248` = `0x18, 0x38, 0x78, 0xF8` = `8·(2ⁿ−1)` → **máscaras de bits acumulativas**
+  (patrones de blit/dibujo), no una progresión de coordenadas.
+- **No coincide** con las tablas de Chaos conocidas (`extent`: `31,44,54,63,70…`; `profile`) ni con
+  una tabla de extensión/distancia de túnel.
+- Los 3 últimos valores son ruido → la «tabla» real son ~17 longs.
+
+**Conclusión:** **no es el mapa del corridor**; parece una **tabla de máscaras de bits** (posible
+parte de otro módulo contiguo en RAM). El mapa de textura del corridor queda **sin localizar** — la
+vía que resta es un **breakpoint puntual** en el código que escribe en `0x26614`.
+
+
 
 
 
