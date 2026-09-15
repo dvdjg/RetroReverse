@@ -186,6 +186,35 @@ y 8/16 bits; Ollama: «random noise») → son **tablas**, no gráficos.
 **Pendiente:** casar estos 7 bloques con los nombres del directorio (por tamaño/posición) para saber
 cuál es el mapa del **corridor**.
 
+### Análisis de los bloques PP20 (pasos 1 y 2)
+
+Ocupación (bytes no-cero) y decodificación como bitmap:
+
+| bloque | len | no-cero | lectura |
+|---|---|---|---|
+| `0503F8` | 6264 | 53% | datos parciales |
+| `051308` | 20800 | 28% | datos parciales |
+| `0525A0` | 18000 | 14% | datos parciales |
+| `08FBD0` | 61456 | **1%** | buffer **vacío** + 16 B de cabecera |
+| `090AB0` | 61456 | **1%** | buffer **vacío** |
+| `091BB0` | 61456 | **1%** | buffer **vacío** |
+| `092C60` | 48664 | 42% | **tabla** (words ordenados + ceros + `-1`) |
+
+- Los 3 de **61456 B son buffers vacíos** (≈0 no-cero): mapas **generados en runtime**, como el
+  plasma (`0x09A940`). No contienen el mapa del corridor en el disco.
+- `092C60` es una **tabla** (words como `3769,3752,3735,3462,…` decrecientes y luego crecientes →
+  ¿distancias/curva?, más regiones de `0`/`-1`).
+- Decodificados como **planar 4/5/6 planes (320 px)** desde varios offsets: **ninguno es una imagen**
+  (Ollama: «none»). Hipótesis «bitmap» descartada.
+- **No se pueden casar con los nombres del directorio**: no hay cabecera con nombre y los tamaños
+  (6264/18000/20800/48664/61456) no coinciden con los `size` de los módulos
+  (`SOSchaos1`=15004, `SOSes`=18284, `SOSchaos3`=16940…).
+
+**Conclusión de 1 y 2:** los PP20 aportan **mapas/tablas** (algunos buffers vacíos) pero **no
+identifican el corridor**. La vía que sigue abierta es **capturar la RAM durante el efecto**
+(breakpoint) para obtener el mapa ya generado, o desensamblar el cargador.
+
+
 
 
 
