@@ -82,6 +82,23 @@ dependencias.
 - **Cierre**: cada efecto documentado tiene pseudocódigo/algoritmo, parámetros y coste.
 - **Estado**: primera recreación en `reimpl/sine_table/` (seno Q1.14, test host OK).
 
+## Estado de efectos (reimpls portadas)
+
+| Efecto | Módulo | Estado | Confianza |
+|---|---|---|---|
+| Seno Q1.14 | `SINE.soslibrary` | hecho (`sine_table`) | alta |
+| Motor 3D Q15 | `0x0B0C2C` | hecho (`motor_3d`), byte-exacto | alta |
+| Blobs con LUT | `0x0B0C2C` | hecho (`blob_render`) | alta |
+| Distorsión SINE | `0x096A28` | hecho (`sine_wobble`) | media |
+| Scrolltext | `0x02162C` | hecho (`scrolltext`) | alta |
+| Fade de paleta | `0x0B0C2C` | hecho (`palette_fade`), byte-exacto | alta |
+| Esfera 16 col. | (Chaos) | hecho (`sphere`), byte-exacto (263/263) | alta |
+| **Túnel/corridor** | `0x03AFFC` | hecho (`tunnel`) — **CERRADO**: estructura validada + paleta real; **mapa del original no recuperado** | estructura alta / mapa baja |
+| Plasma | `0x09A940` | pendiente (procedural) | — |
+| Rubber-rotator | ¿`0x078A2C`? | pendiente | — |
+| Zoom/créditos | `0x07E42C` | pendiente | media |
+
+
 ## Mejoras de método (transversales, para otros desensamblados)
 - HECHO: estructura canónica de expediente + plantilla (`Amiga-Reverse/STRUCTURE.md`, `Amiga-Reverse/_template/`).
 - HECHO: lecciones transversales en `Amiga-Reverse/LECCIONES_APRENDIDAS.md`.

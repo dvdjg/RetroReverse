@@ -122,3 +122,9 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 - Los bloques volcados se clasificaron en **código SOS** y **Copperlists** (mismo doc).
 - Referencias visuales capturadas (timing variable): `recovered/media/reference/`
   (título `arte-title-screenshot.png`, efecto 3D de pasillo `arte-effect-corridor.png`).
+- **Captura en vivo del corridor** (2026): el bloque `0x03AFFC` (el túnel/corridor) **se carga en
+  chip RAM `0x26614`** (paleta en `0x2675A` = `+0x146`); el efecto **parchea la Copperlist en
+  runtime** copiando los 32 colores. Referencias: `reference/corridor-live.png` (corridor) y
+  `reference/sphere-live.png` (esfera). Detalle y **límite** (mapa del original no recuperado) en
+  `recovered/media/palettes/tunnel-VALIDACION.md`.
+
