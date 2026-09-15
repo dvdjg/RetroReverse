@@ -214,6 +214,27 @@ Ocupación (bytes no-cero) y decodificación como bitmap:
 identifican el corridor**. La vía que sigue abierta es **capturar la RAM durante el efecto**
 (breakpoint) para obtener el mapa ya generado, o desensamblar el cargador.
 
+## Captura en vivo (¡desbloqueada!) — el bloque se carga en `0x26614`
+
+Se capturó la RAM en runtime con el emulador corriendo. **Hallazgo confirmado:**
+
+- El bloque `0x03AFFC` **se carga en chip RAM en `0x26614`** — exactamente el `dest` que ya
+  predijo el hook (`mod_007`). **Prueba:** la paleta del túnel aparece en `0x2675A = 0x26614 + 0x146`.
+- Comparado con el bloque del disco: **95 bytes distintos** (la **Copperlist se parchea en
+  runtime**); el resto idéntico. Copia en `out/ram/corridor-live.bin`.
+- El efecto ocurre **~16 s tras el arranque** (5.º volcado de una serie cada 2 s).
+- La paleta **no** está en slow RAM en ningún volcado → el bloque vive en **chip RAM**.
+
+**Método (lección del toolkit):** `launch.mjs` (spawn *detached*) deja el emulador **pausado**
+(PC y `cycles` estáticos). Para que **corra** hay que lanzarlo con ventana en **primer plano**;
+con `Start-Process` del `winuae-gdb.exe` + `WINUAE_GDB_PORT`/`WINUAE_SIDE_CHANNEL_PORT` la CPU
+avanza y el canal lateral responde.
+
+**Siguiente paso para el mapa/textura:** repetir la captura poniendo **breakpoint en el código que
+usa `0x26614`** (sus referencias en slow RAM son datos, no punteros de código), o capturar el
+**framebuffer** de ese instante para comparar con la reimpl.
+
+
 
 
 

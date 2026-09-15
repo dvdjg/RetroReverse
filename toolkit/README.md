@@ -56,6 +56,24 @@ del sistema:
   termina **solo** ese PID (verificando que es `winuae-gdb`). Cerrar la instancia en cuanto no se
   necesite.
 
+## El emulador debe estar en PRIMER PLANO para correr
+
+`launch.mjs` lanza con `spawn(..., { detached: true })`; en este equipo la instancia puede quedar
+**pausada** (PC y `cycles` estáticos, la CPU no avanza) aunque el canal lateral responda. Para que
+la CPU **corra** hay que lanzarla con la **ventana en primer plano**. Alternativa que funciona:
+
+```powershell
+$env:WINUAE_GDB_PORT="2445"; $env:WINUAE_SIDE_CHANNEL_PORT="2446"
+$exe="<...>\WinUAE-DBG\bin\winuae-gdb.exe"
+$args=@("-f",$cfg,"-portable","-G","-s","headless=no","-s","debugging_features=gdbserver",
+        "-s","win32.start_not_captured=yes","-s","win32.active_capture_automatically=no",
+        "-s","win32.absolute_mouse=yes","-s","floppy0=$adf")
+$p=Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -ArgumentList $args -PassThru
+# luego: node side.mjs state  (pc/cycles deben avanzar)
+```
+
+Cerrar esa instancia por **su PID** (`Stop-Process -Id <pid>`), solo el propio.
+
 ## Flujo recomendado (evitar relanzar el emulador)
 
 Lanzar WinUAE **una sola vez** y trabajar contra él por el **canal lateral** (sin pausar la CPU,
