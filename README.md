@@ -6,9 +6,11 @@ no es copiar el original, sino **recuperar las técnicas** (sobre todo las **gr�
 fuente** en un engine propio. Las rutinas optimizadas del ensamblador (p. ej. la aritmética Q15 con
 `muls.w`/`swap` del motor 3D) son la **referencia canónica** que se porta.
 
-> **Aviso legal**: se analiza **para aprender**. No se redistribuye código ni assets de los
-> originales; se documentan **técnicas y algoritmos** (ideas) y la media se conserva solo como
-> referencia de estudio. Ver [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) §8.
+> **Aviso legal**: se analiza **para aprender** y se documentan **técnicas y algoritmos** (ideas).
+> El contenido **propio** del repo va bajo **GPLv3**; el material de terceros que pueda conservarse
+> en `recovered/` (binarios del original, gráficos/paletas decodificados, textos) **no** está
+> cubierto por la GPL y sigue siendo © de sus autores — es solo referencia de estudio. Ver
+> [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) §8.
 
 ---
 
@@ -133,16 +135,17 @@ Recreaciones en C++ en [`sanity-arte/reimpl/`](sanity-arte/reimpl/README.md); í
 | Técnica | Módulo | Reimpl |
 |---|---|---|
 | Seno Q1.14 | `SINE.soslibrary` | [`sine_table`](sanity-arte/reimpl/sine_table/README.md) |
-| Motor 3D Q15 (matriz + transform) | `0x0B0C2C` | [`motor_3d`](sanity-arte/reimpl/motor_3d/README.md) |
+| Motor 3D Q15 (matriz + transform + ortonormalización) | `0x0B0C2C` | [`motor_3d`](sanity-arte/reimpl/motor_3d/README.md) |
 | Blobs con lookup tables | `0x0B0C2C` | [`blob_render`](sanity-arte/reimpl/blob_render/README.md) |
 | Distorsión SINE (8 osciladores) | `0x096A28` | [`sine_wobble`](sanity-arte/reimpl/sine_wobble/README.md) |
 | Scrolltext (fuente 3 planos) | `0x02162C` | [`scrolltext`](sanity-arte/reimpl/scrolltext/README.md) |
 | Fade de paleta por nibbles | `0x0B0C2C` | [`palette_fade`](sanity-arte/reimpl/palette_fade/README.md) |
 | Esfera texturizada 16 col. | (Chaos) | [`sphere`](sanity-arte/reimpl/sphere/README.md) |
 | Túnel / corridor (raycast por filas) | `0x03AFFC` | [`tunnel`](sanity-arte/reimpl/tunnel/README.md) |
+| Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](sanity-arte/reimpl/zoom/README.md) |
 
-Pendientes con decompilado ya disponible: **zoom/créditos** (`0x07E42C`) y la **matriz ortonormal**
-del motor 3D (`0x0E1E`).
+Pendientes: el **blit/copper del zoom** y la **rutina de render del túnel** (init localizado, render
+por dispatch indirecto).
 
 ## Cómo empezar
 
@@ -174,5 +177,9 @@ Detalle y reglas en [`STRUCTURE.md`](STRUCTURE.md) §«Abrir un título nuevo».
 
 ## Licencia
 
-GNU General Public License v3.0 — ver [`LICENSE`](LICENSE). El material de terceros analizado
-(código/assets originales) **no** se incluye ni se redistribuye.
+- **Contenido propio** (análisis, documentación, reimplementaciones C++ y toolkit):
+  **GNU General Public License v3.0** — ver [`LICENSE`](LICENSE).
+- **Material de terceros** (`sanity-arte/recovered/`: binarios del original, gráficos/paletas
+  decodificados, textos): **no** está cubierto por la GPL; © de sus autores (p. ej. Dierk
+  Ohlerich / Chaos of Sanity, Moby, Ra). Es **referencia de estudio** para la ingeniería inversa,
+  no se licencia aquí. Ver [`sanity-arte/recovered/README.md`](sanity-arte/recovered/README.md).

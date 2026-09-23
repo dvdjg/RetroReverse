@@ -144,13 +144,17 @@ Evaluación completa en [`GHIDRA_AMIGA_EVAL.md`](GHIDRA_AMIGA_EVAL.md) y
 - **Motor 3D** (`blk_0B0C2C`, base 0): el decompilado de `0xC16` (matriz) y `0xCBA` (transform)
   coincide **término a término** con `reimpl/motor_3d`. Tablas Q15 en **`0x1056`** (senos) y
   **`0x1256`** (cosenos), 256 words cada una, indexadas por `ángulo & 0x7fe`; `0x1056` crece
-  `0,201,402,603…` (compatible con un **cuarto de seno**). La **matriz ortonormal** (`0x0E1E`,
-  *camera system* por cross-product) **no está portada**.
+  `0,201,402,603…` (compatible con un **cuarto de seno**). La **matriz ortonormal** (`0x0E1E` +
+  raíz entera `0x0F1C`) se ha **portado** a `reimpl/motor_3d` (`orthonormalize`, test OK).
 - **Zoom** (`blk_07E42C`, base 0): el decompilado (`FUN_0000024c`/`FUN_000002d4`) **confirma**
   `ALGORITMOS_ZOOM_Y_TUNEL.md` y añade un detalle: la trayectoria **parchea la Copperlist por
-  bandas** (`BPLCON0=0x200`/`0x5200`, stride 20 B) para el recorte vertical.
+  bandas** (`BPLCON0=0x200`/`0x5200`, stride 20 B) para el recorte vertical. **Núcleo portado** a
+  `reimpl/zoom` (`zoom_step`/`traj_step`/`copper_bands`, test OK); blit/copper pendientes.
 - **Túnel** (`blk_03AFFC`): **0 funciones** → es datos (Copperlist + paleta `@0x146` + datos), no
-  el render; la rutina del corridor **no está localizada** (lead: xrefs a `0x26614` en un `.uss`).
+  el render. En `arte tunnel stars.uss` el buffer está en `0x26614` (61.4 % match); el puntero es
+  `0xC0454E` y lo fija el **init** `FUN_00c0424a` (`0xC0424A`, reserva 350000/470000 B y llama a
+  `FUN_00c04752`). El init **no tiene xrefs directas** → el render se invoca por **dispatch
+  indirecto** (tabla de *jobs* SOS). Ver `GHIDRA_DECOMP_VS_REIMPL.md` §3.4.
 - **rz-ghidra** (`pdg`, Rizin 0.9.0, compilado en WSL) da un C **equivalente** al de Ghidra
   (`0xC16`/`0xCBA`/`0xE1E`) → cross-check válido.
 

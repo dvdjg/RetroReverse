@@ -143,7 +143,10 @@ usando el mismo patrón `muls.w + add/sub + add.l d,d + swap` (aritmética Q15 f
 
 Calcula una matriz de rotación 3×3 con **cross-product** de las filas para mantener
 ortonormalidad (camera system): `muls.w d5,d6; muls.w d4,d7; sub.l d7,d6; ...` por fila.
-Usado para la cámara (evita drift de la matriz).
+Usado para la cámara (evita drift de la matriz). Orden exacto: `fila0 = fila1×fila2`,
+`fila1 = fila2×fila0`, normalizar ambas con `(x*32767)/|fila|` (raíz entera en `0x0F1C`),
+`fila2 = fila0'×fila1'`.
+**Portado**: `reimpl/motor_3d/src/transform3d.cpp::orthonormalize` (test OK).
 
 ### Fade de paleta por nibbles (0x31C-0x3E2)
 

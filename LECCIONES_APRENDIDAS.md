@@ -295,11 +295,22 @@ Probado a fondo (ver `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md` y `toolkit/ghidra/`
   no es barato: úsalo como comprobación puntual.
 - **Trampa de endianness**: Rizin 0.9.1 exige `-E big` (no `-e cfg.bigendian=true`).
 
-## 8. Aspectos legales
+## 8. Aspectos legales y licencia
 
-- Desensamblar **para aprender** y reimplementar técnicas es aceptable en el ámbito del
-  reverse engineering educacional; **no** redistribuir código ni assets del original.
-- Documentar **técnicas y algoritmos** (ideas), no volcar el código ajeno.
+- **Licencia del repositorio**: el contenido **propio** (análisis, documentación,
+  reimplementaciones C++ y toolkit) se publica bajo **GNU GPLv3** — ver `LICENSE`.
+- **Material de terceros (NO cubierto por la GPL)**: `recovered/` conserva copias de estudio de
+  material original — binarios del sistema SOS (`SOS_*`, `*.soslibrary`), gráficos/paletas
+  decodificados y textos (scrolltext). Los derechos son de sus autores (p. ej. Dierk Ohlerich /
+  Chaos of Sanity, Moby, Ra). Se incluyen **solo como referencia de estudio** para la ingeniería
+  inversa; la GPL **no** se aplica a ellos y no deben reutilizarse fuera del ámbito de estudio.
+- Desensamblar **para aprender** y reimplementar técnicas es aceptable en el ámbito del reverse
+  engineering educacional. Se documentan **técnicas y algoritmos** (ideas), no se apropia el
+  código ajeno.
+- **Coherencia**: si el repositorio es público, el material de terceros de `recovered/` queda
+  efectivamente **redistribuido**. Recomendación: excluirlo del control de versiones (o del
+  repo público) y conservar solo el **análisis** y las **reimplementaciones propias**. Ver
+  `sanity-arte/recovered/README.md`.
 
 ## 9. Plantilla de expediente
 

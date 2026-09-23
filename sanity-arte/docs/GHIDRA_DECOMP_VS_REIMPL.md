@@ -64,8 +64,25 @@ La reimpl (`reimpl/tunnel/`) reproduce la geometría del **remake público** (`a
 recuperado. **Conclusión**: no se puede validar el render del original por decompilado porque la
 rutina **no está localizada**. Confianza alta en el negativo (0 funciones).
 
-> **Lead concreto**: usar `XrefsTo.java` (paso 4) sobre la base del buffer del corridor
-> (`0x26614`) en un `.uss` con el efecto cargado, para localizar la rutina que lo lee/escribe.
+### 3.4 Localización del render del túnel (xrefs a `0x26614`)
+
+Ejecutado el lead de §3.3 sobre `arte tunnel stars.uss` (test-suite de `vscode-amiga-debug`), donde
+el corridor **sí está cargado**: el bloque `0x26614` coincide **61.4 %** byte a byte con
+`blk_03AFFC` (las diferencias son reubicaciones/copper en runtime).
+
+- **Puntero al buffer**: la variable en `0xC0454E` vale `0x26614` (encontrado por firma
+  `00026614`); Ghidra la registra como DATA en `0xC0454E`/`0xC03088`.
+- **Rutina que lo fija**: `FUN_00c0424a` (`0xC0424A`, 200 B) — **init del efecto**: reserva buffers
+  (`jsr -$2a(a6)` = AllocMem) de **350000** y **470000** B, calcula punteros
+  (`0xC0454E`, `0xC0454A`, `0xC04552`, `0xC0455A`, `0xC0455E`) y llama a `FUN_00c04752`, que
+  construye tablas y punteros de copper/chip.
+- **`FUN_00c0424a` NO tiene xrefs directas** → se invoca por **dispatch indirecto** (tabla de
+  *jobs* de SOS). Por eso un xref "al buffer" **no alcanza** la rutina de render por-frame.
+
+**Conclusión**: localizado el **init** (`0xC0424A`) y el puntero al corridor (`0xC0454E`), pero el
+**render por-frame se alcanza por la tabla de dispatch**, no por xref directo. Siguiente paso:
+seguir la tabla de dispatch (o poner un breakpoint en el llamador del init) para aislar el render.
+Confianza **media-alta** (init y punteros verificados; render no aislado).
 
 ---
 
