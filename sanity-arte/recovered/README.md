@@ -16,13 +16,14 @@ Reglas:
 
 **Aviso de licencia (material de terceros)**:
 - Lo que hay aquí de terceros — binarios del sistema SOS (`SOS_*`, `*.soslibrary`), gráficos y
-  paletas decodificados, textos (scrolltext), capturas — **NO** está cubierto por la GPLv3 del
-  repositorio. Los derechos son de sus autores (p. ej. Dierk Ohlerich / Chaos of Sanity, Moby, Ra).
+  paletas decodificados, textos (scrolltext), capturas — **NO** está cubierto por la licencia
+  **MIT** del repositorio. Los derechos son de sus autores (p. ej. Dierk Ohlerich / Chaos of
+  Sanity, Moby, Ra).
 - Se conserva **solo como referencia de estudio** para la ingeniería inversa (uso educacional).
-- El contenido **propio** (análisis, `notes.md`, mapas, `.asm` de análisis, reimpl) sí es GPLv3.
-- **Coherencia**: en un repositorio **público** este material queda redistribuido. Si no es la
-  intención, excluirlo del control de versiones (p. ej. añadir a `.gitignore`) y conservar solo el
-  análisis. Ver `../../LECCIONES_APRENDIDAS.md` §8.
+- El contenido **propio** (análisis, `notes.md`, mapas, `.asm` de análisis, reimpl) sí es **MIT**.
+- **Repo privado**: es de uso personal y no se redistribuye. Si pasara a **público**, convendría
+  excluir de git este material de terceros y conservar solo el análisis. Ver
+  `../../LECCIONES_APRENDIDAS.md` §8.
 
 Índice:
 - `code/bootblock` — bootblock SOS1.

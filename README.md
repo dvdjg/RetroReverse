@@ -6,10 +6,11 @@ no es copiar el original, sino **recuperar las técnicas** (sobre todo las **gr�
 fuente** en un engine propio. Las rutinas optimizadas del ensamblador (p. ej. la aritmética Q15 con
 `muls.w`/`swap` del motor 3D) son la **referencia canónica** que se porta.
 
-> **Aviso legal**: se analiza **para aprender** y se documentan **técnicas y algoritmos** (ideas).
-> El contenido **propio** del repo va bajo **GPLv3**; el material de terceros que pueda conservarse
-> en `recovered/` (binarios del original, gráficos/paletas decodificados, textos) **no** está
-> cubierto por la GPL y sigue siendo © de sus autores — es solo referencia de estudio. Ver
+> **Aviso legal**: repositorio **privado** de estudio personal. Se analiza **para aprender** y se
+> documentan **técnicas y algoritmos** (ideas). El contenido **propio** va bajo **MIT**; el
+> material de terceros que pueda conservarse en `recovered/` (binarios del original,
+> gráficos/paletas decodificados, textos) **no** está cubierto por esa licencia y sigue siendo ©
+> de sus autores — solo referencia de estudio. Ver
 > [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) §8.
 
 ---
@@ -178,8 +179,11 @@ Detalle y reglas en [`STRUCTURE.md`](STRUCTURE.md) §«Abrir un título nuevo».
 ## Licencia
 
 - **Contenido propio** (análisis, documentación, reimplementaciones C++ y toolkit):
-  **GNU General Public License v3.0** — ver [`LICENSE`](LICENSE).
+  **MIT** — ver [`LICENSE`](LICENSE).
 - **Material de terceros** (`sanity-arte/recovered/`: binarios del original, gráficos/paletas
-  decodificados, textos): **no** está cubierto por la GPL; © de sus autores (p. ej. Dierk
+  decodificados, textos): **no** está cubierto por la MIT; © de sus autores (p. ej. Dierk
   Ohlerich / Chaos of Sanity, Moby, Ra). Es **referencia de estudio** para la ingeniería inversa,
   no se licencia aquí. Ver [`sanity-arte/recovered/README.md`](sanity-arte/recovered/README.md).
+
+Este repositorio es **privado** y de uso personal; la licencia no cambia el estatus del material
+de terceros.
