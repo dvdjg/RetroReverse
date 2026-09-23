@@ -31,9 +31,19 @@ Transformación: `X' = m[0]*x + m[3]*y + m[6]*z`  (etc.).
 |---|---|
 | `src/transform3d.hpp` | API: `q15_mul`, `Mat3`, `build_rotation`, `transform` |
 | `src/transform3d.cpp` | Implementación de referencia (fiel a las 9 fórmulas del asm) |
-| `src/test_transform3d.cpp` | Test host: Q15, identidad, det(R)=1, preservación de longitud |
-| `reference/transform3d_q15_amiga.asm` | **Rutina asm canónica** (optimizada) preservada |
+| `src/test_transform3d.cpp` | Test host: Q15, identidad, det(R)=1, longitud, ortonormalización |
+| `reference/transform3d_q15_amiga.asm` | **ASM canónico**: matriz + transform |
+| `reference/orthonormalize_amiga.asm` | **ASM canónico**: ortonormalización (`0x0E1E` + raíz `0x0F1C`) |
 | `Makefile` | `make test` |
+
+## Contrato
+
+- **Punto fijo**: Q15 → `producto = (a*b)>>15` (`muls.w` + `add.l d,d` + `swap`).
+- **`build_rotation(a0, a1)`**: `a1`=senos/cosenos (6 words); `a0`=matriz salida (9 words).
+- **`transform(a0, a1, a2)`**: `a0`=puntos (3 words/punto), `a1`=matriz, `a2`=salida; **3 puntos/llamada**.
+- **`orthonormalize(a0, a1)`**: `a0`=matriz (se modifica in situ), `a1`=salida; preserva `d2-d7/a2`.
+  Detalle de registros y coste en `reference/orthonormalize_amiga.asm`.
+- Convención y uso en el engine: [`../../../PORTING.md`](../../../PORTING.md).
 
 ## Por qué así (criterio 68000)
 
@@ -56,12 +66,11 @@ misma convención de matriz. Para las partes donde el rendimiento en 68000 sea c
 **versión canónica a usar es la asm** (`reference/transform3d_q15_amiga.asm`), que se puede
 incluir tal cual (o como inline asm) en la reconstrucción.
 
-## Validación con el decompilador y pendiente
+## Validación con el decompilador
 
 - El **decompilado de Ghidra** de `0xC16` (matriz) y `0xCBA` (transform) coincide **término a
   término** con `build_rotation()`/`transform()` (ver `../../docs/GHIDRA_DECOMP_VS_REIMPL.md` §3.1).
   Confianza alta.
-- **Pendiente**: la **matriz ortonormal por cross‑product** (`0x0E1E` + normalización `0xF1C`, el
-  *camera system* que evita el *drift*) **no está portada** aquí. Decompilado disponible en
-  `out/ghidra/blk_0B0C2C_l1_63064.decomp.c` (`FUN_00000e1e`). Técnica descrita en
+- **Ortonormalización** (`0x0E1E` + raíz `0xF1C`): **portada** (`orthonormalize()` + `isqrt32()`,
+  test OK) y su **ASM canónico** extraído a `reference/orthonormalize_amiga.asm`. Técnica en
   `../../docs/TECNICAS.md` → «Construcción de matriz ortonormal».

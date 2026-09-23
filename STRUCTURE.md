@@ -68,6 +68,8 @@ Amiga-Reverse/                      raíz de todos los expedientes
    de duplicarlos.
 3. **`reimpl/` es el destino**: cada técnica recuperada se reescribe como algoritmo propio en
    C++. No se copia código ajeno; se porta la **idea** (ver `LECCIONES_APRENDIDAS.md` §8).
+   El **contrato de técnica** (funcionamiento + C/C++ de referencia + **ASM canónico** + contrato
+   de llamada/ABI + checklist) y su uso en el engine están en [`PORTING.md`](PORTING.md).
 4. **Media**: se conserva en `recovered/media/` para referencia y comparación. No se redistribuye
    fuera del entorno de estudio (derechos del autor original).
 5. **Una unidad = una carpeta** en `recovered/code/`; el nombre de la carpeta es el nombre del

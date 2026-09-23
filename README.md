@@ -105,6 +105,7 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](toolkit/python/AMI
 |---|---|
 | [`STRUCTURE.md`](STRUCTURE.md) | Estructura canónica de un expediente, reglas y convenciones |
 | [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) | Método reutilizable y trampas (§7bis: Ghidra/Rizin) |
+| [`PORTING.md`](PORTING.md) | **Del código recuperado al engine Amiga**: contrato de técnica (C/C++ ref + ASM canónico), ABI y checklist |
 | [`AGENTS.md`](AGENTS.md) | Directrices de trabajo (objetivos, reglas de documentación, uso de Ollama) |
 | [`toolkit/README.md`](toolkit/README.md) | Todas las utilidades, opciones y ejemplos |
 | [`toolkit/ghidra/README.md`](toolkit/ghidra/README.md) | Ghidra + extensión Amiga: instalación, scripts, pipeline, rz-ghidra |
