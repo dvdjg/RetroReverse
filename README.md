@@ -31,12 +31,16 @@ Todas las utilidades viven en [`toolkit/`](toolkit/README.md), documentadas y pa
 | `toolkit/node/dump-ram.mjs` | lanza WinUAE-DBG y vuelca regiones de RAM |
 | `toolkit/node/hook-trampoline.mjs` | engancha un decruncher por firma y vuelca bloques |
 | `toolkit/node/probe-breakpoints.mjs` | verifica que el stub aplica breakpoints |
+| `toolkit/ghidra/*.java` | Ghidra + extensión Amiga: loaders Hunk/USS, símbolos NDK, decompilador |
 
 ## Entorno
 
 - `WinUAE-DBG/bin/winuae-gdb.exe` (x86) — emulador + servidor GDB `:2345` + canal lateral `:2346`.
 - `mcp-winuae-emu` — módulo Node (`WinUAEConnection`, `GdbProtocol`) para automatizar el emulador.
-- `m68k-amiga-elf-objdump.exe` (extensión Bartman) — desensamblador.
+- `m68k-amiga-elf-objdump.exe` (extensión Bartman) — desensamblador (canónico).
+- Ghidra 12.0.1 + extensión `BartmanAbyss/ghidra-amiga` — CFG/xrefs + decompilador a C
+  (ver `toolkit/ghidra/README.md`).
+- Rizin 0.9.1 — disasm/xrefs ligero (sin decompilador en el build base).
 - Kickstart 1.3 (`C:\Amiga\KICK13.rom`).
 
 ## Añadir un título

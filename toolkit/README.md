@@ -23,6 +23,12 @@ toolkit/
     dms_unpack.py           DMS -> ADF verificado (todos los modos)
     bin_scan.py             strings + entropía de cualquier binario
     copper_decode.py        decodifica una Copperlist binaria (MOVE/WAIT/SKIP)
+  ghidra/
+    README.md               Ghidra + extensión Amiga (Hunk/USS/ROM, símbolos NDK, decompilador)
+    InfoDump.java           bloques/entry points/funciones/símbolos de un programa importado
+    DumpDecomp.java         decompila a C una función (o todas) en headless
+    FindSig.java            busca una firma de bytes en toda la memoria
+    DumpRange.java          escribe un rango de memoria a fichero (comparar)
 ```
 
 Las *specs* de enganche son específicas de cada título y viven en el expediente, p. ej.
@@ -308,6 +314,17 @@ python python\copper_decode.py out\modules\mod_003.bin --base 0x26614 > copper.t
 ```
 
 Decodifica una Copperlist binaria a texto (`MOVE`/`WAIT`/`SKIP`). `--json` para estructura.
+
+## Ghidra + extensión Amiga (`ghidra/`)
+
+Análisis con **Ghidra** y la extensión `BartmanAbyss/ghidra-amiga` (loaders **Hunk**, **WinUAE
+`.uss`** y **Kickstart ROM**, analyzer de llamadas a librería + símbolos **NDK 3.9**, y el
+**decompilador a C**). Scripts headless: `InfoDump`, `DumpDecomp`, `FindSig`, `DumpRange`.
+Instalación, comandos y limitaciones: [`ghidra/README.md`](ghidra/README.md). Evaluación completa:
+[`../sanity-arte/docs/GHIDRA_AMIGA_EVAL.md`](../sanity-arte/docs/GHIDRA_AMIGA_EVAL.md).
+
+Rizin/radare2 es la alternativa ligera para disasm + xrefs/CFG (sin decompilador en el build base).
+Ver `../LECCIONES_APRENDIDAS.md` §7bis.
 
 ## Añadir soporte a un rip nuevo
 
