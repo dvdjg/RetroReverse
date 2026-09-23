@@ -28,6 +28,7 @@ namespace rein {
 using i16 = std::int16_t;
 using i32 = std::int32_t;
 using u16 = std::uint16_t;
+using u32 = std::uint32_t;
 
 struct Mat3 { i16 m[9]; };
 struct Vec3 { i16 x, y, z; };
@@ -45,6 +46,17 @@ Mat3 build_rotation(const Angles& ang);
 
 // Transforma el punto p por la matriz M (R·p) en Q15 (fiel a 0x0CBA-0x0D58).
 Vec3 transform(const Mat3& M, const Vec3& p);
+
+// Ortonormaliza la matriz por cross-product (fiel a 0x0E1E + la raíz 0x0F1C).
+// Es el "camera system": recompone una base ortonormal a partir de M para evitar el
+// *drift* acumulado al multiplicar rotaciones. Los tripletes [0..2],[3..5],[6..8] se
+// tratan como filas (así lo hace el asm):
+//   fila0 = fila1 × fila2 ; fila1 = fila2 × fila0 ; fila2 = fila0' × fila1'
+// con cada fila normalizada a Q15 mediante (x*32767)/|fila|.
+Mat3 orthonormalize(const Mat3& M);
+
+// Raíz cuadrada entera (floor) usada por orthonormalize (fiel al bucle de 0x0F1C).
+std::uint16_t isqrt32(std::uint32_t n);
 
 }  // namespace rein
 

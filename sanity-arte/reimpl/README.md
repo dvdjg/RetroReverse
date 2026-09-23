@@ -13,13 +13,14 @@ la **referencia funcional** equivalente.
 | Técnica | Origen (bloque/rutina) | Estado | Asm canónico |
 |---|---|---|---|
 | `sine_table` — seno precalculado Q1.14 | `SINE.soslibrary` (idea) | PORTADO (test OK) | — |
-| `motor_3d` — transformación 3D Q15 (matriz rotación + punto) | 0x0B0C2C (0x0C16-0x0D58) | PORTADO (test OK) | `reference/transform3d_q15_amiga.asm` |
+| `motor_3d` — transformación 3D Q15 (matriz rotación + punto + **ortonormalización**) | 0x0B0C2C (0x0C16-0x0E86, 0x0F1C) | PORTADO (test OK) | `reference/transform3d_q15_amiga.asm` |
 | `blob_render` — blobs/sprites planares con LUT de expansión | 0x0B0C2C (0x3318-0x3560) | PORTADO (test OK) | `reference/blob_render_amiga.asm` |
 | `sine_wobble` — distorsión por scanlines (8 osciladores) | 0x096A28 (0x150-0x82E) | PORTADO (test OK) | `reference/sine_wobble_amiga.asm` |
 | `scrolltext` — scrolltext con fuente de 3 planos | 0x02162C (0x196E-0x1A70) | PORTADO (test OK) | `reference/scrolltext_amiga.asm` |
 | `palette_fade` — fade de paleta por nibbles (R/G/B) | 0x0B0C2C (0x031C-0x03E2) | PORTADO (test OK) | `reference/palette_fade_amiga.asm` |
 | `sphere` — esfera con textura mapeada (**byte-exacta**, con assets reales) | módulo (gen. mapa $2de7ea) | PORTADO (checksums OK) | (assets de Ra/Sanity + técnica recuperada) |
-| (pendiente) túnel / plasma / zoom | 0x03AFFC / 0x09A940 / 0x07E42C | PENDIENTE | — |
+| `zoom` — núcleo del zoom (factores Q16, trayectoria, bandas de Copper) | 0x07E42C (0x24C, 0x2D4) | PORTADO núcleo (test OK); blit/copper pendiente | — |
+| (pendiente) túnel / plasma | 0x03AFFC / 0x09A940 | PENDIENTE | — |
 
 > **`sphere`** es especial: se recuperaron los **assets reales** (textura de Ra + tablas) y la
 > técnica exacta publicados por la reimplementación de Jon Ludlam, y el render C++ reproduce el

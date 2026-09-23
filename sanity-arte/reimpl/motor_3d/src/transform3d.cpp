@@ -77,4 +77,66 @@ Vec3 transform(const Mat3& M, const Vec3& p) {
     return o;
 }
 
+// --- ortonormalización (asm 0x0E1E + raíz 0x0F1C) ---
+//
+// El asm calcula los productos Q15 con `muls.w + sub.l + add.l d,d + swap` y normaliza
+// con `divs.w` (división 32/16 con signo). Reproducimos ambas cosas literalmente.
+
+namespace {
+// Q15(a*b - c*d) = (a*b - c*d) >> 15  (fiel a `sub.l` + `add.l d,d` + `swap`).
+inline i16 q15_mulsub(i16 a, i16 b, i16 c, i16 d) {
+    i32 p = static_cast<i32>(a) * b - static_cast<i32>(c) * d;
+    return static_cast<i16>(p >> 15);
+}
+// (x * 32767) / mag  con división con signo (fiel a `divs.w`; 0x0E8E-0x0EB2).
+inline i16 div_q15(i16 x, u16 mag) {
+    if (mag == 0) return 0;
+    return static_cast<i16>((static_cast<i32>(x) * 32767) / static_cast<i32>(mag));
+}
+}  // namespace
+
+std::uint16_t isqrt32(std::uint32_t n) {
+    std::uint32_t res = 0, bit = 1u << 30;
+    while (bit) {
+        std::uint32_t t = res + bit;
+        res >>= 1;
+        if (n >= t) { n -= t; res += bit; }
+        bit >>= 2;
+    }
+    return static_cast<std::uint16_t>(res);
+}
+
+Mat3 orthonormalize(const Mat3& M) {
+    i16 a[9];
+    for (int i = 0; i < 9; ++i) a[i] = M.m[i];
+
+    // fila0 = fila1 × fila2  (en sitio)
+    a[0] = q15_mulsub(a[4], a[8], a[5], a[7]);
+    a[1] = q15_mulsub(a[5], a[6], a[3], a[8]);
+    a[2] = q15_mulsub(a[3], a[7], a[4], a[6]);
+    // fila1 = fila2 × fila0
+    a[3] = q15_mulsub(a[7], a[2], a[8], a[1]);
+    a[4] = q15_mulsub(a[0], a[8], a[6], a[2]);
+    a[5] = q15_mulsub(a[6], a[1], a[7], a[0]);
+
+    Mat3 N{};
+    u16 m0 = isqrt32(static_cast<u32>(static_cast<i32>(a[0]) * a[0] +
+                                      static_cast<i32>(a[1]) * a[1] +
+                                      static_cast<i32>(a[2]) * a[2]));
+    u16 m1 = isqrt32(static_cast<u32>(static_cast<i32>(a[3]) * a[3] +
+                                      static_cast<i32>(a[4]) * a[4] +
+                                      static_cast<i32>(a[5]) * a[5]));
+    N.m[0] = div_q15(a[0], m0);
+    N.m[1] = div_q15(a[1], m0);
+    N.m[2] = div_q15(a[2], m0);
+    N.m[3] = div_q15(a[3], m1);
+    N.m[4] = div_q15(a[4], m1);
+    N.m[5] = div_q15(a[5], m1);
+    // fila2 = fila0' × fila1'
+    N.m[6] = q15_mulsub(N.m[1], N.m[5], N.m[2], N.m[4]);
+    N.m[7] = q15_mulsub(N.m[3], N.m[2], N.m[0], N.m[5]);
+    N.m[8] = q15_mulsub(N.m[0], N.m[4], N.m[1], N.m[3]);
+    return N;
+}
+
 }  // namespace rein

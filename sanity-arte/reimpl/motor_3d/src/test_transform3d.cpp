@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <algorithm>
 #include "transform3d.hpp"
 
 using namespace rein;
@@ -86,6 +87,55 @@ int main() {
         Mat3 M = build_rotation(a);
         check(std::abs(M.m[6] - sb) <= 2, "rotacion Y: m[6]=sin_b");
         check(std::abs(M.m[0] - cb) <= 2, "rotacion Y: m[0]=cos_b");
+    }
+
+    // 6. isqrt32 (raíz entera usada por orthonormalize)
+    check(isqrt32(0) == 0, "isqrt32(0)=0");
+    check(isqrt32(1) == 1, "isqrt32(1)=1");
+    check(isqrt32(15) == 3, "isqrt32(15)=3");
+    check(isqrt32(16) == 4, "isqrt32(16)=4");
+    check(isqrt32(1000000) == 1000, "isqrt32(1e6)=1000");
+
+    // 7. orthonormalize: desde una rotación con error recupera una base ortonormal
+    {
+        Angles a = angles_from_rad(0.6, -1.1, 2.3);
+        Mat3 M = build_rotation(a);
+        M.m[0] = (i16)(M.m[0] + 900);   // simula drift acumulado
+        M.m[4] = (i16)(M.m[4] - 1200);
+        M.m[8] = (i16)(M.m[8] + 700);
+        Mat3 N = orthonormalize(M);
+        auto unit = [](i16 x, i16 y, i16 z) {
+            double n = std::sqrt((double)x * x + (double)y * y + (double)z * z) / 32767.0;
+            return std::abs(n - 1.0) < 0.02;
+        };
+        auto dot = [](i16 x0, i16 y0, i16 z0, i16 x1, i16 y1, i16 z1) {
+            return std::abs((double)x0 * x1 + (double)y0 * y1 + (double)z0 * z1) /
+                   (32767.0 * 32767.0);
+        };
+        check(unit(N.m[0], N.m[1], N.m[2]), "orthonormalize: fila0 unitaria");
+        check(unit(N.m[3], N.m[4], N.m[5]), "orthonormalize: fila1 unitaria");
+        check(unit(N.m[6], N.m[7], N.m[8]), "orthonormalize: fila2 unitaria");
+        check(dot(N.m[0], N.m[1], N.m[2], N.m[3], N.m[4], N.m[5]) < 0.02,
+              "orthonormalize: fila0·fila1 ~ 0");
+        check(dot(N.m[0], N.m[1], N.m[2], N.m[6], N.m[7], N.m[8]) < 0.02,
+              "orthonormalize: fila0·fila2 ~ 0");
+        double det =
+            (double)N.m[0] * (N.m[4] * N.m[8] - N.m[5] * N.m[7]) -
+            (double)N.m[3] * (N.m[1] * N.m[8] - N.m[2] * N.m[7]) +
+            (double)N.m[6] * (N.m[1] * N.m[5] - N.m[2] * N.m[4]);
+        det /= (32767.0 * 32767.0 * 32767.0);
+        check(std::abs(det - 1.0) < 0.03, "orthonormalize: det ~ 1");
+    }
+
+    // 8. orthonormalize es ~ idempotente sobre una rotación ya válida
+    {
+        Angles a = angles_from_rad(0.3, 0.8, -1.4);
+        Mat3 M = build_rotation(a);
+        Mat3 N = orthonormalize(M);
+        int maxd = 0;
+        for (int i = 0; i < 9; ++i)
+            maxd = std::max(maxd, std::abs((int)N.m[i] - (int)M.m[i]));
+        check(maxd <= 400, "orthonormalize ~ idempotente (delta pequeno)");
     }
 
     if (g_fails == 0) { std::printf("\nTODOS LOS TESTS OK\n"); return 0; }
