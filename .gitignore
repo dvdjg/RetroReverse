@@ -26,7 +26,12 @@ desktop.ini
 # --- Salidas generadas de reimpl (tests) ---
 sanity-arte/reimpl/**/anim/
 sanity-arte/reimpl/**/anim_arte/
+sanity-arte/reimpl/**/canvas/
 sanity-arte/reimpl/**/sphere_frame_*.raw
+
+# --- Volcados binarios auxiliares del toolkit (regenerables, no son fuente) ---
+toolkit/node/*.bin
+toolkit/out/
 
 # --- Binarios de test compilados (sin extension, p. ej. bajo WSL) ---
 sanity-arte/reimpl/**/*_test
