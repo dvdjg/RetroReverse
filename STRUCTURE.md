@@ -32,6 +32,7 @@ Amiga-Reverse/                      raíz de todos los expedientes
     modules/                bloques descomprimidos + modules.json
     screens/                capturas del emulador
     logs/                   trazas de los scripts
+    ghidra/                 proyecto Ghidra + salidas (decompilado, xrefs, volcados) — regenerable
     <config>.uae            config de emulador usada
   recovered/                CURADO: lo que merece conservarse para reimplementar
     code/                    código recuperado, una carpeta por módulo/rutina
@@ -76,6 +77,13 @@ Amiga-Reverse/                      raíz de todos los expedientes
 7. **Herramientas en `toolkit/`**: nada de scripts atados a un título. Las utilidades se
    parametrizan por CLI/spec y se documentan en `toolkit/README.md`; el expediente solo aporta
    su `specs/*.json` y la lista de comandos en `tools/README.md`.
+8. **Ghidra (análisis, no curación)**: Ghidra consume los volcados de `out/` (módulos
+   descomprimidos de `out/modules/`, `.uss`/Hunk) y su salida va **siempre a `out/ghidra/`**:
+   pseudo‑C, xrefs, volcados auxiliares y el proyecto. **No se cura** su salida (los nombres
+   `FUN_xxxx` y la detección de funciones cambian entre versiones de Ghidra). Lo que merezca
+   conservarse se resume a mano en `recovered/code/<unidad>/notes.md` y `docs/TECNICAS.md`.
+   Contrato: `out/modules/*.bin` → Ghidra → `reimpl/`. Ver `toolkit/ghidra/README.md` y
+   `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md`.
 
 ## Convenciones de nombres
 

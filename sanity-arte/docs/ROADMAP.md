@@ -87,21 +87,29 @@ dependencias.
 | Efecto | Módulo | Estado | Confianza |
 |---|---|---|---|
 | Seno Q1.14 | `SINE.soslibrary` | hecho (`sine_table`) | alta |
-| Motor 3D Q15 | `0x0B0C2C` | hecho (`motor_3d`), byte-exacto | alta |
+| Motor 3D Q15 | `0x0B0C2C` | hecho (`motor_3d`), byte-exacto; **pendiente**: matriz ortonormal `0x0E1E` (camera system) | alta |
 | Blobs con LUT | `0x0B0C2C` | hecho (`blob_render`) | alta |
 | Distorsión SINE | `0x096A28` | hecho (`sine_wobble`) | media |
 | Scrolltext | `0x02162C` | hecho (`scrolltext`) | alta |
 | Fade de paleta | `0x0B0C2C` | hecho (`palette_fade`), byte-exacto | alta |
 | Esfera 16 col. | (Chaos) | hecho (`sphere`), byte-exacto (263/263) | alta |
-| **Túnel/corridor** | `0x03AFFC` | hecho (`tunnel`) — **CERRADO**: estructura validada + paleta real; **mapa del original no recuperado** | estructura alta / mapa baja |
+| **Túnel/corridor** | `0x03AFFC` | hecho (`tunnel`) — **CERRADO**: estructura validada + paleta real; **mapa del original no recuperado**. Render **no localizado** (el bloque es datos: 0 funciones en Ghidra) | estructura alta / mapa baja |
 | Plasma | `0x09A940` | pendiente (procedural) | — |
 | Rubber-rotator | ¿`0x078A2C`? | pendiente | — |
-| Zoom/créditos | `0x07E42C` | pendiente | media |
+| Zoom/créditos | `0x07E42C` | **decompilado disponible** (`out/ghidra`, `FUN_0000024c`/`FUN_000002d4`, incl. copper por bandas); reimpl pendiente | media |
 
 
 ## Mejoras de método (transversales, para otros desensamblados)
 - HECHO: estructura canónica de expediente + plantilla (`Amiga-Reverse/STRUCTURE.md`, `Amiga-Reverse/_template/`).
 - HECHO: lecciones transversales en `Amiga-Reverse/LECCIONES_APRENDIDAS.md`.
+- HECHO: **análisis con Ghidra** (extensión `ghidra-amiga`: loaders Hunk/`.uss`, símbolos NDK,
+  decompilador a C) + pipeline en lote (`toolkit/ghidra/decompile-modules.ps1`) + extracción de
+  datos por xref (`XrefsTo.java`) + cross-check con `rz-ghidra` (WSL). Ver
+  `docs/GHIDRA_AMIGA_EVAL.md` y `docs/GHIDRA_DECOMP_VS_REIMPL.md`.
+- PENDIENTE: portar la **matriz ortonormal `0x0E1E`** del motor 3D y el **zoom** (`0x07E42C`)
+  usando el decompilado.
+- PENDIENTE: localizar la **rutina de render del túnel** por xrefs a `0x26614` (`.uss` con el
+  efecto cargado).
 - PENDIENTE: generalizar `toolkit/node/hook-trampoline.mjs` con un modo «routine» (destino/longitud desde cabecera) además del modo «trampoline».
 - PENDIENTE: script de "hook + volcado" reutilizable (breakpoints configurables + fallback por muestreo).
 - PENDIENTE: decodificador de copperlists y bitplanes reutilizable (módulo propio, no depender de MCP).

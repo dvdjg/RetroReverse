@@ -249,8 +249,51 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 
 - `m68k-amiga-elf-objdump.exe` (extensión Bartman) con
   `-D -b binary -m m68k --adjust-vma=<base> --start-address/--stop-address`.
+  Es el **desensamblado canónico** del expediente (ligero, reproducible; base del `.asm` curado).
 - Para CFG/xrefs y nombrar rutinas en volcados sin símbolos: Rizin/radare2 (ligero) o Ghidra
   (mejor para sesiones largas). Decidir según el tamaño del binario.
+
+### 7bis. Ghidra + extensión Amiga (`ghidra-amiga`) y Rizin — evaluación (2026)
+
+Probado a fondo (ver `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md` y `toolkit/ghidra/`). Confianza alta.
+
+- **Ghidra + `BartmanAbyss/ghidra-amiga`** aporta lo que objdump/Rizin no dan:
+  - Loaders nativos: **Hunk Executable**, **WinUAE `.uss`**, **Kickstart ROM**.
+  - Analyzer **Amiga Library Calls** + **NDK 3.9**: resuelve `jsr -$xx(a6)` a
+    `dos_library_Open`, `graphics_library_*`… y nombra `Custom` (`$DFF000`).
+  - **Decompilador a C** (clave para el objetivo #3, inferir C++).
+- **Compilar la extensión**: requiere JDK 21 + Gradle 9.x + Ghidra 12.0.1 (el fork apunta a esa
+  versión). El `gradlew` de Ghidra **no** sirve para un repo suelto (asume `<GHIDRA>/support/
+  gradle`): usar Gradle directamente con `GHIDRA_INSTALL_DIR`. El repo ya trae `amiga_ndk39.gdt`.
+  Instalar el zip en `<GHIDRA>/Ghidra/Extensions/`.
+- **Hunk**: si el disco es *trackloader*, **no hay Hunk**; el `00 00 03 F3` en el ADF suele ser
+  **coincidencia** en código/datos (validar la cabecera, no fiarse del magic). Probar el loader con
+  Hunks reales de otros títulos (`demoscene-repo/effects/*.exe`) o con `sanity-os-v26/SOS_*`.
+- **`.uss`**: el loader mapea CHIP/BOGO/FRAM/ZRAM/ROM/`Custom` en sus **direcciones reales** y pone
+  el PC de entrada. Los bytes coinciden con el `.asm` salvo **reubicaciones** (el loader parchea las
+  referencias absolutas: `jmp $10` → `jmp $C05F02`). Verificado con `mod_002` base `0xC05EF2`.
+  - **Cuidado**: un `.uss` capturado en *boot/loader* no contiene los módulos del efecto. Exportar
+    el savestate **con el efecto cargado** (los `arte *.uss` del test-suite de `vscode-amiga-debug`
+    sí lo contienen). El bloque `ROM` queda sin bytes (`init=false`).
+- **Volcado crudo sin Hunk**: importar con `-processor 68000:BE:32:default -loader BinaryLoader
+  -loader-baseAddr <base>`. Base `0` = offsets del `.asm`.
+- **Rizin/radare2** (0.9.1): disasm + xrefs + CFG muy rápido sobre volcados crudos
+  (`rizin -a m68k -b 32 -E big -m <base> -c "aaa; pdf @ <addr>"`), pero **sin decompilador** en el
+  build base (`pdc`/`pdd` no existen). Complementario, no sustituto.
+- **Pipeline en lote**: `toolkit/ghidra/decompile-modules.ps1` decompila todos los módulos de un
+  `modules.json`/`index.json` a `out/ghidra/` (base = `dest` del JSON; `index.json` de `modules_all`
+  usa `offset` de ADF → base 0). Resultado en `sanity-arte`: 53 módulos.
+- **Datos por xref**: `XrefsTo.java` lista referencias a una dirección y vuelca los bytes →
+  alimenta `planar_decode`/`copper_decode`/`bin_scan`. Ej.: tabla de senos `0x1056` de `0B0C2C`.
+- **Decompilado vs reimpl** (motor 3D, zoom, túnel): ver
+  `sanity-arte/docs/GHIDRA_DECOMP_VS_REIMPL.md`. El motor 3D coincide término a término; el zoom
+  confirma el doc y revela **copper por bandas**; la matriz ortonormal (`0xE1E`) **no estaba
+  portada**; el túnel `0x03AFFC` es **datos** (0 funciones) → su render no se puede validar aún.
+- **rz-ghidra** (`pdg`) como **segundo decompilador**: funciona, pero **no hay build nativo de
+  Windows** (solo fuentes; el Rizin precompilado no trae `RizinConfig.cmake`). Se compila en
+  **WSL/Ubuntu** (`toolkit/ghidra/wsl/build-rzghidra.sh`); su C coincide con el de Ghidra. Montarlo
+  no es barato: úsalo como comprobación puntual.
+- **Trampa de endianness**: Rizin 0.9.1 exige `-E big` (no `-e cfg.bigendian=true`).
 
 ## 8. Aspectos legales
 

@@ -129,7 +129,10 @@ add.l  d5,d5      ; <<1 (Q15)
 swap   d5         ; >>16
 move.w d5,(a2)+   ; X'
 ```
-La matriz se aplica 3 veces (3 líneas repetidas idénticas para X, Y, Z).
+Dentro de cada bloque se calculan las 3 componentes (X', Y', Z') del punto. El bloque se repite 3
+veces porque la rutina procesa **3 puntos por llamada** (`MOVEM.W (A0)+,D0-D2` ×3 → 9 words de
+entrada, 9 de salida). *Corrección (2026, evidencia: decompilado de Ghidra, ver
+`GHIDRA_AMIGA_EVAL.md` §3): antes se describía como "un punto × 3 componentes"; es 3 puntos.*
 
 ### Construcción de matriz de rotación (0x0C46)
 

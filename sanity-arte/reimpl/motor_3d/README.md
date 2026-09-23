@@ -55,3 +55,13 @@ La versión C++ (`transform3d.cpp`) es **de referencia**: reproduce la misma sem
 misma convención de matriz. Para las partes donde el rendimiento en 68000 sea crítico, la
 **versión canónica a usar es la asm** (`reference/transform3d_q15_amiga.asm`), que se puede
 incluir tal cual (o como inline asm) en la reconstrucción.
+
+## Validación con el decompilador y pendiente
+
+- El **decompilado de Ghidra** de `0xC16` (matriz) y `0xCBA` (transform) coincide **término a
+  término** con `build_rotation()`/`transform()` (ver `../../docs/GHIDRA_DECOMP_VS_REIMPL.md` §3.1).
+  Confianza alta.
+- **Pendiente**: la **matriz ortonormal por cross‑product** (`0x0E1E` + normalización `0xF1C`, el
+  *camera system* que evita el *drift*) **no está portada** aquí. Decompilado disponible en
+  `out/ghidra/blk_0B0C2C_l1_63064.decomp.c` (`FUN_00000e1e`). Técnica descrita en
+  `../../docs/TECNICAS.md` → «Construcción de matriz ortonormal».
