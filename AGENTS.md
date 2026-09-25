@@ -32,6 +32,35 @@ registros y buffers cambian por frame); la clave está en el código.
 - **El conocimiento adquirido y los desarrollos útiles NO deben perderse**: si un análisis no
   termina, guardar el estado como WIP anotado (nunca borrar un avance sin documentarlo).
 
+## Regla de código autodocumentado (obligatoria, también en el código GENERADO)
+
+Todo el código —**incluido el que emite el transpilador**— debe poder entenderse sin salir del
+propio fichero. Documentar de forma explícita:
+
+- **Clases / structs**: propósito y responsabilidad.
+- **Métodos y funciones**: qué hacen, **argumentos** (unidades, rango, `nullptr`), **valor de
+  retorno** (incluido qué significa cada código de error) y **efectos secundarios**.
+- **Variables de instancia y de clase**: significado y unidades.
+- **Macros, `#define`, plantillas y parámetros de plantilla**: para qué existen y cómo se usan.
+- **Constantes, enums y tablas**: qué representan y de dónde salen.
+
+Además, cada bloque de código debe dejar claro:
+
+1. **Qué hace** (resumen en una o dos líneas).
+2. **Quién lo llama / en qué contexto** (punto de entrada, callback, dispatcher, IRQ…).
+3. **Qué recursos necesita** (memoria, Chip RAM, ficheros, hardware, tipos de `eng/core`…).
+
+### Aplicación al código generado por el transpilador
+
+El codegen debe emitir esta documentación de forma **automática**:
+
+- **Cabecera del fichero**: qué es, ROM de origen, quién lo compila/ejecuta, recursos que usa.
+- **Cada basic block** (`bb_XXXX`): rango de direcciones 6502, número de instrucciones, qué hace,
+  quién lo llama (reset/NMI/IRQ, `JSR`/`JMP`/rama, continuación de otro bloque) y cómo sale
+  (cae, salta, retorna, `BRK`, salto indirecto).
+- **Tabla de despacho y `game_main`**: contrato de entrada/salida.
+- **Runtime stub** (`cpu_stub_text.hpp`): clases, miembros, métodos y macros documentados.
+
 ## Uso de Ollama local (modelo de visión)
 
 - Para interpretar/validar imágenes (gráficos Amiga decodificados, capturas) usar **Ollama local**,

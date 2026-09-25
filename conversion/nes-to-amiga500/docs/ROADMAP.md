@@ -64,6 +64,11 @@ plataforma).
 **Objetivo**: generar C++23 a partir de la PRG-ROM, con *basic blocks*, control de flujo resuelto y
 llamadas `cpu.*` que imitan el ensamblador. Detalle en [`TRANSPILER.md`](TRANSPILER.md).
 
+**Estado: prototipo funcional** en [`../tools/transpiler/`](../tools/transpiler/README.md)
+(C++23 sobre `eng/core`, sin STL): iNES → desasm recursivo → basic blocks → codegen NROM, con
+ramas/`JMP`/`JSR`/`RTS`, tabla de despacho y *smoke test* que compila y ejecuta el C++ generado
+(ROMs propias). Pendiente: runtime real (F3) y mappers (F9).
+
 Pipeline: parseo iNES/NES 2.0 → vectores → desensamblado recursivo → CFG → basic blocks →
 codegen (`goto` + etiquetas) → tabla de despacho + arranque.
 

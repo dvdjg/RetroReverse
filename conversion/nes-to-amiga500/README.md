@@ -65,7 +65,7 @@ nes-to-amiga500/
 |---|---|---|
 | F0 | Fundaciones: estructura, docs, ADR, toolchains de build | **EN CURSO** (este scaffolding) |
 | F1 | CPU 6502 runtime fiel (host) validada con `nestest` | pendiente (base ya existe en `platforms/consoles/nes/`) |
-| F2 | Transpilador estático 6502 → C++23 (NROM) | pendiente |
+| F2 | Transpilador estático 6502 → C++23 (NROM) | **prototipo funcional** (`tools/transpiler/`) |
 | F3 | Fallback PPU+APU software (host) + validación vs `mesen` | pendiente |
 | F4 | Runtime Amiga mínimo (arranca y pinta con fallback) | pendiente |
 | F5 | Motor de tiles + scroll HW + atributos | pendiente |
