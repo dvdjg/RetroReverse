@@ -340,3 +340,25 @@ Ver `../LECCIONES_APRENDIDAS.md` §7bis.
    `winuae-session.findPattern` o `bin_scan.py` para localizar la firma).
 2. Ejecutar `dump-ram.mjs` para el volcado inicial y `hook-trampoline.mjs` para los módulos.
 3. Documentar en el expediente qué comando y qué spec se usaron.
+
+## Herramientas multi-plataforma (arcade/consola)
+
+Además del toolkit Amiga, `tools/` incluye utilidades agnósticas para el resto de plataformas:
+
+| Herramienta | Qué hace |
+|---|---|
+| `python/retro_img.py` | Escritura de PNG (sin dependencias) y tilesheets |
+| `python/nes_assets.py` | iNES → tiles CHR (8×8, 2bpp) + paleta + PRG |
+| `python/pacman_assets.py` | Romset Pascal/MAME Pac-Man → tiles 8×8 + PROMs de color + programa Z80 |
+| `python/capstone_disasm.py` | Desensamblado Capstone (`m6502`, `m68k`) → `.asm` + `.ranges.json`/`.ranges.txt` |
+| `python/ppm_diff.py` | Diff de framebuffers PPM (validación diferencial) |
+| `ghidra/ApplyRanges.java` | Puente trazas/desensamblado → Ghidra: crea funciones en los rangos |
+
+`Z80` **no** está en Capstone 5 (llegó en la rama `next`); para Z80 usar **Rizin**. Atajo reproducible:
+`scripts/extract-assets.sh` (salidas en `tools/out/assets/`, ignorado por git).
+
+### Loaders de Ghidra (consolas)
+
+`external/ghidra-extensions/` + instalados en Ghidra 12.0.1 (`Ghidra/Extensions/`):
+**GhidraNes** (build para 12.0.1), y para 11.1.2 (incompatibles con 12) `GhidraBoy`,
+`ghidra_sega_ldr`, `SMSLoader`. Ver [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
