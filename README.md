@@ -8,6 +8,10 @@ objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del or
 > **Un solo repositorio** (decisión [ADR 0004](docs/adr/0004-migracion-amiga-reverse.md)): el
 > **marco** y su **plataforma Amiga** (`platforms/computers/amiga500/demos/arte/`, expediente
 > «Arte») conviven aquí. Repositorio: **`dvdjg/RetroReverse`** (privado).
+>
+> **Contenedor**: este repo vive en `…\Amiga\RetroReverse\repo\`; los **programas auxiliares**
+> (Ghidra, Gradle, Rizin, RetroArch y los cores `libretro-*`, etc.) están en
+> `…\Amiga\RetroReverse\external\`. Las rutas de esas herramientas en esta documentación apuntan ahí.
 
 > **Aviso legal**: repositorio **privado** de estudio personal. Se analiza **para aprender** y se
 > documentan **técnicas y algoritmos** (ideas). El contenido **propio** va bajo **MIT**; el material
