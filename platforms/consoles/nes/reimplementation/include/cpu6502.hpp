@@ -1,6 +1,7 @@
 #ifndef RR_NES_CPU6502_HPP
 #define RR_NES_CPU6502_HPP
 
+#include <array>
 #include <cstdint>
 
 #include "bus.hpp"
@@ -21,16 +22,29 @@ public:
     std::uint64_t cycles = 0;
     bool jammed = false;
 
+    // Cobertura de ejecución: 1 por cada dirección que fue inicio de instrucción.
+    std::array<std::uint8_t, 0x10000> coverage{};
+    // 1 si la dirección se alcanzó secuencialmente desde la instrucción anterior.
+    std::array<std::uint8_t, 0x10000> sequential{};
+
     // Flags
     enum : std::uint8_t { C = 0x01, Z = 0x02, I = 0x04, D = 0x08, B = 0x10, U = 0x20, V = 0x40, N = 0x80 };
 
 private:
     Bus& bus;
+    std::uint16_t expected_next = 0;
+    std::uint16_t boundary = 0;
+    bool has_expected = false;
 
     std::uint8_t read(std::uint16_t addr) { return bus.read(addr); }
     void write(std::uint16_t addr, std::uint8_t v) { bus.write(addr, v); }
 
-    std::uint8_t fetch() { return read(pc++); }
+    std::uint8_t fetch() {
+        std::uint8_t v = read(pc);
+        ++pc;
+        boundary = pc;  // dirección inmediatamente posterior a los bytes leídos
+        return v;
+    }
     void push(std::uint8_t v) { write(0x0100 | sp, v); --sp; }
     std::uint8_t pull() { ++sp; return read(0x0100 | sp); }
 

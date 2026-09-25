@@ -72,6 +72,8 @@ void CPU6502::branch(bool taken) {
 
 int CPU6502::step() {
     if (jammed) return 1;
+    coverage[pc] = 1;  // cobertura: dirección de inicio de instrucción ejecutada
+    if (has_expected && pc == expected_next) sequential[pc] = 1;
     const std::uint8_t op = fetch();
     auto rd = [&](std::uint16_t a) { return read(a); };
     auto wr = [&](std::uint16_t a, std::uint8_t v) { write(a, v); };
@@ -378,5 +380,7 @@ int CPU6502::step() {
             break;
     }
     cycles += 2;  // ciclos aproximados (no usados por el criterio $02/$03)
+    expected_next = boundary;  // fall-through real tras los bytes de la instrucción
+    has_expected = true;
     return 2;
 }

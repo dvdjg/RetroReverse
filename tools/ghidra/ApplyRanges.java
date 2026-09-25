@@ -31,7 +31,9 @@ public class ApplyRanges extends GhidraScript {
 				if (line.isEmpty() || line.startsWith("#")) continue;
 				String[] p = line.split("\\s+");
 				Address a = space.getAddress(Long.parseLong(p[0], 16));
-				if (getFunctionAt(a) != null) { existed++; continue; }
+				// Solo si no cae dentro de una función ya creada (crea funciones en los
+				// inicios de bloque, no en cada instrucción de la cobertura).
+				if (getFunctionContaining(a) != null) { existed++; continue; }
 				try {
 					disassemble(a);
 					createFunction(a, null);

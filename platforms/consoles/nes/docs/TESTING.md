@@ -41,3 +41,16 @@ wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Ret
 ```
 
 Salida esperada (H1+H2): `nestest: $02=0 $03=0 -> CPU OK`.
+
+## Cobertura de ejecución
+
+El runner registra qué direcciones fueron **inicio de instrucción** y cuáles se alcanzaron
+secuencialmente, y puede volcar los **inicios de bloque** ejecutados en ROM:
+
+```powershell
+./nestest_runner <nestest.nes> --coverage coverage.txt
+```
+
+`coverage.txt` (líneas `ADDR 01`) alimenta el puente a Ghidra
+(`tools/ghidra/ApplyRanges.java`): importar la ROM y ejecutar el script con ese fichero crea
+funciones en los bloques **realmente ejecutados** (en vez de disasm lineal).
