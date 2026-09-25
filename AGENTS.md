@@ -61,6 +61,22 @@ El codegen debe emitir esta documentación de forma **automática**:
 - **Tabla de despacho y `game_main`**: contrato de entrada/salida.
 - **Runtime stub** (`cpu_stub_text.hpp`): clases, miembros, métodos y macros documentados.
 
+## Codificación de texto (obligatoria)
+
+Todo el texto del proyecto va en **UTF-8 sin BOM** —sin UTF-16, sin mojibake (UTF-8 doblemente
+codificado) y sin carácter de reemplazo—, y se pueden usar con naturalidad `ñ`, tildes y símbolos
+Unicode (`→`, `≈`, `±`…). Mismo criterio que `Amiga-Cpp/tools/check/encoding.mjs`.
+
+Aplica a: documentación (`.md`), **código fuente propio y generado** (`.cpp/.hpp`), mensajes de
+commit y salida de herramientas. Es decir: **no** se translitera a ASCII (`añade`, no `anade`;
+`código`, no `codigo`).
+
+- En **Windows**, para verlo bien en consola:
+  `chcp 65001 > $null; [Console]::OutputEncoding = [Text.UTF8Encoding]::new()`, y leer ficheros con
+  `Get-Content -Encoding utf8` (o `git`). En VS Code es automático.
+- El validador `encoding.mjs` comprueba que todo siga siendo UTF-8 válido y sin BOM: cualquier
+  fichero nuevo debe pasar ese check.
+
 ## Uso de Ollama local (modelo de visión)
 
 - Para interpretar/validar imágenes (gráficos Amiga decodificados, capturas) usar **Ollama local**,
