@@ -88,7 +88,7 @@ Para acercar el remake al **original**, `src/test_tunnel.cpp` genera además una
 `0x03AFFC`, ver `data/palette-arte.json` y `tunnel-VALIDACION.md`). La geometría es la misma; solo
 cambia el color.
 
-Verificación con Ollama (qwen3-vl, `toolkit/python/ollama_vision.py`) sobre tiras de 4 frames
+Verificación con Ollama (qwen3-vl, `tools/python/ollama_vision.py`) sobre tiras de 4 frames
 consecutivos:
 
 | Secuencia | Converge a punto de fuga | Movimiento coherente | Colores dominantes |

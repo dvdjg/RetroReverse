@@ -29,7 +29,7 @@ Detalle en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 ## Estructura del expediente
 
 ```
-sanity-arte/
+platforms/computers/amiga500/demos/arte/
   README.md
   docs/
     ROADMAP.md            fases, criterios de cierre, riesgos
@@ -53,24 +53,24 @@ sanity-arte/
   reimpl/                 recreación en C++
 ```
 
-Los scripts viven en el **toolkit compartido** [`../toolkit/`](../../../../../tools/README.md):
+Los scripts viven en el **toolkit compartido** [`../tools/`](../../../../../tools/README.md):
 
 | Script | Uso |
 |---|---|
-| `toolkit/python/dms_unpack.py` | DMS -> ADF verificado (crc/checksum por pista) |
-| `toolkit/python/bin_scan.py` | strings/entropía de ADF o volcado |
-| `toolkit/node/dump-ram.mjs` | lanza WinUAE-DBG y vuelca regiones de RAM |
-| `toolkit/node/hook-trampoline.mjs` | engancha el decruncher por firma y vuelca bloques |
-| `toolkit/node/probe-breakpoints.mjs` | verifica que el stub aplica breakpoints |
+| `tools/python/dms_unpack.py` | DMS -> ADF verificado (crc/checksum por pista) |
+| `tools/python/bin_scan.py` | strings/entropía de ADF o volcado |
+| `tools/node/dump-ram.mjs` | lanza WinUAE-DBG y vuelca regiones de RAM |
+| `tools/node/hook-trampoline.mjs` | engancha el decruncher por firma y vuelca bloques |
+| `tools/node/probe-breakpoints.mjs` | verifica que el stub aplica breakpoints |
 
 ## Cómo reproducir
 
 ```powershell
 cd Amiga-Reverse\sanity-arte
-python ..\toolkit\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms out\disk\sanity-arte.adf --verbose
-node   ..\toolkit\node\dump-ram.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node   ..\toolkit\node\hook-trampoline.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --spec specs\imp-dump.json --out out --boot 5
-node   ..\toolkit\node\dump-display.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
+python ..\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms out\disk\sanity-arte.adf --verbose
+node   ..\tools\node\dump-ram.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node   ..\tools\node\hook-trampoline.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --spec specs\imp-dump.json --out out --boot 5
+node   ..\tools\node\dump-display.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
 ```
 
 Comandos exactos y notas en [`tools/README.md`](tools/README.md).

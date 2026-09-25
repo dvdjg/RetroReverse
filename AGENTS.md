@@ -37,16 +37,16 @@ registros y buffers cambian por frame); la clave está en el código.
 - Para interpretar/validar imágenes (gráficos Amiga decodificados, capturas) usar **Ollama local**,
   no depender del modelo de chat principal (que no ve imágenes).
 - Modelo de visión disponible: `qwen3-vl:8b-instruct-q8_0` (también `gemma3:12b`).
-- Cliente: `toolkit/python/ollama_vision.py` (manda la imagen en base64 al endpoint
+- Cliente: `tools/python/ollama_vision.py` (manda la imagen en base64 al endpoint
   `http://localhost:11434/api/generate`).
 - **Advertencia**: el modelo de visión de 8B **alucina coherencia** ("pixel art") y puede
   inventar contexto. Usarlo solo como señal débil; validar con métricas objetivas y, para
   confirmar, pedir al usuario que mire la imagen.
-- Comando: `python toolkit/python/ollama_vision.py <imagen.png> [--prompt "..."]`.
+- Comando: `python tools/python/ollama_vision.py <imagen.png> [--prompt "..."]`.
 
 ## Bitmaps Amiga OCS/ECS (guía de reconstrucción)
 
-Ver `toolkit/python/AMIGA_BITMAPS.md` (guía completa del usuario): registros custom a leer,
+Ver `tools/python/AMIGA_BITMAPS.md` (guía completa del usuario): registros custom a leer,
 algoritmo de intercalado planar, heurísticas de ancho/altura/stride, detección de tiles/bobs,
 lectura desde ADF. Puntos clave:
 

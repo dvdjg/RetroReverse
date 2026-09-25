@@ -105,7 +105,7 @@ Búsqueda de runs de words 12-bit (`$0RGB`) a continuación de la cabecera de ca
 | `0x0A3C2C` | ¿? | @`0x817A` (953) | probablemente datos |
 
 **Pendiente (siguiente fase):** para cada efecto (plasma, rubber-rotator, zoom) hay que
-**capturar su frame en vivo** (receta en `toolkit/README.md`) y localizar su paleta/estructura
+**capturar su frame en vivo** (receta en `tools/README.md`) y localizar su paleta/estructura
 antes de reimplementar — igual que se hizo con el túnel.
 
 **Nota sobre `0x078A2C`** (candidato a rubber-rotator): es una variante de `sos.library` con **64

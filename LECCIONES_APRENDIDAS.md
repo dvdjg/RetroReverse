@@ -54,8 +54,8 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   línea de comandos**, no solo en el `.uae`.
 - Para no depender de las tools MCP, importar el módulo Node del repo hermano:
   `mcp-winuae-emu/dist/winuae-connection.js` (`WinUAEConnection` + `GdbProtocol`).
-  Es exactamente lo que hacen `toolkit/node/dump-ram.mjs` y
-  `toolkit/node/hook-trampoline.mjs`.
+  Es exactamente lo que hacen `tools/node/dump-ram.mjs` y
+  `tools/node/hook-trampoline.mjs`.
 - Flujo: `connect()` (hace Ctrl+C y handshake) -> `continue()` -> esperar -> `pause()` ->
   `readRegisters()` / `readMemory()`.
 - `memcfg` (monitor) da el mapa real de bancos: no asumir 0x000000/0xC00000, confirmarlo.
@@ -65,13 +65,13 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 
 ### 4bis. Sesión persistente y canal lateral (evitar relanzar)
 
-- **Lanzar WinUAE UNA vez** y reutilizarlo (`toolkit/node/launch.mjs` deja el emulador detached).
+- **Lanzar WinUAE UNA vez** y reutilizarlo (`tools/node/launch.mjs` deja el emulador detached).
   Relanzarlo por cada experimento es lento y un error de método: las herramientas deben conectar
   al que ya corre, no arrancar otro.
 - **Canal lateral (2346)**: independiente de GDB; lee/escribe en runtime **sin pausar la CPU**.
   Comandos: `hello`, `state`, `regs`, `mem <addr> <len>` (≤4096 B), `poke <addr> <hex>`,
   `lock acquire <owner> <observe|assist|takeover>` / `lock release`, `screenshot <path>`,
-  `pause`/`resume`, `runstatus`, `audit writes`. Cliente: `toolkit/node/side.mjs`.
+  `pause`/`resume`, `runstatus`, `audit writes`. Cliente: `tools/node/side.mjs`.
 - **Trampa de formato numérico**: el servidor parsea los números en **base 10** salvo que lleven
   `0x` o letras hex. Enviar SIEMPRE `0x` (p. ej. `mem 0xdff080 0x140`); si no, `1000` se
   interpreta como 1000 decimal en vez de `0x1000` (nos pasó: leía 128000 B de 524288).
@@ -165,7 +165,7 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **SOS carga sus librerías por nombre de 4 letras (OpenLibrary), no por tag**: `jsr -$138(a6)`
   (= `_OpenLibrary` en el mapa de LVOs) con `move.l #$44425547 ("DBUG"), d0` abre
   `DBUG.soslibrary`. El mapa completo de LVOs de SOS está en
-  `sanity-arte/recovered/reference/sanity-os-v26/LVO_MAP.md` (extraído de `sos.includes`).
+  `platforms/computers/amiga500/demos/arte/recovered/reference/sanity-os-v26/LVO_MAP.md` (extraído de `sos.includes`).
   **Corrección**: interpretaciones previas de `-$138` como "resolución de módulos por tag",
   `-$11A` como "primitiva" y `-$54` como "FindTask" eran incorrectas (son OpenLibrary, GetPISS y
   SetInt respectivamente).
@@ -198,7 +198,7 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   `IMP!` del disco es **Imploder** ("ripped out of beermon"); (2) las librerías
   `DBUG/SINE/TEXT/AGAC.soslibrary`; (3) `main` es el loader; (4) el "effect handler" interpreta
   un `script` (los `.scr` del paquete). Referencia guardada en
-  `sanity-arte/recovered/reference/sanity-os-v26/`.
+  `platforms/computers/amiga500/demos/arte/recovered/reference/sanity-os-v26/`.
 - **Formato de copperlist SOS**: MOVE = `[opcode 0][reg][valor]` (4 bytes, igual que el estándar
   `0x01xx` pero con opcode `0`). Los punteros BPL/SPR y colores van a 0 en el bloque (el demo los
   parchea por frame). Un bloque de efecto puede contener **varias copperlists encadenadas**
@@ -242,7 +242,7 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **Referencia fiable**: la **captura de pantalla** (`screenshot`) refleja lo realmente mostrado.
   Usarla como fuente para reimplementar, aunque no dé los bitplanes fuente.
 - No leer `$DFF1C0+` en OCS/ECS: provoca error y puede tumbar el emulador (limitar a `$DFF1BE`).
-- El canal lateral (`toolkit/node/side-read.mjs`, puerto 2346) sí es útil de forma fiable para
+- El canal lateral (`tools/node/side-read.mjs`, puerto 2346) sí es útil de forma fiable para
   `state`/`regs` (PC, ciclos, registros de CPU) y para `mem` de RAM genérica.
 
 ## 7. Desensamblado
@@ -255,7 +255,7 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 
 ### 7bis. Ghidra + extensión Amiga (`ghidra-amiga`) y Rizin — evaluación (2026)
 
-Probado a fondo (ver `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md` y `toolkit/ghidra/`). Confianza alta.
+Probado a fondo (ver `platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md` y `tools/ghidra/`). Confianza alta.
 
 - **Ghidra + `BartmanAbyss/ghidra-amiga`** aporta lo que objdump/Rizin no dan:
   - Loaders nativos: **Hunk Executable**, **WinUAE `.uss`**, **Kickstart ROM**.
@@ -280,18 +280,18 @@ Probado a fondo (ver `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md` y `toolkit/ghidra/`
 - **Rizin/radare2** (0.9.1): disasm + xrefs + CFG muy rápido sobre volcados crudos
   (`rizin -a m68k -b 32 -E big -m <base> -c "aaa; pdf @ <addr>"`), pero **sin decompilador** en el
   build base (`pdc`/`pdd` no existen). Complementario, no sustituto.
-- **Pipeline en lote**: `toolkit/ghidra/decompile-modules.ps1` decompila todos los módulos de un
+- **Pipeline en lote**: `tools/ghidra/decompile-modules.ps1` decompila todos los módulos de un
   `modules.json`/`index.json` a `out/ghidra/` (base = `dest` del JSON; `index.json` de `modules_all`
   usa `offset` de ADF → base 0). Resultado en `sanity-arte`: 53 módulos.
 - **Datos por xref**: `XrefsTo.java` lista referencias a una dirección y vuelca los bytes →
   alimenta `planar_decode`/`copper_decode`/`bin_scan`. Ej.: tabla de senos `0x1056` de `0B0C2C`.
 - **Decompilado vs reimpl** (motor 3D, zoom, túnel): ver
-  `sanity-arte/docs/GHIDRA_DECOMP_VS_REIMPL.md`. El motor 3D coincide término a término; el zoom
+  `platforms/computers/amiga500/demos/arte/docs/GHIDRA_DECOMP_VS_REIMPL.md`. El motor 3D coincide término a término; el zoom
   confirma el doc y revela **copper por bandas**; la matriz ortonormal (`0xE1E`) **no estaba
   portada**; el túnel `0x03AFFC` es **datos** (0 funciones) → su render no se puede validar aún.
 - **rz-ghidra** (`pdg`) como **segundo decompilador**: funciona, pero **no hay build nativo de
   Windows** (solo fuentes; el Rizin precompilado no trae `RizinConfig.cmake`). Se compila en
-  **WSL/Ubuntu** (`toolkit/ghidra/wsl/build-rzghidra.sh`); su C coincide con el de Ghidra. Montarlo
+  **WSL/Ubuntu** (`tools/ghidra/wsl/build-rzghidra.sh`); su C coincide con el de Ghidra. Montarlo
   no es barato: úsalo como comprobación puntual.
 - **Trampa de endianness**: Rizin 0.9.1 exige `-E big` (no `-e cfg.bigendian=true`).
 
@@ -310,7 +310,7 @@ Probado a fondo (ver `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md` y `toolkit/ghidra/`
   código ajeno.
 - **Si el repo pasara a público**: convendría excluir de git el material de terceros de
   `recovered/` y conservar solo el **análisis** y las **reimplementaciones propias**. Ver
-  `sanity-arte/recovered/README.md`.
+  `platforms/computers/amiga500/demos/arte/recovered/README.md`.
 
 ## 9. Plantilla de expediente
 

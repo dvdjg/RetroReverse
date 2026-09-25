@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """imp_decrunch.py — Decruncher del formato "IMP!" (File Imploder) de la demo Sanity-Arte.
 
-ESTADO: FUNCIONAL vía `ancient` (temisu/ancient, compilado en toolkit/bin/ancient).
+ESTADO: FUNCIONAL vía `ancient` (temisu/ancient, compilado en tools/bin/ancient).
 El port Python de abajo es WIP/referencia. El formato IMP! = File Imploder de la
 escena Amiga (firma 0x494D5021, clones ATN!/EDAM/M.H.). Sanity usa IMP! SIN
 checksum estándar (en ancient: addition=0). Ver LECCIONES_APRENDIDAS.md.
@@ -247,7 +247,7 @@ def main():
     off = int(off_s, 0)
     data = bytearray(open(fn, "rb").read())
     if use_ancient:
-        # usa toolkit/bin/ancient/ancient.exe (compilado, verificado)
+        # usa tools/bin/ancient/ancient.exe (compilado, verificado)
         import subprocess, os
         eo = u32(data, off + 8)
         blk = bytes(data[off:off + eo + 0x32])

@@ -39,4 +39,4 @@ Lo que hay que cuidar es el **material de terceros**: ROMs y assets originales.
 | Publicar specs derivadas de material con copyright | las specs describen **ideas/tiempos**; evitar reproducir tablas de datos protegidas |
 
 > Aplica también a `Amiga-Reverse`: ver `LECCIONES_APRENDIDAS.md` §8 y
-> `sanity-arte/recovered/README.md`.
+> `platforms/computers/amiga500/demos/arte/recovered/README.md`.

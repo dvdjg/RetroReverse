@@ -76,7 +76,7 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 
 ## Breakpoints del stub
 
-- Verificado con `toolkit/node/probe-breakpoints.mjs`: el stub **sí aplica `Z0`** y devuelve
+- Verificado con `tools/node/probe-breakpoints.mjs`: el stub **sí aplica `Z0`** y devuelve
   `T05swbreak:;` (confirmado en `0xC0255A`, dentro del bucle `IMP!`).
 - `pause()` (interrupt `0x03`) puede tardar; usar reintentos.
 
@@ -99,7 +99,7 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
   `COLOR00..`; guardada en `recovered/media/copper/` marcada como **no verificada**.
 - **No leer `$DFF1C0+` en OCS/ECS**: error y posible caída del emulador.
 - Referencia fiable del aspecto: `recovered/media/reference/arte-title-screenshot.png`.
-- El **canal lateral** (`toolkit/node/side-read.mjs`) sí es fiable para `state`/`regs`/`mem` de RAM.
+- El **canal lateral** (`tools/node/side-read.mjs`) sí es fiable para `state`/`regs`/`mem` de RAM.
 - Reconstruir un frame desde los registros en vivo falla por los **splits de Copper** (cambian
   `BPLCON0`/punteros por zonas): un rango contiguo no reconstruye la imagen. La **captura de
   pantalla** es la referencia fiable; para los planos fuente habría que emular el Copper.
@@ -132,7 +132,7 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 
 Evaluación completa en [`GHIDRA_AMIGA_EVAL.md`](GHIDRA_AMIGA_EVAL.md) y
 [`GHIDRA_DECOMP_VS_REIMPL.md`](GHIDRA_DECOMP_VS_REIMPL.md); herramienta en
-[`../../toolkit/ghidra/`](../../../../../../tools/ghidra/README.md). Salidas en `out/ghidra/` (regenerables).
+[`../../tools/ghidra/`](../../../../../../tools/ghidra/README.md). Salidas en `out/ghidra/` (regenerables).
 
 - **Loaders**: Ghidra 12.0.1 + extensión `ghidra-amiga` cargan **Hunk** y **`.uss`** y resuelven
   las llamadas a librería con símbolos **NDK 3.9**. `out/disk` **no contiene Hunk** (trackloader);

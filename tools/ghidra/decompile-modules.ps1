@@ -2,11 +2,11 @@
 #
 # Lee un JSON de modulos (out/modules/modules.json o out/modules_all/index.json), importa cada
 # binario como Raw Binary en su direccion de carga y vuelca el pseudo-C de todas sus funciones a
-# out/ghidra/. Salida NO curada (regenerable). Ver toolkit/ghidra/README.md y STRUCTURE.md regla 8.
+# out/ghidra/. Salida NO curada (regenerable). Ver tools/ghidra/README.md y STRUCTURE.md regla 8.
 #
 # Uso:
-#   ./decompile-modules.ps1 -ModulesJson ..\..\sanity-arte\out\modules\modules.json `
-#       -OutDir ..\..\sanity-arte\out\ghidra [-Only 'mod_00'] [-BaseField dest]
+#   ./decompile-modules.ps1 -ModulesJson ..\..\platforms\computers\amiga500\demos\arte\out\modules\modules.json `
+#       -OutDir ..\..\platforms\computers\amiga500\demos\arte\out\ghidra [-Only 'mod_00'] [-BaseField dest]
 #
 # Campos del JSON:
 #   - "file": nombre del binario (relativo al JSON)

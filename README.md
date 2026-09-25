@@ -6,7 +6,7 @@ objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del or
 (*pixel-perfect* y temporizaciones exactas).
 
 > **Un solo repositorio** (decisión [ADR 0004](docs/adr/0004-migracion-amiga-reverse.md)): aquí
-> convive el **marco** con su **subproyecto Amiga** (`sanity-arte/`, expediente «Arte»). El repo se
+> convive el **marco** con su **subproyecto Amiga** (`platforms/computers/amiga500/demos/arte/`, expediente «Arte»). El repo se
 > llama hoy `Amiga-Reverse` en GitHub; puede renombrarse a `RetroReverse` para coherencia.
 
 > **Aviso legal**: repositorio **privado** de estudio personal. Se analiza **para aprender** y se
@@ -54,7 +54,7 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout destino en
 ## Estado
 
 - **Marco**: diseño documentado (este repo). Pendiente: vertical slice **Pac-Man + MAME** (P0).
-- **Subproyecto Amiga**: `sanity-arte/` (expediente «Arte») — pipeline ya probado para A500.
+- **Subproyecto Amiga**: `platforms/computers/amiga500/demos/arte/` (expediente «Arte») — pipeline ya probado para A500.
 - **Migración pendiente** del expediente al layout de plataformas:
   [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md).
 
@@ -65,20 +65,20 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout destino en
 Expediente de **ingeniería inversa de software Amiga 68k**. Objetivo: **recuperar las técnicas**
 (sobre todo gráficas), **comprender el asm 68k**, **inferir el C++ equivalente** y **reconstruir**
 en un engine propio. Las rutinas optimizadas (p. ej. Q15 con `muls.w`/`swap` del motor 3D) son la
-**referencia canónica** que se porta. Ver [`sanity-arte/README.md`](platforms/computers/amiga500/demos/arte/README.md).
+**referencia canónica** que se porta. Ver [`platforms/computers/amiga500/demos/arte/README.md`](platforms/computers/amiga500/demos/arte/README.md).
 
 ## Índice de expedientes
 
 | Título | Año | Plataforma | Estado | Carpeta |
 |---|---|---|---|---|
-| **Arte** (Sanity) | 1993 | A500 OCS/ECS | En curso | [`sanity-arte/`](platforms/computers/amiga500/demos/arte/README.md) |
+| **Arte** (Sanity) | 1993 | A500 OCS/ECS | En curso | [`platforms/computers/amiga500/demos/arte/`](platforms/computers/amiga500/demos/arte/README.md) |
 
 Cada título vive en su propia carpeta y sigue la **estructura canónica** de [`STRUCTURE.md`](STRUCTURE.md).
-Para uno nuevo se copia [`_template/`](docs/templates/expediente/).
+Para uno nuevo se copia [`docs/templates/expediente/`](docs/templates/expediente/).
 
 ## Técnicas recuperadas y portadas
 
-Recreaciones en C++ en [`sanity-arte/reimpl/`](platforms/computers/amiga500/demos/arte/reimpl/README.md); estado en
+Recreaciones en C++ en [`platforms/computers/amiga500/demos/arte/reimpl/`](platforms/computers/amiga500/demos/arte/reimpl/README.md); estado en
 [`ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md):
 
 | Técnica | Módulo | Reimpl |
@@ -94,23 +94,23 @@ Recreaciones en C++ en [`sanity-arte/reimpl/`](platforms/computers/amiga500/demo
 | Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](platforms/computers/amiga500/demos/arte/reimpl/zoom/README.md) |
 
 Pendientes: el **blit/copper del zoom** y la **rutina de render del túnel** (init localizado, render
-por dispatch indirecto). Inventario completo en [`sanity-arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
+por dispatch indirecto). Inventario completo en [`platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
 
 ## Cómo empezar (Amiga)
 
 ```powershell
 # 1) Extraer el disco (verificado por pista)
-python toolkit\python\dms_unpack.py Sanity-Arte.dms sanity-arte\out\disk\sanity-arte.adf --verbose
+python tools\python\dms_unpack.py Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
 
 # 2) Arrancar en WinUAE-DBG y volcar RAM + módulos
-node toolkit\node\dump-ram.mjs --config sanity-arte\out\sanity.uae --adf sanity-arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node toolkit\node\hook-trampoline.mjs --config sanity-arte\out\sanity.uae --adf sanity-arte\out\disk\sanity-arte.adf --spec sanity-arte\specs\imp-dump.json --out sanity-arte\out --boot 5
+node tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec platforms\computers\amiga500\demos\arte\specs\imp-dump.json --out platforms\computers\amiga500\demos\arte\out --boot 5
 
 # 3) Desensamblar / decompilar (objdump/capstone + Ghidra)
-..\toolkit\ghidra\decompile-modules.ps1 -ModulesJson sanity-arte\out\modules\modules.json -OutDir sanity-arte\out\ghidra
+tools\ghidra\decompile-modules.ps1 -ModulesJson platforms\computers\amiga500\demos\arte\out\modules\modules.json -OutDir platforms\computers\amiga500\demos\arte\out\ghidra
 ```
 
-Comandos completos: [`sanity-arte/tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md).
+Comandos completos: [`platforms/computers/amiga500/demos/arte/tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md).
 
 ## Metodología (RE Amiga)
 
@@ -128,16 +128,16 @@ Método completo en [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md); contra
 
 ## Toolkit reutilizable
 
-Utilidades **parametrizables**, documentadas en [`toolkit/README.md`](tools/README.md):
+Utilidades **parametrizables**, documentadas en [`tools/README.md`](tools/README.md):
 
 | Área | Herramientas |
 |---|---|
 | **DMS / binarios** | `python/dms_unpack.py`, `python/bin_scan.py` |
 | **Emulador (WinUAE-DBG + GDB)** | `node/winuae-session.mjs`, `dump-ram.mjs`, `hook-trampoline.mjs`, `probe-*.mjs`, `launch/side/stop.mjs`, `capture-live.ps1` |
 | **Vídeo / assets** | `node/dump-display.mjs`, `node/decode-bitplanes.mjs`, `python/copper_decode.py`, `python/planar_decode.py`, `python/ollama_vision.py` |
-| **Desensamblado / decompilado** | `ghidra/` (headless + pipeline), ver [`toolkit/ghidra/README.md`](tools/ghidra/README.md) |
+| **Desensamblado / decompilado** | `ghidra/` (headless + pipeline), ver [`tools/ghidra/README.md`](tools/ghidra/README.md) |
 
-Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](tools/python/AMIGA_BITMAPS.md).
+Guía de bitmaps OCS/ECS: [`tools/python/AMIGA_BITMAPS.md`](tools/python/AMIGA_BITMAPS.md).
 
 ## Entorno / toolchain
 
@@ -177,11 +177,11 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](tools/python/AMIGA
 | [`PORTING.md`](PORTING.md) | Del código recuperado al engine: C/C++ ref + ASM canónico + ABI |
 | [`AGENTS.md`](AGENTS.md) | Directrices de trabajo |
 
-### Expediente «Arte» (`sanity-arte/`)
+### Expediente «Arte» (`platforms/computers/amiga500/demos/arte/`)
 
 | Documento | Contenido |
 |---|---|
-| [`sanity-arte/README.md`](platforms/computers/amiga500/demos/arte/README.md) | Estado, inventario y cómo reproducir |
+| [`platforms/computers/amiga500/demos/arte/README.md`](platforms/computers/amiga500/demos/arte/README.md) | Estado, inventario y cómo reproducir |
 | [`docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md) | Fases, criterios de cierre, estado de efectos |
 | [`docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md) | Inventario vivo de trabajo abierto |
 | [`docs/HALLAZGOS.md`](platforms/computers/amiga500/demos/arte/docs/HALLAZGOS.md) | Datos concretos con evidencia |
@@ -194,7 +194,7 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](tools/python/AMIGA
 
 ## Añadir un expediente nuevo
 
-1. Copiar [`_template/`](docs/templates/expediente/) a `<titulo>/` (o a `platforms/...` cuando se aplique el layout).
+1. Copiar [`docs/templates/expediente/`](docs/templates/expediente/) a `<titulo>/` (o a `platforms/...` cuando se aplique el layout).
 2. Rellenar `README.md` y `docs/ROADMAP.md` (fase 0 = extraer la imagen).
 3. Añadir la spec en `specs/` y documentar los comandos del toolkit en `tools/README.md`.
 4. Ir volcando: `out/` → revisar → promover a `recovered/` → reimplementar en `reimpl/`.
@@ -204,7 +204,7 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](tools/python/AMIGA
 
 - **Contenido propio** (marco, análisis, documentación, reimplementaciones y toolkit): **MIT** —
   ver [`LICENSE`](LICENSE).
-- **Material de terceros** (binarios/assets originales en `sanity-arte/recovered/`): **no** cubierto
+- **Material de terceros** (binarios/assets originales en `platforms/computers/amiga500/demos/arte/recovered/`): **no** cubierto
   por la MIT; © de sus autores. Referencia de estudio. Ver [`docs/LEGAL.md`](docs/LEGAL.md).
 
 Repositorio **privado** de uso personal.

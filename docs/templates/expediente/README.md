@@ -21,7 +21,7 @@ Ver `docs/ROADMAP.md` para el detalle y los criterios de cierre.
 ## Inventario
 
 - `docs/` — ROADMAP, HALLAZGOS, TECNICAS.
-- `tools/` — scripts host de extracción/volcado (base: `../sanity-arte/tools/`).
+- `tools/` — scripts host de extracción/volcado (base: `../platforms/computers/amiga500/demos/arte/tools/`).
 - `out/` — artefactos regenerables (dumps, módulos, capturas, logs).
 - `recovered/` — código/media/mapas curados.
 - `reimpl/` — recreación en C++.

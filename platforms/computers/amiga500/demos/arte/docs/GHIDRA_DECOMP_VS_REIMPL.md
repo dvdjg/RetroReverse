@@ -5,7 +5,7 @@ Segunda fase de la evaluación de Ghidra (ver `GHIDRA_AMIGA_EVAL.md`). Aquí: (3
 **datos por xref** para alimentar los decoders, y (5) **rz-ghidra** como segundo decompilador.
 
 Todo lo generado está en `out/ghidra/` (regenerable). Comandos en `tools/README.md` y
-`toolkit/ghidra/README.md`.
+`tools/ghidra/README.md`.
 
 ---
 
@@ -88,7 +88,7 @@ Confianza **media-alta** (init y punteros verificados; render no aislado).
 
 ## 4. Extracción de datos por xref (para los decoders)
 
-`toolkit/ghidra/XrefsTo.java <out.txt> <hexAddr> [hexLen]` lista las referencias a una dirección y
+`tools/ghidra/XrefsTo.java <out.txt> <hexAddr> [hexLen]` lista las referencias a una dirección y
 (opcional) vuelca los bytes para alimentar `planar_decode`/`copper_decode`/`bin_scan`.
 
 Ejemplo real — tabla de senos de `blk_0B0C2C`:
@@ -108,7 +108,7 @@ words Q15 (`0, 201, 402, 603, …`, compatible con un **cuarto de seno**). Confi
 ## 5. rz-ghidra como segundo decompilador (cross-check)
 
 **Resultado**: **funciona** y su salida coincide con la de Ghidra. Se construyó en **WSL/Ubuntu**
-desde fuente (ver `toolkit/ghidra/wsl/build-rzghidra.sh`), porque en Windows nativo no es viable
+desde fuente (ver `tools/ghidra/wsl/build-rzghidra.sh`), porque en Windows nativo no es viable
 (sin binarios precompilados; el Rizin precompilado no trae `RizinConfig.cmake`).
 
 Mismo input (`blk_0B0C2C`, base 0, m68k BE), `pdg @ 0xcba` →

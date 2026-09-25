@@ -182,4 +182,4 @@ llega a 50 Hz**: es la parte que hay que escribir en ASM (o delegar al blitter) 
   correctos; un error de módulo desplaza la imagen entera.
 
 *(Ver también `recovered/code/ALGORITMOS_ZOOM_Y_TUNEL.md`, `docs/TECNICAS.md` y
-`toolkit/python/AMIGA_BITMAPS.md`.)*
+`tools/python/AMIGA_BITMAPS.md`.)*

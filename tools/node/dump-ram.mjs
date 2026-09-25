@@ -21,9 +21,9 @@
  *   --screenshot         captura la pantalla a <out>/screens/<prefix>-boot.png
  *
  * Ejemplo:
- *   node dump-ram.mjs --config ../sanity-arte/out/sanity.uae \
- *     --adf ../sanity-arte/out/disk/sanity-arte.adf --boot 20 \
- *     --regions 0x0:0x80000,0xc00000:0x80000 --out ../sanity-arte/out --prefix arte --screenshot
+ *   node dump-ram.mjs --config ../platforms/computers/amiga500/demos/arte/out/sanity.uae \
+ *     --adf ../platforms/computers/amiga500/demos/arte/out/disk/sanity-arte.adf --boot 20 \
+ *     --regions 0x0:0x80000,0xc00000:0x80000 --out ../platforms/computers/amiga500/demos/arte/out --prefix arte --screenshot
  */
 
 import * as path from 'node:path';

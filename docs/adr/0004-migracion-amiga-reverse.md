@@ -18,8 +18,8 @@ que contiene **marco + subproyecto Amiga**:
   README.md                      README del marco (RetroReverse)
   STRUCTURE.md · LECCIONES_APRENDIDAS.md · PORTING.md · AGENTS.md   (metodología)
   docs/                          documentación del marco (arquitectura, pipeline, HIGS, roadmap, adr)
-  toolkit/ · _template/          herramientas y plantillas del marco
-  sanity-arte/                   subproyecto Amiga (expediente «Arte»)
+  tools/ · docs/templates/expediente/          herramientas y plantillas del marco
+  platforms/computers/amiga500/demos/arte/                   subproyecto Amiga (expediente «Arte»)
 ```
 
 No se usa **subtree ni submódulo**: la reorganización hacia el layout de plataformas es

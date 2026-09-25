@@ -1,7 +1,7 @@
 <#
 capture-live.ps1 — captura un efecto EN VIVO en una sola invocación de WinUAE-DBG.
 
-Lanza el emulador en PRIMER PLANO (necesario para que la CPU corra; ver toolkit/README.md),
+Lanza el emulador en PRIMER PLANO (necesario para que la CPU corra; ver tools/README.md),
 sondena una firma en RAM hasta que aparezca (a la espera del efecto), y entonces vuelca RAM +
 screenshot. Cierra SOLO la instancia propia (por PID).
 
@@ -10,8 +10,8 @@ Uso:
                      -OutDir <dir> [-TimeoutSec 90]
 
 Ejemplo (corridor de Sanity-Arte; la paleta del tunel aparece en 0x2675A):
-  ./capture-live.ps1 -Config ../sanity-arte/out/sanity.uae `
-                     -Adf    ../sanity-arte/out/disk/sanity-arte.adf `
+  ./capture-live.ps1 -Config ../platforms/computers/amiga500/demos/arte/out/sanity.uae `
+                     -Adf    ../platforms/computers/amiga500/demos/arte/out/disk/sanity-arte.adf `
                      -ProbeAddr 0x26758 -ProbePattern 0fff0ffc0fd9 -OutDir ./shots
 
 Notas:

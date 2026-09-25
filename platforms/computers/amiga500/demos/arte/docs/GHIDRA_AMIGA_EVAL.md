@@ -2,7 +2,7 @@
 
 Evaluación práctica de `BartmanAbyss/ghidra-amiga` para la labor de este expediente, ejecutada
 completa (pasos 1–4). Herramienta documentada en
-[`../../toolkit/ghidra/README.md`](../../../../../../tools/ghidra/README.md).
+[`../../tools/ghidra/README.md`](../../../../../../tools/ghidra/README.md).
 
 **Entorno**: Ghidra 12.0.1, extensión compilada con Gradle 9.2.1, JDK 21.
 Todo el material regenerable queda en `out/ghidra/`.
@@ -144,12 +144,12 @@ expediente (que sigue siendo ligero y reproducible). Confianza **alta**.
 
 ```powershell
 $g  = "C:\Users\dvdjg\Documents\programa\AI\Amiga\ghidra_12.0.1_PUBLIC"
-$sd = "C:\Users\dvdjg\Documents\programa\AI\Amiga\Amiga-Reverse\toolkit\ghidra"
+$sd = "C:\Users\dvdjg\Documents\programa\AI\Amiga\Amiga-Reverse\tools\ghidra"
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
-$out = "sanity-arte\out\ghidra"
+$out = "platforms\computers\amiga500\demos\arte\out\ghidra"
 
 # Paso 1: Hunk
-& "$g\support\analyzeHeadless.bat" $out sanity -import "sanity-arte\recovered\reference\sanity-os-v26\SOS_RUN" `
+& "$g\support\analyzeHeadless.bat" $out sanity -import "platforms\computers\amiga500\demos\arte\recovered\reference\sanity-os-v26\SOS_RUN" `
   -overwrite -scriptPath $sd -postScript InfoDump.java "$out\SOS_RUN.info.txt"
 
 # Paso 2: .uss + búsqueda de firmas + volcado
@@ -158,7 +158,7 @@ $out = "sanity-arte\out\ghidra"
   -postScript DumpRange.java "$out\ats.bogo.bin" "c00000" "80000"
 
 # Paso 3: decompilador
-& "$g\support\analyzeHeadless.bat" $out sanity -import "sanity-arte\out\modules_all\blk_0B0C2C_l1_63064.bin" `
+& "$g\support\analyzeHeadless.bat" $out sanity -import "platforms\computers\amiga500\demos\arte\out\modules_all\blk_0B0C2C_l1_63064.bin" `
   -overwrite -processor "68000:BE:32:default" -loader BinaryLoader -loader-baseAddr 0x0 `
   -scriptPath $sd -postScript DumpDecomp.java "$out\b0c2c.decomp.c" 0xCBA
 ```

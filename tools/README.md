@@ -5,7 +5,7 @@ enganchar descompresores de cualquier software Amiga 68k. Cada utilidad está do
 y acepta su configuración por CLI/env, de modo que se reutiliza en cualquier expediente.
 
 ```
-toolkit/
+tools/
   node/
     winuae-session.mjs      biblioteca (lanzar WinUAE-DBG + GDB, pausar, leer RAM, buscar firmas, breakpoints)
     launch.mjs              CLI: lanzar WinUAE UNA vez (detached, sin GDB) para reutilizarlo
@@ -83,7 +83,7 @@ Cerrar esa instancia por **su PID** (`Stop-Process -Id <pid>`), solo el propio.
 ## Receta: capturar un efecto concreto en vivo (una sola invocación)
 
 Evitar relanzar en bucle: lanzar **una vez** y sondear dentro de esa sesión. Automatizado en
-**`toolkit/capture-live.ps1`** (lanza en primer plano, sondea una firma, vuelca RAM + screenshot y
+**`tools/capture-live.ps1`** (lanza en primer plano, sondea una firma, vuelca RAM + screenshot y
 cierra por PID):
 
 ```powershell
@@ -205,7 +205,7 @@ breakpoint en la entrada (donde se leen destino/longitud) y otro en el retorno.
 
 ```powershell
 node hook-trampoline.mjs --config out\game.uae --adf out\disk\game.adf `
-  --spec ..\sanity-arte\specs\sanity-arte.json --out out --boot 4
+  --spec ..\platforms\computers\amiga500\demos\arte\specs\sanity-arte.json --out out --boot 4
 ```
 
 Spec JSON (ejemplo real: `../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`):

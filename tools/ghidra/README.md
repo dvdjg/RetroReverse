@@ -1,4 +1,4 @@
-# toolkit/ghidra — Ghidra + extensión Amiga (loaders Hunk/USS, símbolos NDK)
+# tools/ghidra — Ghidra + extensión Amiga (loaders Hunk/USS, símbolos NDK)
 
 Análisis de software Amiga 68k con **Ghidra** y la extensión
 [`BartmanAbyss/ghidra-amiga`](https://github.com/BartmanAbyss/ghidra-amiga). Aporta lo que
@@ -59,7 +59,7 @@ Uso típico (importar + analizar + script):
 
 ```powershell
 $g  = "C:\...\Amiga\ghidra_12.0.1_PUBLIC"
-$sd = "C:\...\Amiga-Reverse\toolkit\ghidra"
+$sd = "C:\...\Amiga-Reverse\tools\ghidra"
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 
 # Hunk o .uss: el loader se autodetecta por el magic
@@ -86,8 +86,8 @@ cada binario como Raw Binary en su dirección de carga (`dest` del JSON; si falt
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 ./decompile-modules.ps1 `
-  -ModulesJson ..\..\sanity-arte\out\modules\modules.json `
-  -OutDir      ..\..\sanity-arte\out\ghidra `
+  -ModulesJson ..\..\platforms\computers\amiga500\demos\arte\out\modules\modules.json `
+  -OutDir      ..\..\platforms\computers\amiga500\demos\arte\out\ghidra `
   [-Only 'mod_00'] [-BaseField dest]
 ```
 
@@ -115,13 +115,13 @@ fuente y el Rizin precompilado no incluye `RizinConfig.cmake`. Se construye desd
 
 ```bash
 # en WSL:
-bash /mnt/c/.../toolkit/ghidra/wsl/pdg-dump.sh \
-  /mnt/c/.../sanity-arte/out/modules_all/blk_0B0C2C_l1_63064.bin \
-  /mnt/c/.../sanity-arte/out/ghidra/blk_0B0C2C.rzghidra.pdg.c 0xc16 0xcba 0xe1e
+bash /mnt/c/.../tools/ghidra/wsl/pdg-dump.sh \
+  /mnt/c/.../platforms/computers/amiga500/demos/arte/out/modules_all/blk_0B0C2C_l1_63064.bin \
+  /mnt/c/.../platforms/computers/amiga500/demos/arte/out/ghidra/blk_0B0C2C.rzghidra.pdg.c 0xc16 0xcba 0xe1e
 ```
 
 Su salida coincide con la de Ghidra (misma semántica Q15). Detalle y resultados en
-`../../sanity-arte/docs/GHIDRA_DECOMP_VS_REIMPL.md` §5.
+`../../platforms/computers/amiga500/demos/arte/docs/GHIDRA_DECOMP_VS_REIMPL.md` §5.
 
 ## Relación con el resto del toolkit
 
@@ -130,4 +130,4 @@ Su salida coincide con la de Ghidra (misma semántica Q15). Detalle y resultados
 - Rizin/radare2 es la alternativa ligera (disasm + xrefs) pero **sin decompilador** en el build
   base (necesita el plugin `rz-ghidra`). Ver `LECCIONES_APRENDIDAS.md` §7bis.
 
-Ver la evaluación completa (pasos 1–4) en `../../sanity-arte/docs/GHIDRA_AMIGA_EVAL.md`.
+Ver la evaluación completa (pasos 1–4) en `../../platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md`.

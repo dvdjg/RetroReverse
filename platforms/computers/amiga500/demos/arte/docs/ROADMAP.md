@@ -52,7 +52,7 @@ dependencias.
 - **Riesgo**: el stub GDB puede requerir step-over manual de los breakpoints software; si se
   repite el mismo PC, hay que quitar/poner el breakpoint y hacer step.
 - **Estado (hito 1)**: el stub **sí aplica breakpoints** (verificado con
-  `toolkit/node/probe-breakpoints.mjs`: `T05swbreak` en `0xC0255A`). El PC en caliente está en el
+  `tools/node/probe-breakpoints.mjs`: `T05swbreak` en `0xC0255A`). El PC en caliente está en el
   cruncher **`IMP!`** (`0xC02426`), no en el trampoline `CrM!` (`0xC02584`) enganchado primero:
   por eso no disparaba. Hay que enganchar `IMP!`.
 - **Hito 2 (siguiente)**: determinar el layout del bloque `IMP!` (destino/longitud) con un sondeo
@@ -100,16 +100,16 @@ dependencias.
 
 
 ## Mejoras de método (transversales, para otros desensamblados)
-- HECHO: estructura canónica de expediente + plantilla (`Amiga-Reverse/STRUCTURE.md`, `Amiga-Reverse/_template/`).
+- HECHO: estructura canónica de expediente + plantilla (`Amiga-Reverse/STRUCTURE.md`, `Amiga-Reverse/docs/templates/expediente/`).
 - HECHO: lecciones transversales en `Amiga-Reverse/LECCIONES_APRENDIDAS.md`.
 - HECHO: **análisis con Ghidra** (extensión `ghidra-amiga`: loaders Hunk/`.uss`, símbolos NDK,
-  decompilador a C) + pipeline en lote (`toolkit/ghidra/decompile-modules.ps1`) + extracción de
+  decompilador a C) + pipeline en lote (`tools/ghidra/decompile-modules.ps1`) + extracción de
   datos por xref (`XrefsTo.java`) + cross-check con `rz-ghidra` (WSL). Ver
   `docs/GHIDRA_AMIGA_EVAL.md` y `docs/GHIDRA_DECOMP_VS_REIMPL.md`.
 - HECHO: portada la **matriz ortonormal `0x0E1E`** (`motor_3d`) y el **núcleo del zoom**
   (`zoom`, `0x07E42C`) usando el decompilado (tests host OK).
 - EN CURSO: aislar la **rutina de render del túnel**: init localizado (`0xC0424A`, puntero
   `0xC0454E`); el render se alcanza por la **tabla de dispatch** (xref directo no llega).
-- PENDIENTE: generalizar `toolkit/node/hook-trampoline.mjs` con un modo «routine» (destino/longitud desde cabecera) además del modo «trampoline».
+- PENDIENTE: generalizar `tools/node/hook-trampoline.mjs` con un modo «routine» (destino/longitud desde cabecera) además del modo «trampoline».
 - PENDIENTE: script de "hook + volcado" reutilizable (breakpoints configurables + fallback por muestreo).
 - PENDIENTE: decodificador de copperlists y bitplanes reutilizable (módulo propio, no depender de MCP).

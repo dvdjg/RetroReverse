@@ -51,7 +51,7 @@ git clone https://github.com/libretro/libretro-common.git      $BASE/tools/libre
    `save/load_state`, `set_input`, `read_mem`, `read_vram`, `screenshot`.
 
 > En Amiga, el stack maduro es **WinUAE-DBG + GDB + canal lateral**, ya automatizado en
-> `Amiga-Reverse/toolkit/` (ver [`MIGRATION_AMIGA_REVERSE.md`](MIGRATION_AMIGA_REVERSE.md)).
+> `Amiga-Reverse/tools/` (ver [`MIGRATION_AMIGA_REVERSE.md`](MIGRATION_AMIGA_REVERSE.md)).
 
 ## Riesgos
 

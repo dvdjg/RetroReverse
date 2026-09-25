@@ -96,6 +96,6 @@ reimpl/<tecnica>/
 
 - Estructura y reglas: [`STRUCTURE.md`](STRUCTURE.md).
 - Método y trampas: [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md).
-- Técnica a técnica + receta: `sanity-arte/docs/TECNICAS.md`.
-- Estado de efectos: `sanity-arte/docs/ROADMAP.md`.
+- Técnica a técnica + receta: `platforms/computers/amiga500/demos/arte/docs/TECNICAS.md`.
+- Estado de efectos: `platforms/computers/amiga500/demos/arte/docs/ROADMAP.md`.
 - Plantilla de título: [`docs/templates/expediente/reimpl/README.md`](docs/templates/expediente/reimpl/README.md).

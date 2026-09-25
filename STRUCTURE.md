@@ -5,17 +5,24 @@ objetivo final es siempre el mismo: recuperar **técnicas y media** y **reimplem
 en programas nuevos, dejando trazabilidad de dónde salió cada cosa.
 
 ```
-Amiga-Reverse/                      raíz de todos los expedientes
-  README.md                         índice + reglas + convenciones
-  LECCIONES_APRENDIDAS.md           método transversal (sirve para todos los títulos)
-  STRUCTURE.md                      este documento
-  toolkit/                          utilidades reutilizables (documentadas, sin atar a un título)
-    node/  python/                  biblioteca + CLIs
-  _template/                        esqueleto para copiar al abrir un título nuevo
-  <titulo>/                         un expediente por título o pieza
+<repo>/                                  marco RetroReverse + plataformas
+  README.md                              README del marco
+  STRUCTURE.md · LECCIONES_APRENDIDAS.md · PORTING.md · AGENTS.md   metodología
+  docs/                                  documentación del marco (arquitectura, HIGS, adr/, templates/)
+  tools/                                 utilidades reutilizables (antes `toolkit/`)
+    node/  python/  ghidra/              biblioteca + CLIs + pipeline Ghidra
+  scripts/                               validación (HIGS) y utilidades de repo
+  platforms/                             plataformas → placa → [variante] → juego
+    computers/amiga500/
+      hardware_spec/                     custom chips (Agnus/Denise/Paula), 68000
+      tools/                             herramientas específicas de Amiga
+      demos/arte/                        expediente «Arte» (ver anatomía abajo)
+      games/                             juegos Amiga futuros
+    arcade/dedicated/namco_pacman/pacman/  nodo Pac-Man (vertical slice P0)
+  emulators/ · frontend/                 fuentes y forks instrumentados (ver docs/EMULATORS.md)
 ```
 
-## Anatomía de un expediente (`<titulo>/`)
+## Anatomía de un nodo/expediente (`<game_id>/`)
 
 ```
 <titulo>/
@@ -76,16 +83,17 @@ Amiga-Reverse/                      raíz de todos los expedientes
    módulo/rutina (`SINE_soslibrary`, `bootblock`, `cruncher_sos`, …).
 6. **Trazabilidad**: todo artefacto curado indica su origen (`SOURCE` o el `sha1` en
    `modules.json`) y el comando de `tools/` que lo regenera.
-7. **Herramientas en `toolkit/`**: nada de scripts atados a un título. Las utilidades se
-   parametrizan por CLI/spec y se documentan en `toolkit/README.md`; el expediente solo aporta
-   su `specs/*.json` y la lista de comandos en `tools/README.md`.
+7. **Herramientas en `tools/` (marco) y en `platforms/.../tools/` (plataforma)**: nada de scripts
+   atados a un título. Las utilidades se parametrizan por CLI/spec y se documentan en
+   `tools/README.md`; el expediente solo aporta su `specs/*.json` y su lista de comandos en el
+   `tools/README.md` del nodo.
 8. **Ghidra (análisis, no curación)**: Ghidra consume los volcados de `out/` (módulos
    descomprimidos de `out/modules/`, `.uss`/Hunk) y su salida va **siempre a `out/ghidra/`**:
    pseudo‑C, xrefs, volcados auxiliares y el proyecto. **No se cura** su salida (los nombres
    `FUN_xxxx` y la detección de funciones cambian entre versiones de Ghidra). Lo que merezca
    conservarse se resume a mano en `recovered/code/<unidad>/notes.md` y `docs/TECNICAS.md`.
-   Contrato: `out/modules/*.bin` → Ghidra → `reimpl/`. Ver `toolkit/ghidra/README.md` y
-   `sanity-arte/docs/GHIDRA_AMIGA_EVAL.md`.
+   Contrato: `out/modules/*.bin` → Ghidra → `reimpl/`. Ver `tools/ghidra/README.md` y
+   `platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md`.
 
 ## Convenciones de nombres
 
@@ -95,11 +103,11 @@ Amiga-Reverse/                      raíz de todos los expedientes
 - Capturas: `<efecto>-<frame>.png`.
 - Desensamblados: `<unidad>.asm`.
 
-## Abrir un título nuevo
+## Abrir un expediente nuevo
 
-1. Copiar `_template/` a `Amiga-Reverse/<titulo>/`.
+1. Copiar `docs/templates/expediente/` a `platforms/<categoría>/<plataforma>/.../<game_id>/`.
 2. Rellenar `README.md` y `docs/ROADMAP.md` (fase 0 = extraer la imagen).
-3. Añadir la spec en `specs/` y documentar los comandos del toolkit en `tools/README.md`
-   (reutilizar `toolkit/`, no crear scripts nuevos salvo necesidad real).
+3. Añadir la spec en `specs/` y documentar los comandos en el `tools/README.md` del nodo
+   (reutilizar `tools/` del marco, no crear scripts nuevos salvo necesidad real).
 4. Ir volcando: `out/` -> revisar -> promover a `recovered/` -> reimplementar en `reimpl/`.
-5. Añadir a `docs/TECNICAS.md` cada técnica con su receta de port.
+5. Añadir cada técnica a `docs/TECNICAS.md` con su receta de port.
