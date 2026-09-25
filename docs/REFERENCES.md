@@ -83,15 +83,19 @@ Los cores se compilan en `external/` (no versionados): ver
 |---|---|---|---|
 | **Capstone** | 5.0.7 (WSL `pip`) | Desensamblado m6502/m68k (Z80 no en v5) | `tools/python/capstone_disasm.py` |
 | **Ghidra** | 12.0.1 | CFG/xrefs/decompilador (Z80/6502/68k) | `external/ghidra_12.0.1_PUBLIC` |
-| **GhidraNes** | build 12.0.1 | Loader NES (inicializa bloque PRG/CHR) | `Ghidra/Extensions/GhidraNes` |
-| **GhidraRetroReversing** | 11.1.2 | Loaders NES/GB/MD/SMS/GBA… (para Ghidra 11.1.2) | `external/ghidra-extensions/` |
+| **GhidraNes** | build 12.0.1 | Loader NES (probado: SMB) | `ghidra_12.0.1_PUBLIC/Ghidra/Extensions/GhidraNes` |
+| **Ghidra 11.1.2 (paralelo)** | 11.1.2 | Para loaders de consola sin soporte en Ghidra 12 | `external/ghidra_11.1.2_PUBLIC` |
+| **GhidraBoy** | 11.1.2 | Loader Game Boy / SM83 (probado: Tetris) | `ghidra_11.1.2_PUBLIC/…/Extensions/GhidraBoy` |
+| **ghidra_sega_ldr** | 11.1.2 | Loader Mega Drive / Genesis (probado: Golden Axe) | `ghidra_11.1.2_PUBLIC/…/Extensions/ghidra_sega_ldr` |
+| **GhidraRetroReversing** | 11.1.2 | Zips de loaders (NES/GB/MD/SMS/GBA…) para Ghidra 11.1.2 | `external/ghidra-extensions/` |
 | **libRetroReversing** | submodule | Trazas/CDL/export en cores (NES/GB/MD/SNES) | `external/libRetroReversing`, fork `external/libretro-gpgx-reversing` |
 | **Rizin** | 0.9.x | Alternativa ligera (xrefs/CFG); Z80 | `external/rizin-win-installer-clang_cl-64` |
 | **gdb-multiarch** | (pendiente) | Símbolos por arreglo para Ghidra | — |
 
 > Nota: las extensiones precompiladas de GhidraRetroReversing son para **11.1.2** y **no cargan**
-> en Ghidra 12 (cambios de API: `HashUtilities`, `Loader.load(ImporterSettings)`). Para 12 se usa
-> el **build oficial de GhidraNes 12.0.1**; el resto requiere recompilar desde fuente.
+> en Ghidra 12 (cambios de API: `HashUtilities`, `Loader.load(ImporterSettings)`). Solución: **Ghidra
+> 11.1.2 en paralelo** (`external/ghidra_11.1.2_PUBLIC`) para GhidraBoy/Mega Drive, y **Ghidra 12.0.1**
+> para NES con el build oficial de GhidraNes. GhidraBoy oficial solo llega hasta Ghidra 11.4.2.
 
 
 
