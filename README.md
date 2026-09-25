@@ -1,17 +1,9 @@
 # RetroReverse — de juegos clásicos a PC
 
 Marco (proyecto **único**) para **extraer, entender y reimplementar** juegos clásicos — arcade,
-consolas y ordenadores (Amiga 500, NES, …) — de forma **automatizada y asistida por IA**, con el
-objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del original
+consolas (NES, Megadrive…) y ordenadores (Amiga 500) — de forma **automatizada y asistida por IA**,
+con el objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del original
 (*pixel-perfect* y temporizaciones exactas).
-
-> **Un solo repositorio** (decisión [ADR 0004](docs/adr/0004-migracion-amiga-reverse.md)): el
-> **marco** y su **plataforma Amiga** (`platforms/computers/amiga500/demos/arte/`, expediente
-> «Arte») conviven aquí. Repositorio: **`dvdjg/RetroReverse`** (privado).
->
-> **Contenedor**: este repo vive en `…\Amiga\RetroReverse\repo\`; los **programas auxiliares**
-> (Ghidra, Gradle, Rizin, RetroArch y los cores `libretro-*`, etc.) están en
-> `…\Amiga\RetroReverse\external\`. Las rutas de esas herramientas en esta documentación apuntan ahí.
 
 > **Aviso legal**: repositorio **privado** de estudio personal. Se analiza **para aprender** y se
 > documentan **técnicas y algoritmos** (ideas). El contenido **propio** va bajo **MIT**; el material
@@ -19,7 +11,34 @@ objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del or
 > sus autores — solo referencia de estudio. Ver [`docs/LEGAL.md`](docs/LEGAL.md) y
 > [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) §8.
 
+> **Un solo repositorio** (decisión [ADR 0004](docs/adr/0004-migracion-amiga-reverse.md)): el marco y
+> sus plataformas conviven aquí. Repositorio: **`dvdjg/RetroReverse`** (privado).
+
+> **Layout**: los **programas auxiliares** (Ghidra, Gradle, Rizin, RetroArch, cores `libretro-*`…)
+> viven en [`external/`](external/) **dentro del repo** pero **ignorados por git** (no versionados).
+
 ---
+
+## Cómo empezar (hilo nuevo)
+
+1. **Directorio de trabajo**: la **raíz del repo** (esta carpeta). En disco:
+   `C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\repo`.
+2. **Leer en este orden**:
+   1. [`CONTEXT.md`](CONTEXT.md) — traspaso: estado, rutas, entorno y próximos pasos.
+   2. Este README (visión, reglas, índices).
+   3. [`AGENTS.md`](AGENTS.md) — **directrices del agente** (obligatorias).
+   4. [`STRUCTURE.md`](STRUCTURE.md) — estructura canónica de un expediente.
+   5. [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) y [`PORTING.md`](PORTING.md).
+3. **Validar** (los `Makefile` corren con **g++ de WSL**):
+
+```powershell
+wsl -d Ubuntu -- bash -lc "bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/scripts/validate-higs.sh"
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/platforms/computers/amiga500/demos/arte/reimplementation/reference && make test-all"
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/tools/orchestrator && make test"
+```
+
+> ⚠️ El CWD de hilos anteriores apuntaba a `…\Amiga\Amiga-Reverse` (ya no existe). Usa siempre esta
+> carpeta o `workdir`/rutas absolutas.
 
 ## Qué produce (por juego)
 
@@ -33,34 +52,54 @@ objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del or
 
 1. **Documentación primero** — antes de tocar una ROM, búsqueda documental exhaustiva
    ([`docs/RESEARCH_FIRST.md`](docs/RESEARCH_FIRST.md)).
-2. **Determinismo** — savestates en memoria + control de input ([`docs/PIPELINE.md`](docs/PIPELINE.md)).
-3. **Spec agnóstica de hardware** — la reimpl **solo** consume `spec/` (HIGS) ([`docs/HIGS.md`](docs/HIGS.md)).
+2. **Determinismo** — savestates en memoria + input frame-exacto
+   ([`docs/PIPELINE.md`](docs/PIPELINE.md), [`docs/INSTRUMENTATION.md`](docs/INSTRUMENTATION.md)).
+3. **Spec agnóstica de hardware** — la reimpl **solo** consume `spec/` (HIGS), ADR 0003
+   ([`docs/HIGS.md`](docs/HIGS.md)).
 4. **Validación diferencial** — framebuffer y audio frame a frame contra el emulador.
 5. **Legalidad** — solo ROMs propias; no se redistribuyen binarios/assets ([`docs/LEGAL.md`](docs/LEGAL.md)).
 
 ## Arquitectura (5 componentes)
 
 ```
-         ORQUESTADOR (C++23/Python)
+         ORQUESTADOR (tools/orchestrator)
    ┌──────────────┬────────────────────┬───────────────────┐
    ▼              ▼                    ▼                   │
-EMULACIÓN      ANÁLISIS ESTÁTICO      SPEC INTERMEDIA        │
-HEADLESS       (Ghidra/Capstone)      (HIGS JSON/YAML)       │
+EMULACIÓN      ANÁLISIS ESTÁTICO      SPEC INTERMEDIA (HIGS) │
+HEADLESS       (Ghidra/Capstone)      JSON/YAML              │
 (libretro)     CFG · símbolos · I/O   mapas · FSMs · timing  │
    └──────────────┴────────────────────┴───────────────────┘
                           ▼
               VALIDACIÓN DIFERENCIAL (C++23/SDL3)
 ```
 
-Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout destino en
+Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout en
 [`docs/REPO_LAYOUT.md`](docs/REPO_LAYOUT.md); hoja de ruta en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Estado
+## Estado y roadmaps
 
-- **Marco**: diseño documentado (este repo). Pendiente: vertical slice **Pac-Man + MAME** (P0).
-- **Subproyecto Amiga**: `platforms/computers/amiga500/demos/arte/` (expediente «Arte») — pipeline ya probado para A500.
-- **Migración pendiente** del expediente al layout de plataformas:
-  [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md).
+- **Marco**: documentación hecha; **HIGS** (JSON Schema + lint + CI) hecha; **orquestador** con
+  interfaz `EmulatorControl` y **adaptador libretro** validado con core de prueba. Pendiente:
+  compilar **cores reales** y el vertical slice.
+- **Amiga 500**: migrado e integrado; `hardware_spec` y herramientas; demo **«Arte»** con **HIGS** y
+  **esqueleto SDL3** + C/C++ de referencia (tests OK). Pendiente: render y validación diferencial.
+- **Arcade — Pac-Man**: `docs/RESEARCH.md` cerrado (Dossier) + plan de instrumentación + `rom/layout.json`.
+- Roadmaps: [`docs/ROADMAP.md`](docs/ROADMAP.md) ·
+  [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md) ·
+  [`arte/docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md) ·
+  [`arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
+
+## Expedientes (nodos)
+
+| Nodo | Plataforma | Estado | Ruta |
+|---|---|---|---|
+| **Arte** (Sanity) | Amiga 500 (demo) | en curso | [`platforms/computers/amiga500/demos/arte/`](platforms/computers/amiga500/demos/arte/README.md) |
+| **Pac-Man** | Arcade (Namco) | research cerrado | [`platforms/arcade/dedicated/namco_pacman/pacman/`](platforms/arcade/dedicated/namco_pacman/pacman/README.md) |
+| NES | consola | por abrir | `platforms/consoles/nes/` |
+| Megadrive | consola | por abrir | (crear `platforms/consoles/megadrive/`) |
+
+Cada título sigue la **estructura canónica** de [`STRUCTURE.md`](STRUCTURE.md); para uno nuevo se
+copia [`docs/templates/expediente/`](docs/templates/expediente/).
 
 ---
 
@@ -69,21 +108,14 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout destino en
 Expediente de **ingeniería inversa de software Amiga 68k**. Objetivo: **recuperar las técnicas**
 (sobre todo gráficas), **comprender el asm 68k**, **inferir el C++ equivalente** y **reconstruir**
 en un engine propio. Las rutinas optimizadas (p. ej. Q15 con `muls.w`/`swap` del motor 3D) son la
-**referencia canónica** que se porta. Ver [`platforms/computers/amiga500/demos/arte/README.md`](platforms/computers/amiga500/demos/arte/README.md).
-
-## Índice de expedientes
-
-| Título | Año | Plataforma | Estado | Carpeta |
-|---|---|---|---|---|
-| **Arte** (Sanity) | 1993 | A500 OCS/ECS | En curso | [`platforms/computers/amiga500/demos/arte/`](platforms/computers/amiga500/demos/arte/README.md) |
-
-Cada título vive en su propia carpeta y sigue la **estructura canónica** de [`STRUCTURE.md`](STRUCTURE.md).
-Para uno nuevo se copia [`docs/templates/expediente/`](docs/templates/expediente/).
+**referencia canónica** que se porta. Ver
+[`platforms/computers/amiga500/demos/arte/README.md`](platforms/computers/amiga500/demos/arte/README.md).
 
 ## Técnicas recuperadas y portadas
 
-Recreaciones en C++ en [`platforms/computers/amiga500/demos/arte/reimplementation/reference/`](platforms/computers/amiga500/demos/arte/reimplementation/reference/README.md); estado en
-[`ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md):
+Recreaciones en C++ en
+[`reimplementation/reference/`](platforms/computers/amiga500/demos/arte/reimplementation/reference/README.md);
+estado en [`arte/docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md):
 
 | Técnica | Módulo | Reimpl |
 |---|---|---|
@@ -98,23 +130,25 @@ Recreaciones en C++ en [`platforms/computers/amiga500/demos/arte/reimplementatio
 | Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](platforms/computers/amiga500/demos/arte/reimplementation/reference/zoom/README.md) |
 
 Pendientes: el **blit/copper del zoom** y la **rutina de render del túnel** (init localizado, render
-por dispatch indirecto). Inventario completo en [`platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
+por dispatch indirecto). Inventario en
+[`arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
 
 ## Cómo empezar (Amiga)
 
 ```powershell
 # 1) Extraer el disco (verificado por pista)
-python platforms\computers\amiga500\tools\python\dms_unpack.py Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
+python platforms\computers\amiga500\tools\python\dms_unpack.py Sanity-Arte.dms platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --verbose
 
 # 2) Arrancar en WinUAE-DBG y volcar RAM + módulos
-node platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec platforms\computers\amiga500\demos\arte\specs\imp-dump.json --out platforms\computers\amiga500\demos\arte\out --boot 5
+node platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\rom\sanity.uae --adf platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\rom\sanity.uae --adf platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --spec platforms\computers\amiga500\demos\arte\extraction\specs\imp-dump.json --out platforms\computers\amiga500\demos\arte\extraction --boot 5
 
 # 3) Desensamblar / decompilar (objdump/capstone + Ghidra)
-tools\ghidra\decompile-modules.ps1 -ModulesJson platforms\computers\amiga500\demos\arte\out\modules\modules.json -OutDir platforms\computers\amiga500\demos\arte\out\ghidra
+tools\ghidra\decompile-modules.ps1 -ModulesJson platforms\computers\amiga500\demos\arte\extraction\modules\modules.json -OutDir platforms\computers\amiga500\demos\arte\extraction\ghidra
 ```
 
-Comandos completos: [`platforms/computers/amiga500/demos/arte/tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md).
+Comandos completos:
+[`arte/tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md).
 
 ## Metodología (RE Amiga)
 
@@ -130,85 +164,115 @@ el decrunch); y **la demo en marcha no es fiable** para reconstruir un frame (el
 Método completo en [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md); contrato de port en
 [`PORTING.md`](PORTING.md).
 
-## Toolkit reutilizable
-
-Utilidades **parametrizables**, documentadas en [`tools/README.md`](tools/README.md):
-
-| Área | Herramientas |
-|---|---|
-| **DMS / binarios** | `python/dms_unpack.py`, `python/bin_scan.py` |
-| **Emulador (WinUAE-DBG + GDB)** | `node/winuae-session.mjs`, `dump-ram.mjs`, `hook-trampoline.mjs`, `probe-*.mjs`, `launch/side/stop.mjs`, `capture-live.ps1` |
-| **Vídeo / assets** | `node/dump-display.mjs`, `node/decode-bitplanes.mjs`, `python/copper_decode.py`, `python/planar_decode.py`, `python/ollama_vision.py` |
-| **Desensamblado / decompilado** | `ghidra/` (headless + pipeline), ver [`tools/ghidra/README.md`](tools/ghidra/README.md) |
-
-Guía de bitmaps OCS/ECS: [`platforms/computers/amiga500/tools/python/AMIGA_BITMAPS.md`](platforms/computers/amiga500/tools/python/AMIGA_BITMAPS.md).
-
-## Entorno / toolchain
-
-- **WinUAE-DBG x86** (`WinUAE-DBG/bin/winuae-gdb.exe`) + servidor **GDB** (`:2345`) + **canal lateral** (`:2346`).
-- **mcp-winuae-emu** (repo hermano) — `WinUAEConnection`, `GdbProtocol`.
-- **`m68k-amiga-elf-objdump.exe`** (extensión Bartman) — desensamblado canónico.
-- **Ghidra 12.0.1 + [`BartmanAbyss/ghidra-amiga`](https://github.com/BartmanAbyss/ghidra-amiga)** — loaders Hunk/`.uss`/ROM, símbolos NDK 3.9, **decompilador**.
-- **Rizin 0.9.1** — disasm/xrefs (y `rz-ghidra` compilado en WSL como 2º decompilador).
-- **Kickstart 1.3**, **Node.js** ≥ 18, **Python 3**, **JDK 21**.
-
 ---
 
 ## Documentación
 
-### Marco
+### Marco (`docs/`)
 
 | Documento | Contenido |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Componentes, interfaces y flujo de datos |
 | [`docs/PIPELINE.md`](docs/PIPELINE.md) | Flujo iterativo (instrumentar → trazar → inferir → validar) |
-| [`docs/HIGS.md`](docs/HIGS.md) | Spec intermedia agnóstica de hardware (esquema + ejemplos) |
-| [`docs/higs/`](docs/higs/README.md) | **JSON Schema** (`game.schema.json`), ejemplo y **lint** (`higs_lint.py`) |
+| [`docs/HIGS.md`](docs/HIGS.md) | Spec intermedia agnóstica de hardware (concepto) |
+| [`docs/higs/`](docs/higs/README.md) | **JSON Schema**, ejemplo y **lint** (`higs_lint.py`) |
+| [`docs/INSTRUMENTATION.md`](docs/INSTRUMENTATION.md) | Contrato de emulación observable (API, trazas, determinismo) |
+| [`docs/RESEARCH_FIRST.md`](docs/RESEARCH_FIRST.md) | Regla 0: documentación primero |
+| [`docs/EMULATORS.md`](docs/EMULATORS.md) | Cores/emuladores por plataforma e instrumentación |
 | [`docs/REPO_LAYOUT.md`](docs/REPO_LAYOUT.md) | Estructura por plataforma + nodo de juego |
-| [`docs/RESEARCH_FIRST.md`](docs/RESEARCH_FIRST.md) | Regla 0: documentación primero (recursos) |
-| [`docs/EMULATORS.md`](docs/EMULATORS.md) | Cores por plataforma e instrumentación |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Fases, hitos y riesgos del marco |
-| [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md) | Plan para portar «Arte» al layout del marco |
+| [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md) | Migración/integración Amiga (hecha) |
 | [`docs/LEGAL.md`](docs/LEGAL.md) | ROMs propias, no redistribución, licencias |
 | [`docs/adr/`](docs/adr/README.md) | ADRs (monorepo, libretro, HIGS, repo único) |
+| [`docs/templates/expediente/`](docs/templates/expediente/) | Plantilla de expediente |
 
-### Metodología y reglas (transversal)
+### Metodología y reglas
 
 | Documento | Contenido |
 |---|---|
 | [`STRUCTURE.md`](STRUCTURE.md) | Estructura canónica de un expediente, reglas y convenciones |
 | [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md) | Método reutilizable y trampas (§7bis: Ghidra/Rizin) |
 | [`PORTING.md`](PORTING.md) | Del código recuperado al engine: C/C++ ref + ASM canónico + ABI |
-| [`AGENTS.md`](AGENTS.md) | Directrices de trabajo |
+| [`AGENTS.md`](AGENTS.md) | Directrices de trabajo del agente |
 
-### Expediente «Arte» (`platforms/computers/amiga500/demos/arte/`)
+### Herramientas
 
 | Documento | Contenido |
 |---|---|
-| [`platforms/computers/amiga500/demos/arte/README.md`](platforms/computers/amiga500/demos/arte/README.md) | Estado, inventario y cómo reproducir |
-| [`docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md) | Fases, criterios de cierre, estado de efectos |
-| [`docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md) | Inventario vivo de trabajo abierto |
-| [`docs/HALLAZGOS.md`](platforms/computers/amiga500/demos/arte/docs/HALLAZGOS.md) | Datos concretos con evidencia |
-| [`docs/TECNICAS.md`](platforms/computers/amiga500/demos/arte/docs/TECNICAS.md) | Efecto a efecto + receta de reimplementación |
-| [`docs/GHIDRA_AMIGA_EVAL.md`](platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md) | Evaluación de Ghidra + extensión |
-| [`docs/GHIDRA_DECOMP_VS_REIMPL.md`](platforms/computers/amiga500/demos/arte/docs/GHIDRA_DECOMP_VS_REIMPL.md) | Decompilado vs. reimpl y cross-check con rz-ghidra |
-| [`docs/PORT_ENGINE_ZOOM_Y_TUNEL.md`](platforms/computers/amiga500/demos/arte/docs/PORT_ENGINE_ZOOM_Y_TUNEL.md) | Guía de port a un engine A500 50 Hz |
-| [`tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md) | Comandos exactos del expediente |
-| [`extraction/maps/modules.md`](platforms/computers/amiga500/demos/arte/extraction/maps/modules.md) | Módulos, direcciones, tamaños, sha1 |
+| [`tools/README.md`](tools/README.md) | Toolkit genérico (`bin_scan`, `ollama_vision`, `ghidra/`) |
+| [`tools/orchestrator/README.md`](tools/orchestrator/README.md) | Orquestador + **adaptador libretro** (`EmulatorControl`) |
+| [`tools/ghidra/README.md`](tools/ghidra/README.md) | Ghidra + extensión Amiga: instalación, scripts, pipeline, rz-ghidra |
+| [`platforms/computers/amiga500/tools/README.md`](platforms/computers/amiga500/tools/README.md) | Herramientas específicas de Amiga (WinUAE/GDB, DMS, planar/copper) |
+| [`platforms/computers/amiga500/hardware_spec/README.md`](platforms/computers/amiga500/hardware_spec/README.md) | Memoria/custom chips/registros del A500 |
+
+### Expediente «Arte»
+
+| Documento | Contenido |
+|---|---|
+| [`arte/README.md`](platforms/computers/amiga500/demos/arte/README.md) | Estado, inventario y cómo reproducir |
+| [`arte/docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md) | Fases, criterios de cierre, estado de efectos |
+| [`arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md) | Inventario vivo de trabajo abierto |
+| [`arte/docs/HALLAZGOS.md`](platforms/computers/amiga500/demos/arte/docs/HALLAZGOS.md) | Datos concretos con evidencia |
+| [`arte/docs/TECNICAS.md`](platforms/computers/amiga500/demos/arte/docs/TECNICAS.md) | Efecto a efecto + receta de reimplementación |
+| [`arte/spec/game.json`](platforms/computers/amiga500/demos/arte/spec/game.json) | HIGS de «Arte» |
+| [`arte/reimplementation/`](platforms/computers/amiga500/demos/arte/reimplementation/README.md) | Reimpl SDL3 (solo `spec/` + `assets/`) |
+| [`arte/docs/GHIDRA_AMIGA_EVAL.md`](platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md) | Evaluación de Ghidra + extensión |
+| [`arte/extraction/maps/modules.md`](platforms/computers/amiga500/demos/arte/extraction/maps/modules.md) | Módulos, direcciones, tamaños, sha1 |
+
+### Expediente «Pac-Man»
+
+| Documento | Contenido |
+|---|---|
+| [`pacman/README.md`](platforms/arcade/dedicated/namco_pacman/pacman/README.md) | Estado del nodo |
+| [`pacman/docs/RESEARCH.md`](platforms/arcade/dedicated/namco_pacman/pacman/docs/RESEARCH.md) | Ground truth (Dossier) |
+| [`pacman/docs/INSTRUMENTATION.md`](platforms/arcade/dedicated/namco_pacman/pacman/docs/INSTRUMENTATION.md) | Plan de instrumentación MAME |
+| [`pacman/rom/layout.json`](platforms/arcade/dedicated/namco_pacman/pacman/rom/layout.json) | Mapa de memoria/I-O |
+
+## Entorno / toolchain
+
+- **WinUAE-DBG x86** (`WinUAE-DBG/bin/winuae-gdb.exe`) + GDB (`:2345`) + canal lateral (`:2346`)
+  (repo hermano, **no** movido aquí).
+- **`m68k-amiga-elf-objdump.exe`** (extensión Bartman) — desensamblado canónico.
+- **Ghidra 12.0.1 + `BartmanAbyss/ghidra-amiga`** — loaders Hunk/`.uss`/ROM, símbolos NDK, decompilador
+  → [`external/`](external/), ver [`tools/ghidra/README.md`](tools/ghidra/README.md).
+- **Rizin 0.9.1** (y `rz-ghidra` en WSL) → [`external/`](external/).
+- **Kickstart 1.3**, **Node.js** ≥ 18, **Python 3**, **JDK 21**.
+
+## Programas auxiliares (`external/`, ignorado por git)
+
+- **Herramientas**: Ghidra 12.0.1, extensión `ghidra-amiga`, Gradle 9.2.1, Rizin (fuentes y builds),
+  `rz-ghidra`.
+- **Emulación**: RetroArch, libretro-super, libretro-common, libretro-database, libRetroReversing.
+- **Cores**: arcade (`mame`, `mame2003-plus`), NES (`mesen`, `nestopia`, `fceumm`), Megadrive
+  (`genesis-plus-gx`), Amiga (**`libretro-uae`** base WinUAE, `puae`).
+- Detalle: [`tools/orchestrator/README.md`](tools/orchestrator/README.md).
+
+## Cómo reproducir / validar
+
+```powershell
+# HIGS (esquema + lint)
+wsl -d Ubuntu -- bash -lc "bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/scripts/validate-higs.sh"
+# Reimpl «Arte» (tests host)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/platforms/computers/amiga500/demos/arte/reimplementation/reference && make test-all"
+# Adaptador libretro (core de prueba)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/tools/orchestrator && make test"
+```
+
+**CI**: [`.github/workflows/validate.yml`](.github/workflows/validate.yml) valida las HIGS en cada push/PR.
 
 ## Añadir un expediente nuevo
 
-1. Copiar [`docs/templates/expediente/`](docs/templates/expediente/) a `<titulo>/` (o a `platforms/...` cuando se aplique el layout).
+1. Copiar [`docs/templates/expediente/`](docs/templates/expediente/) a `platforms/.../<game_id>/`.
 2. Rellenar `README.md` y `docs/ROADMAP.md` (fase 0 = extraer la imagen).
-3. Añadir la spec en `specs/` y documentar los comandos del toolkit en `tools/README.md`.
-4. Ir volcando: `out/` → revisar → promover a `recovered/` → reimplementar en `reimpl/`.
-5. Añadir cada técnica a `docs/TECNICAS.md` con su receta de port. Reglas en [`STRUCTURE.md`](STRUCTURE.md).
+3. Añadir la spec en `extraction/specs/` y documentar los comandos en su `tools/README.md`.
+4. Ir volcando: `extraction/` → revisar → promover a `assets/`/`docs/` → reimplementar en
+   `reimplementation/`. Reglas en [`STRUCTURE.md`](STRUCTURE.md).
 
 ## Licencia
 
 - **Contenido propio** (marco, análisis, documentación, reimplementaciones y toolkit): **MIT** —
   ver [`LICENSE`](LICENSE).
-- **Material de terceros** (binarios/assets originales en `platforms/computers/amiga500/demos/arte/recovered/`): **no** cubierto
-  por la MIT; © de sus autores. Referencia de estudio. Ver [`docs/LEGAL.md`](docs/LEGAL.md).
+- **Material de terceros** (binarios/assets originales en el repo): **no** cubierto por la MIT; © de
+  sus autores. Referencia de estudio. Ver [`docs/LEGAL.md`](docs/LEGAL.md).
 
 Repositorio **privado** de uso personal.

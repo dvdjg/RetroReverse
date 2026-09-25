@@ -56,3 +56,7 @@ tools/orchestrator/host_test
 tools/orchestrator/test_core.so
 tools/orchestrator/test_core.dll
 tools/orchestrator/*.ppm
+
+# --- Auxiliares y traspaso (locales, NO versionar) ---
+external/
+CONTEXT.md

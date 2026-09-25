@@ -143,7 +143,7 @@ expediente (que sigue siendo ligero y reproducible). Confianza **alta**.
 ## Reproducir
 
 ```powershell
-$g  = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\external\ghidra_12.0.1_PUBLIC"
+$g  = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\repo\external\ghidra_12.0.1_PUBLIC"
 $sd = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\repo\tools\ghidra"
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 $out = "platforms\computers\amiga500\demos\arte\out\ghidra"

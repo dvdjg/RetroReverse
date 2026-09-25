@@ -17,7 +17,7 @@
 param(
 	[Parameter(Mandatory = $true)][string]$ModulesJson,
 	[Parameter(Mandatory = $true)][string]$OutDir,
-	[string]$GhidraDir = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\external\ghidra_12.0.1_PUBLIC",
+	[string]$GhidraDir = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\repo\external\ghidra_12.0.1_PUBLIC",
 	[string]$ScriptPath = $PSScriptRoot,
 	[string]$ProjectDir,
 	[string]$Processor = "68000:BE:32:default",
