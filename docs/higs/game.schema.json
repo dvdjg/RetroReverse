@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://retroreverse.local/schemas/higs/game.schema.json",
+  "title": "HIGS — Hardware-Independent Game Spec",
+  "description": "Especificación de un juego agnóstica del hardware original. Única entrada de la reimplementación (ver docs/HIGS.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "game_id", "tick_hz", "resolution"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "game_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "title": { "type": "string" },
+    "platform_origin": {
+      "type": "string",
+      "description": "Metadato informativo (p. ej. 'arcade/namco_pacman', 'amiga500'). La reimplementación NO debe usarlo."
+    },
+    "fps": { "type": "number", "exclusiveMinimum": 0 },
+    "tick_hz": { "type": "integer", "minimum": 1, "description": "Unidad lógica de la spec (normalmente 50 o 60)." },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "mechanics": { "$ref": "#/$defs/mechanics" },
+    "maps": { "type": "array", "items": { "$ref": "#/$defs/map" } },
+    "entities": { "type": "array", "items": { "$ref": "#/$defs/entity" } },
+    "hitboxes": { "type": "array", "items": { "$ref": "#/$defs/hitbox" } },
+    "timing_sequences": { "type": "array", "items": { "$ref": "#/$defs/sequence" } },
+    "scoring": { "$ref": "#/$defs/scoring" },
+    "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+  },
+  "$defs": {
+    "confidence": { "type": "string", "enum": ["alta", "media", "baja"] },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["savestate", "input", "frame", "trace", "doc"] },
+        "path": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "refs"],
+      "properties": {
+        "id": { "type": "string" },
+        "refs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidenceRef" } },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "mechanics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string" },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "description"],
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "confidence": { "$ref": "#/$defs/confidence" },
+              "evidence": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "controls": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": { "type": "string" },
+              "note": { "type": "string" }
+            }
+          },
+          "description": "Mapa de acción lógica (up/down/left/right/fire/...) — NO teclas ni hardware."
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tile_size", "grid", "legend"],
+      "properties": {
+        "id": { "type": "string" },
+        "tileset": { "type": "string", "description": "Ruta dentro de assets/ (PNG)." },
+        "tile_size": {
+          "type": "array", "prefixItems": [ { "type": "integer" }, { "type": "integer" } ],
+          "minItems": 2, "maxItems": 2
+        },
+        "grid": { "type": "array", "items": { "type": "string" } },
+        "legend": { "type": "object", "additionalProperties": { "type": "string" } },
+        "spawns": { "type": "object", "additionalProperties": {} },
+        "portals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tile": { "type": "array", "items": { "type": "integer" } },
+              "to": { "type": "array", "items": { "type": "integer" } }
+            }
+          }
+        }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "states"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string", "enum": ["player", "npc", "projectile", "item", "other"] },
+        "sprite": { "type": "string" },
+        "initial_state": { "type": "string" },
+        "states": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/state" } },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string" },
+        "on_enter": { "type": "array", "items": { "type": "string" } },
+        "on_exit": { "type": "array", "items": { "type": "string" } },
+        "transitions": { "type": "array", "items": { "$ref": "#/$defs/transition" } },
+        "motion": { "$ref": "#/$defs/motion" }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["to"],
+      "properties": {
+        "when": { "type": "string", "description": "Condición lógica (p. ej. 'timer>=scatter_ticks', 'collision(pacman)')." },
+        "after_ticks": { "type": "integer", "minimum": 0 },
+        "to": { "type": "string" }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string", "description": "p. ej. 'chase_target', 'fixed_corner', 'random', 'follow_path'." },
+        "speed_tiles_per_tick": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "params": { "type": "object" }
+      }
+    },
+    "hitbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity"],
+      "properties": {
+        "entity": { "type": "string" },
+        "state": { "type": "string" },
+        "box": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "integer" }, "y": { "type": "integer" },
+            "w": { "type": "integer" }, "h": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "events"],
+      "properties": {
+        "id": { "type": "string" },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at_tick", "action"],
+            "properties": {
+              "at_tick": { "type": "integer", "minimum": 0 },
+              "action": { "type": "string" },
+              "params": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "events": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "lives": { "type": "integer" },
+        "level_progression": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "kind"],
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" },
+        "kind": { "type": "string", "enum": ["sprite", "tileset", "tilemap", "palette", "wave", "music", "font", "other"] },
+        "meta": { "type": "object" }
+      }
+    }
+  }
+}

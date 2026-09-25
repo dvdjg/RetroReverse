@@ -1,0 +1,153 @@
+{
+  "schema_version": "0.1",
+  "game_id": "pacman",
+  "title": "Pac-Man",
+  "platform_origin": "arcade/namco_pacman",
+  "fps": 60,
+  "tick_hz": 60,
+  "resolution": { "width": 224, "height": 288 },
+
+  "mechanics": {
+    "summary": "Laberinto de puntos; Pac-Man come dots y power pellets; 4 fantasmas alternan Scatter/Chase/Frightened.",
+    "controls": {
+      "up":    { "action": "move_up" },
+      "down":  { "action": "move_down" },
+      "left":  { "action": "move_left" },
+      "right": { "action": "move_right" }
+    },
+    "rules": [
+      { "id": "dot_score", "description": "Cada dot suma 10; cada power pellet 50.", "confidence": "alta" },
+      { "id": "frightened", "description": "Power pellet asusta a los fantasmas durante N ticks (según nivel).", "confidence": "alta" },
+      { "id": "tunnel_slow", "description": "Los fantasmas se ralentizan en el túnel lateral.", "confidence": "alta" },
+      { "id": "split_screen_256", "description": "El nivel 256 provoca el famoso fallo de mitad de pantalla.", "confidence": "alta" }
+    ]
+  },
+
+  "maps": [
+    {
+      "id": "maze_1",
+      "tileset": "assets/graphics/tiles_maze.png",
+      "tile_size": [8, 8],
+      "grid": [
+        "############################",
+        "#............##............#",
+        "#.####.#####.##.#####.####.#",
+        "#o####.#####.##.#####.####o#",
+        "#.####.#####.##.#####.####.#",
+        "#..........................#",
+        "#.####.##.########.##.####.#",
+        "#.####.##.########.##.####.#",
+        "#......##....##....##......#",
+        "######.#####.##.#####.######"
+      ],
+      "legend": {
+        "#": "wall",
+        ".": "dot",
+        "o": "power_pellet",
+        " ": "empty",
+        "-": "ghost_door"
+      },
+      "spawns": {
+        "pacman": [13.5, 26.0],
+        "ghosts": { "blinky": [13.5, 11.0], "pinky": [13.5, 14.0], "inky": [11.5, 14.0], "clyde": [15.5, 14.0] }
+      },
+      "portals": [
+        { "tile": [0, 17], "to": [27, 17] },
+        { "tile": [27, 17], "to": [0, 17] }
+      ]
+    }
+  ],
+
+  "entities": [
+    {
+      "id": "pacman",
+      "kind": "player",
+      "sprite": "assets/graphics/pacman.png",
+      "initial_state": "alive",
+      "states": [
+        {
+          "id": "alive",
+          "motion": { "rule": "player_input", "speed_tiles_per_tick": { "plus_dots": 0.80, "minus_dots": 0.90 } },
+          "transitions": [ { "when": "collision(ghost.hostile)", "to": "dying" } ]
+        },
+        { "id": "dying", "transitions": [ { "after_ticks": 120, "to": "respawn" } ] },
+        { "id": "respawn", "transitions": [ { "when": "spawn_ready", "to": "alive" } ] }
+      ],
+      "confidence": "alta"
+    },
+    {
+      "id": "ghost.blinky",
+      "kind": "npc",
+      "sprite": "assets/graphics/ghosts.png",
+      "initial_state": "scatter",
+      "states": [
+        {
+          "id": "scatter",
+          "motion": { "rule": "fixed_corner", "params": { "corner": [25, 0] }, "speed_tiles_per_tick": { "level_1": 0.75 } },
+          "transitions": [ { "when": "timer>=scatter_ticks", "to": "chase" } ]
+        },
+        {
+          "id": "chase",
+          "motion": { "rule": "chase_target", "params": { "target": "pacman_tile" }, "speed_tiles_per_tick": { "level_1": 0.75 } },
+          "transitions": [
+            { "when": "timer>=chase_ticks", "to": "scatter" },
+            { "when": "frightened", "to": "frightened" }
+          ]
+        },
+        {
+          "id": "frightened",
+          "motion": { "rule": "flee", "speed_tiles_per_tick": { "level_1": 0.50 } },
+          "transitions": [ { "when": "timer>=fright_ticks", "to": "chase" } ]
+        }
+      ],
+      "confidence": "alta",
+      "evidence": ["ghost_scatter", "scenario_left"]
+    }
+  ],
+
+  "hitboxes": [
+    { "entity": "pacman", "state": "alive", "box": { "x": 0, "y": 0, "w": 8, "h": 8 } }
+  ],
+
+  "timing_sequences": [
+    {
+      "id": "level_intro",
+      "events": [
+        { "at_tick": 0,   "action": "show_text", "params": { "text": "READY!" } },
+        { "at_tick": 120, "action": "spawn_entities" },
+        { "at_tick": 180, "action": "enable_input" }
+      ]
+    }
+  ],
+
+  "scoring": {
+    "events": { "dot": 10, "power_pellet": 50, "ghost": 200, "fruit": 100 },
+    "lives": 3
+  },
+
+  "assets": [
+    { "id": "tiles_maze", "path": "assets/graphics/tiles_maze.png", "kind": "tileset" },
+    { "id": "pacman",     "path": "assets/graphics/pacman.png",     "kind": "sprite" },
+    { "id": "ghosts",     "path": "assets/graphics/ghosts.png",     "kind": "sprite" },
+    { "id": "palette",    "path": "assets/palettes/pacman.json",    "kind": "palette" },
+    { "id": "siren",      "path": "assets/audio/siren.wav",         "kind": "wave" }
+  ],
+
+  "evidence": [
+    {
+      "id": "ghost_scatter",
+      "refs": [ { "kind": "savestate", "path": "extraction/savestates/ghost_scatter_00.state" }, { "kind": "input", "path": "extraction/traces/scenario_move_left.bin" } ],
+      "confidence": "alta"
+    },
+    {
+      "id": "scenario_left",
+      "refs": [ { "kind": "input", "path": "extraction/traces/scenario_move_left.bin" }, { "kind": "frame", "path": "extraction/screenshots/left_0001.png" } ],
+      "confidence": "alta"
+    },
+    {
+      "id": "dossier",
+      "refs": [ { "kind": "doc", "path": "docs/RESEARCH.md#pac-man-dossier" } ],
+      "confidence": "alta"
+    }
+  ]
+}

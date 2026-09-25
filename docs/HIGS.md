@@ -95,7 +95,10 @@ notes: "Original: Z80 @ 3.072 MHz, VBlank 60.6 Hz (ver evidence/)."
 
 ## Validación del esquema
 
-- `spec/` debe validar contra un **JSON Schema** (`spec/game.schema.json`) en CI.
-- Un `HIGS lint` comprueba: referencias a assets existentes, evidencia presente, unidades declaradas.
+- `spec/` debe validar contra el **JSON Schema** [`higs/game.schema.json`](higs/game.schema.json)
+  en CI (draft 2020-12). Ejemplo válido: [`higs/examples/pacman.game.json`](higs/examples/pacman.game.json).
+- **`HIGS lint`** ([`higs/higs_lint.py`](higs/higs_lint.py)) comprueba coherencia más allá de la
+  forma: sin términos de hardware (R1), evidencia resoluble (R3), unidades/tick_hz (R4), mapas
+  (R7), etc. Detalle en [`higs/README.md`](higs/README.md).
 - La **validación diferencial** (ver [`PIPELINE.md`](PIPELINE.md) fase 7) es la prueba final de que
   la HIGS es **suficiente** para reimplementar el juego.

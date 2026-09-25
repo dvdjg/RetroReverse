@@ -159,6 +159,7 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](toolkit/python/AMI
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Componentes, interfaces y flujo de datos |
 | [`docs/PIPELINE.md`](docs/PIPELINE.md) | Flujo iterativo (instrumentar → trazar → inferir → validar) |
 | [`docs/HIGS.md`](docs/HIGS.md) | Spec intermedia agnóstica de hardware (esquema + ejemplos) |
+| [`docs/higs/`](docs/higs/README.md) | **JSON Schema** (`game.schema.json`), ejemplo y **lint** (`higs_lint.py`) |
 | [`docs/REPO_LAYOUT.md`](docs/REPO_LAYOUT.md) | Estructura por plataforma + nodo de juego |
 | [`docs/RESEARCH_FIRST.md`](docs/RESEARCH_FIRST.md) | Regla 0: documentación primero (recursos) |
 | [`docs/EMULATORS.md`](docs/EMULATORS.md) | Cores por plataforma e instrumentación |

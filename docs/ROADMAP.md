@@ -23,7 +23,7 @@ HIGS **reproduce** lo que el Dossier describe.
 ## P1 — Generalización del pipeline
 
 - P1.1 Orquestador C++23/Python (carga ROM → instrumenta → traza → Ghidra → HIGS → valida).
-- P1.2 Esquema HIGS + JSON Schema + `HIGS lint`.
+- P1.2 Esquema HIGS + JSON Schema + `HIGS lint` — **HECHO** (`docs/higs/`); pendiente integrarlo en CI.
 - P1.3 Extractores de assets por plataforma (tiles/sprites/paletas/audio).
 - P1.4 Validación diferencial reusable (framebuffer + audio + estado).
 - P1.5 Segundo juego (preferible no arcade: NES o Amiga) para probar la generalidad.
