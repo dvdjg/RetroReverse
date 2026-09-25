@@ -38,6 +38,26 @@ int main() {
 	if (ppu.fb[100] != 0x30u) { std::printf("  fb[100]=%02X (esperado 30)\n", ppu.fb[100]); ++fail; }
 	if (ppu.fb[255] != 0x30u) { std::printf("  fb[255]=%02X (esperado 30)\n", ppu.fb[255]); ++fail; }
 
+	// --- Scroll mid-frame (por línea) --------------------------------------
+	// Tile 2: plano 0 = 0, plano 1 = 0xFF -> color 2 (paleta 2 = 0x27).
+	g_chr[32] = 0x00u;
+	g_chr[40] = 0xFFu;
+	ppu.vram[1] = 0x02u;      // celda (1,0) = tile 2
+	ppu.palette[2] = 0x27u;
+	ppu.line_scroll = false;
+	ppu.render_background();
+	if (ppu.fb[0] != 0x30u) {
+		std::printf("  bg sin scroll (fb=%02X)\n", ppu.fb[0]);
+		++fail;
+	}
+	ppu.set_line_scroll(0, 8u, 0u);  // la línea 0 arranca 8 px a la derecha
+	ppu.render_background();
+	if (ppu.fb[0] != 0x27u) {
+		std::printf("  scroll mid-frame no aplicado (fb=%02X, esperado 27)\n", ppu.fb[0]);
+		++fail;
+	}
+	ppu.line_scroll = false;
+
 	// --- Sprites -----------------------------------------------------------
 	// Tile 1 (pattern base 0): fila 0 con color 1 en todos los píxeles.
 	g_chr[16] = 0xFFu;

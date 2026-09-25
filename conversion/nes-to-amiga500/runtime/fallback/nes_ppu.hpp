@@ -38,9 +38,25 @@ struct Ppu {
 
 	// --- Dirección/scroll ---
 	eng::u16 v = 0;          ///< Dirección de VRAM ($2006) o dirección temporal.
-	eng::u8 scroll_x = 0;    ///< Scroll fino/grueso horizontal acumulado.
-	eng::u8 scroll_y = 0;    ///< Scroll fino/grueso vertical acumulado.
+	eng::u8 scroll_x = 0;    ///< Scroll grueso/fino horizontal global.
+	eng::u8 scroll_y = 0;    ///< Scroll grueso/fino vertical global.
 	bool write_toggle = false; ///< Latch de dos escrituras ($2005/$2006).
+
+	/// Scroll por línea (para splits mid-frame): si `line_scroll` está activo, la
+	/// línea `y` usa `line_sx[y]`/`line_sy[y]` en lugar del scroll global.
+	eng::u8 line_sx[kPpuHeight] {};
+	eng::u8 line_sy[kPpuHeight] {};
+	bool line_scroll = false;
+
+	/// Fija el scroll de la línea `y` (splits mid-frame). \param y Línea; \param sx
+	/// scroll X; \param sy scroll Y.
+	void set_line_scroll(int y, eng::u8 sx, eng::u8 sy) {
+		if (y >= 0 && y < kPpuHeight) {
+			line_sx[y] = sx;
+			line_sy[y] = sy;
+			line_scroll = true;
+		}
+	}
 
 	// --- Tiempo ---
 	eng::u16 scanline = 0;   ///< Línea actual (0..261 en NTSC).
@@ -145,11 +161,13 @@ struct Ppu {
 		const eng::u8 universal = static_cast<eng::u8>(palette[0] & 0x3Fu);
 
 		for (int py = 0; py < kPpuHeight; ++py) {
-			const int sy = (py + scroll_y) & 0xFF;
+			const int ly = line_scroll ? line_sy[py] : scroll_y;
+			const int lx = line_scroll ? line_sx[py] : scroll_x;
+			const int sy = (py + ly) & 0xFF;
 			const int ty = sy >> 3;
 			const int fine_y = sy & 7;
 			for (int px = 0; px < kPpuWidth; ++px) {
-				const int sx = (px + scroll_x) & 0xFF;
+				const int sx = (px + lx) & 0xFF;
 				const int tx = sx >> 3;
 				const int fine_x = sx & 7;
 

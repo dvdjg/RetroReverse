@@ -219,6 +219,10 @@ constexpr eng::u8 kMiscProg[] = {
 	0x55u, 0x85u, 0x40u, 0x00u,
 };
 
+// VSA: LDA #$2A ; STA $10 ; LDA $10 ; BRK. El codegen infiere que `$10` vale
+// $2A y emite `N2A_ASSUME` sin necesidad de un fichero de hechos.
+constexpr eng::u8 kAssumeProg[] = {0xA9u, 0x2Au, 0x85u, 0x10u, 0xA5u, 0x10u, 0x00u};
+
 /// Imprime la ayuda de línea de comandos.
 /// \param argv0 Nombre del programa (no se usa; se mantiene por uniformidad).
 void print_usage(const char* argv0) {
@@ -228,6 +232,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-mini-rom   <salida.nes>");
 	n2a::out_line("     --emit-branch-rom <salida.nes>");
 	n2a::out_line("     --emit-misc-rom   <salida.nes>");
+	n2a::out_line("     --emit-vsa-rom    <salida.nes>");
 }
 
 } // namespace
@@ -255,9 +260,13 @@ int main(int argc, char** argv) {
 			print_usage(argv[0]);
 			return 0;
 		}
-		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom") &&
+		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom" ||
+		     arg == "--emit-vsa-rom") &&
 		    i + 1 < argc) {
-			emit = (arg == "--emit-mini-rom") ? 1 : (arg == "--emit-branch-rom") ? 2 : 3;
+			emit = (arg == "--emit-mini-rom")     ? 1
+			       : (arg == "--emit-branch-rom") ? 2
+			       : (arg == "--emit-misc-rom")   ? 3
+							      : 4;
 			input = eng::util::StringView(argv[++i]);
 			continue;
 		}
@@ -275,7 +284,8 @@ int main(int argc, char** argv) {
 	if (emit != 0) {
 		const bool ok = (emit == 1)   ? write_ines_rom(input.data(), kMiniProg, sizeof(kMiniProg))
 				: (emit == 2) ? write_ines_rom(input.data(), kBranchProg, sizeof(kBranchProg))
-					      : write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg));
+				: (emit == 3) ? write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg))
+					      : write_ines_rom(input.data(), kAssumeProg, sizeof(kAssumeProg));
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");
 			return 1;

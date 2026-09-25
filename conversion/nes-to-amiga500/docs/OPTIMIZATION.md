@@ -215,6 +215,8 @@ visibles** del original se reproducen, no se "arreglan".
 - **Telemetría**: [`../runtime/tools/facts_from_run.cpp`](../runtime/tools/facts_from_run.cpp)
   ejecuta la ROM con el intérprete y escribe un fichero de hechos (`set`/`range`) consumible por
   `--facts`.
+- **VSA estática (intra-bloque)**: el codegen propaga `LDA #c; STA a` y emite `N2A_ASSUME` al leer
+  `a` **sin** fichero de hechos (caso `--emit-vsa-rom`).
 - **Pendiente**: interpretación abstracta de valores sobre el IR, clonado con guarda (fast path +
   genérico), PGO cruzado y extracción dirigida por trazas de qué direcciones se leen.
 

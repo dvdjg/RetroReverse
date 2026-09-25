@@ -80,3 +80,11 @@ void NESMemory::write(uint16_t addr, uint8_t value) {
 
 Se instrumenta el ratio de escrituras resueltas por HLE frente al total por frame; el hito M8 exige
 ≥80 % en el vertical slice. Cada handler documenta su coste (ciclos) frente al fallback.
+
+## Estado
+
+Implementado en [`../runtime/include/nes_hle.hpp`](../runtime/include/nes_hle.hpp): clasifica las
+escrituras de PPU (scroll `$2005`, dirección/datos `$2006/$2007`, OAM DMA `$4014`) como HLE y mide el
+**ratio** (≈97 % en `runtime/test/system_test.cpp`). En host los handlers actualizan la PPU; en el
+Amiga pasarán a Copper/Blitter. Pendiente: reconocimiento estático/dinámico de patrones y sincronía
+HLE↔fallback.

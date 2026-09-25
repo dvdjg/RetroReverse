@@ -99,6 +99,14 @@ El desensamblado recursivo se hace **por banco** (los puntos de entrada de un ba
 válidos en otro). Para NROM/UxROM/CNROM se puede hacer casi todo estático; MMC1/MMC3 requieren
 análisis dinámico (trazas en host) para descubrir qué bancos se ejecutan.
 
+## Estado
+
+Implementado en [`../runtime/include/nes_mapper.hpp`](../runtime/include/nes_mapper.hpp): cartucho
+con bancos PRG/CHR para **NROM (0), UxROM (2), CNROM (3)** y **MMC1 (1)** parcial, más el parseo de
+iNES/**NES 2.0** en [`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp). El
+transpilador sigue siendo **NROM-only**; el *banking* con **tablas de despacho por banco** es lo
+pendiente.
+
 ## Cierre (F9)
 
 - 2 juegos por mapper NROM/UxROM/CNROM y 1 por MMC1/MMC3 arrancan y son jugables.

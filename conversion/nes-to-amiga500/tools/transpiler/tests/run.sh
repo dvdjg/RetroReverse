@@ -16,7 +16,7 @@ BIN="$ROOT/build/nes_transpiler"
 GEN="$ROOT/generated"
 TMP="$ROOT/build/tests"
 
-compile_generated() {  # $1 = nombre del caso (mini/branch/misc)
+compile_generated() {  # $1 = nombre del caso; $2 = cuerpo del main de comprobación
 	local name="$1"
 	"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$GEN/$name.cpp" -o "$TMP/${name}_standalone"
 	"$TMP/${name}_standalone"
@@ -40,10 +40,10 @@ if [ ! -f "$RUNTIME_INC/nes_runtime.hpp" ]; then
 	exit 1
 fi
 
-echo "[1/4] compilando el transpilador"
+echo "[1/5] compilando el transpilador"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/src" "$ROOT/src/main.cpp" -o "$BIN"
 
-echo "[2/4] caso mini (LDA/STA/INX/BRK)"
+echo "[2/5] caso mini (LDA/STA/INX/BRK)"
 "$BIN" --emit-mini-rom "$GEN/mini.nes"
 "$BIN" "$GEN/mini.nes" -o "$GEN/mini.cpp"
 compile_generated mini 'int main() {
@@ -51,7 +51,7 @@ compile_generated mini 'int main() {
 	return (g_state.cpu.X == 1u && g_state.cpu.A == 0x23u && g_state.mem.ram[0] == 0x23u) ? 0 : 1;
 }'
 
-echo "[3/4] caso branch/jsr (bucle 5 con ADC/BNE/JSR/RTS)"
+echo "[3/5] caso branch/jsr (bucle 5 con ADC/BNE/JSR/RTS)"
 "$BIN" --emit-branch-rom "$GEN/branch.nes"
 "$BIN" "$GEN/branch.nes" -o "$GEN/branch.cpp"
 compile_generated branch 'int main() {
@@ -61,7 +61,7 @@ compile_generated branch 'int main() {
 	return ok ? 0 : 1;
 }'
 
-echo "[4/4] caso misc (PHA/PLA, shifts, INC/DEC memoria, JMP indirecto)"
+echo "[4/5] caso misc (PHA/PLA, shifts, INC/DEC memoria, JMP indirecto, --facts)"
 "$BIN" --emit-misc-rom "$GEN/misc.nes"
 "$BIN" "$GEN/misc.nes" --facts "$ROOT/tests/facts/misc.txt" -o "$GEN/misc.cpp"
 if ! grep -q "N2A_ASSUME" "$GEN/misc.cpp"; then
@@ -74,6 +74,18 @@ compile_generated misc 'int main() {
 			(g_state.mem.ram[0x10] == 0x40u) && (g_state.mem.ram[0x20] == 0x06u) &&
 			(g_state.mem.ram[0x40] == 0x55u);
 	return ok ? 0 : 1;
+}'
+
+echo "[5/5] caso VSA (N2A_ASSUME inferido sin --facts)"
+"$BIN" --emit-vsa-rom "$GEN/vsa.nes"
+"$BIN" "$GEN/vsa.nes" -o "$GEN/vsa.cpp"
+if ! grep -q "N2A_ASSUME" "$GEN/vsa.cpp"; then
+	echo "ERROR: el VSA no emitió N2A_ASSUME" >&2
+	exit 1
+fi
+compile_generated vsa 'int main() {
+	game_main();
+	return (g_state.cpu.A == 0x2Au) ? 0 : 1;
 }'
 
 echo "TEST OK"

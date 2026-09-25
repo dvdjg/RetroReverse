@@ -68,6 +68,14 @@ struct NESMemory {
 	/// Tamaño de la PRG-ROM en bytes: 16 KB se espeja, 32 KB no.
 	eng::u32 prg_size = 0;
 
+	// --- Hooks opcionales del sistema (PPU/APU/mapper/input) ---
+	/// Cookie que se pasa a los hooks de E/S.
+	void* io_user = nullptr;
+	/// Si no es `nullptr`, atiende las lecturas de `$2000-$FFFF` (sistema real).
+	eng::u8 (*io_read)(void*, eng::u16) = nullptr;
+	/// Si no es `nullptr`, atiende las escrituras de `$2000-$FFFF`.
+	void (*io_write)(void*, eng::u16, eng::u8) = nullptr;
+
 	/// Lee el byte de la dirección `addr` del espacio de 64 KB, imitando el bus de
 	/// la NES:
 	/// - `$0000-$1FFF`: RAM interna (espejo de 2 KB);
@@ -82,6 +90,9 @@ struct NESMemory {
 	[[nodiscard]] eng::u8 read(eng::u16 addr) const {
 		if (addr < 0x2000u) {
 			return ram[addr & 0x7FFu];
+		}
+		if (io_read != nullptr) {
+			return io_read(io_user, addr);
 		}
 		if (addr < 0x4000u) {
 			return ppu_regs[addr & 0x07u];
@@ -114,6 +125,10 @@ struct NESMemory {
 	void write(eng::u16 addr, eng::u8 value) {
 		if (addr < 0x2000u) {
 			ram[addr & 0x7FFu] = value;
+			return;
+		}
+		if (io_write != nullptr) {
+			io_write(io_user, addr, value);
 			return;
 		}
 		if (addr < 0x4000u) {

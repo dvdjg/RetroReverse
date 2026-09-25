@@ -101,8 +101,11 @@ Es el "cero" del HLE: todo lo que no se acelere caerá aquí.
 **Estado: EN CURSO.** [`../runtime/fallback/nes_ppu.hpp`](../runtime/fallback/nes_ppu.hpp) implementa
 registros, VRAM, OAM, paleta, scroll, VBlank/NMI, el **render del fondo** y los **sprites**
 (8×8/8×16, flips, 4 paletas, prioridad tras el fondo, límite de 8 por línea y **sprite-0 hit**) a un
-framebuffer de índices NES (`runtime/fallback/test/ppu_test.cpp`). Pendiente: scroll por línea
-(mid-frame) y **validación diferencial contra `mesen`**.
+framebuffer de índices NES (`runtime/fallback/test/ppu_test.cpp`), con **scroll por línea**
+(mid-frame). **Validación diferencial** con `mesen` (vía el orquestador) en
+[`../runtime/test/diff_mesen.sh`](../runtime/test/diff_mesen.sh): ~12 % de píxeles distintos en
+Donkey Kong y ~24 % en Balloon Fight (la diferencia es en gran parte **paleta y timing**, no
+estructura). Pendiente: afinar timing/paleta para reducir la divergencia.
 
 - PPU software: render 256×240 (tiles, attributes, sprites, scroll, sprite-0 hit), VBlank/NMI,
   `$2000-$2007`, OAM, DMA `$4014`.
@@ -185,6 +188,11 @@ reconocible frente a `mesen` (comparación subjetiva + RMS/FFT básica).
 **Objetivo**: acelerar el código sustituyendo patrones por rutinas nativas. Detalle en
 [`HLE.md`](HLE.md) y [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
+**Estado: EN CURSO.** [`../runtime/include/nes_hle.hpp`](../runtime/include/nes_hle.hpp) clasifica
+las escrituras de PPU (scroll/dirección/datos/OAM DMA) como HLE y mide el **ratio HLE**
+(~97 % en el test del sistema, `runtime/test/system_test.cpp`). Pendiente: handlers reales de
+Copper/Blitter en el destino y el reconocimiento estático/dinámico de patrones.
+
 - Interceptación de `$2000`, `$2005`, `$2006`, `$2007`, `$4014` y registros de mapper.
 - *Handlers*: scroll, escritura de VRAM/nametable (dirty tiles), OAM DMA, bankswitch, sprite-0
   hit/splits.
@@ -199,6 +207,12 @@ reconocible frente a `mesen` (comparación subjetiva + RMS/FFT básica).
 ## F9 — Mappers y bankswitching
 
 **Objetivo**: soportar juegos comerciales. Detalle en [`MAPPERS.md`](MAPPERS.md).
+
+**Estado: EN CURSO.** [`../runtime/include/nes_mapper.hpp`](../runtime/include/nes_mapper.hpp)
+implementa el cartucho (bancos PRG/CHR) para **NROM (0), UxROM (2), CNROM (3)** y **MMC1 (1)**
+parcial, y el runner [`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp) parsea
+iNES/**NES 2.0**. El transpilador sigue siendo **NROM-only**; el *banking* con tablas de despacho
+por banco es lo pendiente.
 
 - Orden: **0 (NROM) → 2 (UxROM) → 3 (CNROM) → 1 (MMC1) → 4 (MMC3, con IRQ de scanline)**.
 - Interfaz `Mapper` (read/write PRG, CHR, IRQ, `scanline_clock`).

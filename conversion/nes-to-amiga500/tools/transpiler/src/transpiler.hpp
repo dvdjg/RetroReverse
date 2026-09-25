@@ -986,6 +986,13 @@ private:
 			}
 			emit_assumptions(out, start);
 
+			// VSA intra-bloque: mapa de valores constantes vistos (`LDA #c; STA a`).
+			eng::u16 vsa_addr[64];
+			eng::u8 vsa_val[64];
+			int vsa_n = 0;
+			bool a_known = false;
+			eng::u8 a_val = 0;
+
 			eng::u16 pc = start;
 			eng::u16 last_addr = start;
 			const OpcodeInfo* last = nullptr;
@@ -998,7 +1005,49 @@ private:
 				}
 				const Instruction& in = instr_[pc];
 				const OpcodeInfo& info = kOpcodeTable[in.opcode];
+
+				// Si leemos una dirección con valor constante conocido en el bloque,
+				// se emite la suposición antes de la carga.
+				if ((in.opcode == 0xA5u || in.opcode == 0xADu) && has_operand(in)) {
+					for (int k = 0; k < vsa_n; ++k) {
+						if (vsa_addr[k] == in.operand) {
+							out.append("    N2A_ASSUME(cpu.mem->read(0x");
+							out.append_hex(in.operand, 4u, true);
+							out.append(") == 0x");
+							out.append_hex(vsa_val[k], 2u, true);
+							out.append(");\n");
+							break;
+						}
+					}
+				}
+
 				emit_one_instruction(out, in, start);
+
+				// Actualiza el mapa: LDA #imm guarda el valor; STA zp/abs lo fija.
+				if (in.opcode == 0xA9u) {
+					a_known = true;
+					a_val = static_cast<eng::u8>(in.operand);
+				} else if ((in.opcode == 0x85u || in.opcode == 0x8Du) && a_known) {
+					bool set = false;
+					for (int k = 0; k < vsa_n; ++k) {
+						if (vsa_addr[k] == in.operand) {
+							vsa_val[k] = a_val;
+							set = true;
+							break;
+						}
+					}
+					if (!set && vsa_n < 64) {
+						vsa_addr[vsa_n] = in.operand;
+						vsa_val[vsa_n] = a_val;
+						++vsa_n;
+					}
+					a_known = false;
+				} else if (in.opcode == 0x20u) {  // JSR: puede tocar memoria
+					vsa_n = 0;
+					a_known = false;
+				} else {
+					a_known = false;
+				}
 				last_addr = pc;
 				last = &info;
 				pc = static_cast<eng::u16>(pc + info.size);
