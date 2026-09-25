@@ -1,41 +1,56 @@
 #pragma once
 
-/// \file cpu_stub_text.hpp
-/// Texto del **runtime provisional** que el transpilador escribe en el fichero
-/// generado: `NESMemory` + `CPU` en C++23 sobre `eng/core` y sin STL.
+/// \file nes_runtime.hpp
+/// Runtime mínimo del nodo NES→Amiga 500: memoria de consola (`NESMemory`) y CPU
+/// 6502 (`CPU`) que ejecutan el código generado por el transpilador.
 ///
-/// Es un *stub*: la semantica de algunas operaciones es simplificada y el estado
-/// intencionalmente incompleto (PPU/APU/mappers). Su unico proposito ahora es que
-/// el codigo generado **compile y ejecute** en host (y en 68000), y servir de
-/// punto de enganche hasta que exista el runtime real del nodo
-/// [`runtime/`](../../../runtime/README.md) (fases F3/F4 del roadmap).
+/// ## Contrato de inclusión
+/// Este header **no es autónomo**: debe incluirse desde el fichero generado
+/// **después** de definir la PRG-ROM de la ROM concreta, porque `NESMemory::read`
+/// la consulta:
+/// \code
+/// #include <eng/core/types/types.hpp>
+/// static constexpr eng::usize kPrgSize = <N>;
+/// static constexpr eng::u8 PRG_ROM[kPrgSize] = { ... };
+/// #include "nes_runtime.hpp"      // usa kPrgSize y PRG_ROM
+/// \endcode
 ///
-/// El generador emite antes de este texto `PRG_ROM` y `kPrgSize`.
+/// ## Estado y alcance (F1)
+/// Implementa solo lo que necesitan los *basic blocks* generados: registros,
+/// flags, pila, modos de direccionamiento y las familias de instrucciones
+/// (oficiales + ilegales frecuentes). **No** modela todavía PPU, APU ni mappers:
+/// eso son las fases F3 (PPU/APU software), F7 (audio) y F9 (mappers) del
+/// [`../../docs/ROADMAP.md`](../../docs/ROADMAP.md). La exactitud ciclo a ciclo y
+/// la validación con `nestest` son el siguiente paso de F1.
 ///
-/// Siguiendo la regla de codigo autodocumentado de `AGENTS.md`, **este texto
-/// emitido documenta clases, miembros, metodos, argumentos, retornos y macros**.
+/// ## Recursos
+/// Sin memoria dinámica ni STL: solo `eng/core` (tipos) y estado en pila/estática.
+/// Pensado para compilar igual en host (tests) y en `m68k` (Amiga 500).
+
+#include <eng/core/types/types.hpp>
 
 namespace n2a {
 
-inline constexpr const char* kCpuStubText = R"N2ASTUB(
-// ============================================================
-//  Runtime provisional (stub) - sustituir por el runtime del nodo
-//  Contexto: lo usan los basic blocks generados (bb_XXXX) y game_main().
-//  Recursos: solo RAM interna y PRG_ROM; sin heap ni STL.
-// ============================================================
-
-/// Memoria de la consola para el stub: RAM interna y lectura de la PRG-ROM.
-/// No modela PPU/APU/mapper (llegan con el runtime real).
+/// Memoria de consola para un programa NROM: RAM interna de 2 KB y lectura de la
+/// PRG-ROM de la ROM generada.
+///
+/// La PRG-ROM y su tamaño (`kPrgSize`) los aporta el fichero generado que incluye
+/// este header (ver contrato de inclusión).
 struct NESMemory {
-	/// RAM interna de 2 KB ($0000-$07FF), espejada hasta $1FFF por `read`.
+	/// RAM interna de la consola: 2 KB en `$0000-$07FF`, espejada hasta `$1FFF`.
 	eng::u8 ram[0x800] {};
 
-	/// Lee un byte del espacio de direcciones de la CPU.
-	/// - addr $0000-$1FFF: RAM espejada (`addr & 0x7FF`).
-	/// - addr $8000-$FFFF: PRG-ROM (con espejo de 16 KB si `kPrgSize == 16384`).
-	/// - resto: 0 (PPU/APU/mapper no modelados).
-	/// Retorno: el byte leido. Sin efectos secundarios.
-	eng::u8 read(eng::u16 addr) const {
+	/// Lee el byte de la dirección `addr` del espacio de 64 KB de la CPU.
+	///
+	/// - `$0000-$1FFF`: RAM interna, con espejo de 2 KB (`addr & 0x7FF`).
+	/// - `$8000-$FFFF`: PRG-ROM; si `kPrgSize == 16384` se aplica el espejo de
+	///   16 KB (NROM de 16 KB) y se devuelve el byte correspondiente.
+	/// - cualquier otra dirección ($2000-$7FFF): 0, porque PPU/APU/mapper aún no
+	///   están modelados (ver estado y alcance).
+	///
+	/// \param addr Dirección de 16 bits.
+	/// \return El byte leído. No tiene efectos secundarios.
+	[[nodiscard]] eng::u8 read(eng::u16 addr) const {
 		if (addr < 0x2000u) {
 			return ram[addr & 0x7FFu];
 		}
@@ -51,64 +66,96 @@ struct NESMemory {
 		return 0u;
 	}
 
-	/// Escribe un byte. Solo persiste en la RAM interna ($0000-$1FFF, espejada);
-	/// las demas direcciones se ignoran (PPU/APU/mapper no modelados).
-	/// Argumentos: addr destino, value byte a escribir. Sin retorno.
+	/// Escribe el byte `value` en la dirección `addr`.
+	///
+	/// Solo persiste en la RAM interna (`$0000-$1FFF`, con espejo); el resto de
+	/// direcciones se ignoran porque PPU/APU/mapper no están modelados todavía.
+	///
+	/// \param addr   Dirección destino de 16 bits.
+	/// \param value  Byte a escribir.
 	void write(eng::u16 addr, eng::u8 value) {
 		if (addr < 0x2000u) {
 			ram[addr & 0x7FFu] = value;
 		}
 	}
 
-	/// Lee una palabra de 16 bits en formato little-endian (lo/hi).
-	/// Uso: operandos absolutos e indirecciones (p. ej. `JMP ($xxyy)`).
-	/// Retorno: `read(addr) | (read(addr+1) << 8)`.
-	eng::u16 read16(eng::u16 addr) const {
+	/// Lee una palabra de 16 bits en formato little-endian.
+	///
+	/// Se usa para operandos absolutos e indirecciones (p. ej. `JMP ($xxyy)`).
+	///
+	/// \param addr Dirección del byte bajo; el alto se lee en `addr + 1`.
+	/// \return `read(addr) | (read(addr + 1) << 8)`.
+	[[nodiscard]] eng::u16 read16(eng::u16 addr) const {
 		return static_cast<eng::u16>(read(addr) |
 			       (static_cast<eng::u16>(read(static_cast<eng::u16>(addr + 1u))) << 8));
 	}
 };
 
-/// CPU 6502 del stub. Implementa los registros, flags y metodos usados por el
-/// codigo generado. Convencion: los metodos se llaman como el mnemonico + sufijo
-/// de modo (`LDA_abs`, `STA_zp`, `ADC_imm`, `ASL_A`...), de forma que el codigo
-/// generado se lea como el desensamblador y sea facil de reconocer por la capa HLE.
+/// CPU 6502 (2A03 sin decimal) del runtime.
+///
+/// Expone un método por **mnemónico + sufijo de modo** (`LDA_abs`, `STA_zp`,
+/// `ADC_imm`, `ASL_A`, `JSR_abs`…). El código generado llama a esos métodos, de
+/// modo que cada línea se lee como el desensamblador y la capa HLE puede
+/// reconocer patrones (`docs/HLE.md`).
+///
+/// Convenciones:
+/// - Los métodos que cargan/transforman un registro actualizan los flags `N`/`Z`.
+/// - Los métodos de memoria reciben la **dirección efectiva ya calculada** (el
+///   modo de direccionamiento resuelve los índices X/Y y los punteros).
+/// - `CMP`/`CPX`/`CPY` y las operaciones ALU actualizan `C`/`V`/`N`/`Z` según el 6502.
 struct CPU {
 	/// Acumulador (8 bits).
 	eng::u8 A = 0;
-	/// Registro indice X (8 bits).
+	/// Registro índice X (8 bits).
 	eng::u8 X = 0;
-	/// Registro indice Y (8 bits).
+	/// Registro índice Y (8 bits).
 	eng::u8 Y = 0;
-	/// Puntero de pila (offset dentro de la pagina $0100). Arranca en $FD.
+	/// Puntero de pila: offset dentro de la página `$0100`. Arranca en `$FD`.
 	eng::u8 SP = 0xFD;
-	/// Contador de programa: direccion 6502 de la instruccion/bloque actual.
+	/// Contador de programa: dirección 6502 del bloque que se está ejecutando.
 	eng::u16 PC = 0;
-	/// Flags: carry, zero, irq-disable, decimal, overflow, negativo.
+	/// Flags del 6502: carry, zero, IRQ-disable, decimal, overflow y negativo.
 	bool C = false, Z = false, I = false, D = false, V = false, N = false;
-	/// `true` tras `BRK`; `game_main()` lo usa para terminar el bucle de despacho.
+	/// Se pone a `true` tras `BRK`; `game_main()` lo usa para terminar el bucle.
 	bool halted = false;
-	/// Memoria asociada (no propietario). La fija `game_main()`.
+	/// Memoria asociada (observador, no propietario). La enlaza `game_main()`.
 	NESMemory* mem = nullptr;
 
-	/// Actualiza los flags Z (resultado == 0) y N (bit 7) a partir de `v`.
-	/// Usado por todas las operaciones que cargan/transforman A, X o Y.
+	/// Actualiza `Z` (resultado nulo) y `N` (bit 7) a partir de `v`.
+	/// Lo usan todas las operaciones que cargan o transforman A, X o Y.
+	/// \param v Resultado de 8 bits recién calculado.
 	void set_nz(eng::u8 v) { Z = (v == 0u); N = (v & 0x80u) != 0u; }
-	/// Apila un byte en la pila de la pagina $0100 y decrementa SP.
-	void push(eng::u8 v) { mem->ram[0x100u + static_cast<eng::usize>(SP)] = v; --SP; }
-	/// Desapila un byte (incrementa SP) y lo devuelve.
-	eng::u8 pull() { ++SP; return mem->ram[0x100u + static_cast<eng::usize>(SP)]; }
-	/// Apila una palabra (primero el byte alto, luego el bajo), como JSR/BRK.
-	void push16(eng::u16 v) { push(static_cast<eng::u8>(v >> 8u)); push(static_cast<eng::u8>(v & 0xFFu)); }
-	/// Desapila una palabra little-endian (lo primero) y la devuelve.
-	eng::u16 pull16() { const eng::u8 lo = pull(); const eng::u8 hi = pull(); return static_cast<eng::u16>(lo | (static_cast<eng::u16>(hi) << 8)); }
 
-	// --- Cargas: LDA/LDX/LDY ---
-	// El macro genera, por cada registro R (A/X/Y), un metodo por modo de
-	// direccionamiento. Cada metodo lee el operando efectivo, lo carga en R y
-	// actualiza N/Z. Modos: imm, zp, zpx, zpy, abs, absx, absy, indx, indy.
-	// (X/Y no usan todos los modos, pero los metodos sobrantes no se emiten si
-	//  el opcode no aparece en la ROM.)
+	/// Apila `v` en la pila de la página `$0100` y decrementa `SP`.
+	/// \param v Byte a apilar.
+	void push(eng::u8 v) { mem->ram[0x100u + static_cast<eng::usize>(SP)] = v; --SP; }
+
+	/// Desapila un byte (incrementa `SP`) y lo devuelve.
+	/// \return Byte en la cima de la pila.
+	eng::u8 pull() { ++SP; return mem->ram[0x100u + static_cast<eng::usize>(SP)]; }
+
+	/// Apila una palabra: primero el byte alto y luego el bajo (como `JSR`/`BRK`).
+	/// \param v Palabra a apilar.
+	void push16(eng::u16 v) {
+		push(static_cast<eng::u8>(v >> 8u));
+		push(static_cast<eng::u8>(v & 0xFFu));
+	}
+
+	/// Desapila una palabra little-endian (lo primero) y la devuelve.
+	/// \return Palabra desapilada.
+	eng::u16 pull16() {
+		const eng::u8 lo = pull();
+		const eng::u8 hi = pull();
+		return static_cast<eng::u16>(lo | (static_cast<eng::u16>(hi) << 8));
+	}
+
+	// --- Cargas: LDA / LDX / LDY -------------------------------------------
+	// Genera, para el registro R indicado, un método por modo de direccionamiento.
+	// Todos leen el operando efectivo, lo cargan en R y actualizan N/Z.
+	//   NAME_imm / NAME_zp / NAME_zpx / NAME_zpy / NAME_abs / NAME_absx /
+	//   NAME_absy / NAME_indx / NAME_indy
+	// `a` es la dirección o el inmediato según el sufijo; los modos indexados
+	// resuelven X o Y y los indX/indY leen el puntero de página cero.
 #define N2A_LOAD(NAME, R) \
 	void NAME##_imm(eng::u8 v) { R = v; set_nz(R); } \
 	void NAME##_zp(eng::u8 a) { R = mem->read(a); set_nz(R); } \
@@ -124,9 +171,11 @@ struct CPU {
 	N2A_LOAD(LDY, Y)
 #undef N2A_LOAD
 
-	// --- Almacenes: STA/STX/STY ---
-	// Genera un metodo por registro R y modo: escribe R en la direccion efectiva.
-	// No modifican flags. Modos: zp, zpx, zpy, abs, absx, absy, indx, indy.
+	// --- Almacenes: STA / STX / STY ---------------------------------------
+	// Genera, para el registro R, un método por modo que escribe R en la
+	// dirección efectiva. No modifican flags.
+	//   NAME_zp / NAME_zpx / NAME_zpy / NAME_abs / NAME_absx / NAME_absy /
+	//   NAME_indx / NAME_indy
 #define N2A_STORE(NAME, R) \
 	void NAME##_zp(eng::u8 a) { mem->write(a, R); } \
 	void NAME##_zpx(eng::u8 a) { mem->write(static_cast<eng::u8>(a + X), R); } \
@@ -141,8 +190,9 @@ struct CPU {
 	N2A_STORE(STY, Y)
 #undef N2A_STORE
 
-	// --- ALU interna ---
-	/// Suma con acarreo: A = A + v + C. Actualiza C, V, N, Z.
+	// --- Núcleo de la ALU --------------------------------------------------
+	/// Suma con acarreo: `A = A + v + C`. Actualiza `C`, `V`, `N` y `Z`.
+	/// \param v Operando de 8 bits.
 	void ADC_impl(eng::u8 v) {
 		const eng::u16 s = static_cast<eng::u16>(A + v + (C ? 1u : 0u));
 		C = (s > 0xFFu);
@@ -151,7 +201,9 @@ struct CPU {
 		A = r;
 		set_nz(A);
 	}
-	/// Resta con borrow: A = A - v - (1-C). Actualiza C, V, N, Z.
+
+	/// Resta con préstamo: `A = A - v - (1 - C)`. Actualiza `C`, `V`, `N` y `Z`.
+	/// \param v Operando de 8 bits.
 	void SBC_impl(eng::u8 v) {
 		const eng::u8 nv = static_cast<eng::u8>(~v);
 		const eng::u16 s = static_cast<eng::u16>(A + nv + (C ? 1u : 0u));
@@ -161,22 +213,28 @@ struct CPU {
 		A = r;
 		set_nz(A);
 	}
-	/// AND logico de A con v; actualiza N/Z.
+
+	/// `A = A & v`; actualiza `N` y `Z`.
 	void AND_impl(eng::u8 v) { A = static_cast<eng::u8>(A & v); set_nz(A); }
-	/// OR logico de A con v; actualiza N/Z.
+	/// `A = A | v`; actualiza `N` y `Z`.
 	void ORA_impl(eng::u8 v) { A = static_cast<eng::u8>(A | v); set_nz(A); }
-	/// XOR logico de A con v; actualiza N/Z.
+	/// `A = A ^ v`; actualiza `N` y `Z`.
 	void EOR_impl(eng::u8 v) { A = static_cast<eng::u8>(A ^ v); set_nz(A); }
-	/// Compara `reg` con `v` (resta sin guardar) y actualiza C, Z, N.
-	/// Argumentos: reg valor del registro (A/X/Y); v operando.
+
+	/// Compara un registro con `v` (resta descartando el resultado): fija `C`,
+	/// `Z` y `N`.
+	/// \param reg Valor del registro (A, X o Y).
+	/// \param v   Operando a comparar.
 	void CMP_impl(eng::u8 reg, eng::u8 v) {
 		const eng::u8 r = static_cast<eng::u8>(reg - v);
 		C = (reg >= v);
 		Z = (r == 0u);
 		N = (r & 0x80u) != 0u;
 	}
-	// Genera un metodo por modo de direccionamiento para una operacion ALU IMPL.
-	// IMPL es un metodo interno (ADC_impl, SBC_impl, AND_impl, ORA_impl, EOR_impl).
+
+	// Genera un método por modo para una operación ALU cuyo núcleo es `IMPL`
+	// (ADC_impl, SBC_impl, AND_impl, ORA_impl o EOR_impl). El sufijo indica el
+	// modo de direccionamiento.
 #define N2A_ALU(NAME, IMPL) \
 	void NAME##_imm(eng::u8 v) { IMPL(v); } \
 	void NAME##_zp(eng::u8 a) { IMPL(mem->read(a)); } \
@@ -193,7 +251,9 @@ struct CPU {
 	N2A_ALU(ORA, ORA_impl)
 	N2A_ALU(EOR, EOR_impl)
 #undef N2A_ALU
-	// Comparaciones: un metodo por modo que compara el registro R con el operando.
+
+	// Genera un método por modo para CMP/CPX/CPY, comparando el registro `R`
+	// con el operando efectivo.
 #define N2A_CMP(NAME, R) \
 	void NAME##_imm(eng::u8 v) { CMP_impl(R, v); } \
 	void NAME##_zp(eng::u8 a) { CMP_impl(R, mem->read(a)); } \
@@ -209,22 +269,26 @@ struct CPU {
 	N2A_CMP(CPY, Y)
 #undef N2A_CMP
 
-	// --- Desplazamientos ---
-	/// ASL del acumulador: C = bit 7, A <<= 1.
+	// --- Desplazamientos ---------------------------------------------------
+	/// `ASL` del acumulador: `C = bit 7`, `A <<= 1`, actualiza `N`/`Z`.
 	void ASL_A() { C = (A & 0x80u) != 0u; A = static_cast<eng::u8>(A << 1u); set_nz(A); }
-	/// LSR del acumulador: C = bit 0, A >>= 1.
+	/// `LSR` del acumulador: `C = bit 0`, `A >>= 1`, actualiza `N`/`Z`.
 	void LSR_A() { C = (A & 1u) != 0u; A = static_cast<eng::u8>(A >> 1u); set_nz(A); }
-	/// ROL del acumulador con el carry entrante.
+	/// `ROL` del acumulador usando el carry entrante.
 	void ROL_A() { const eng::u8 c = C ? 1u : 0u; C = (A & 0x80u) != 0u; A = static_cast<eng::u8>((A << 1u) | c); set_nz(A); }
-	/// ROR del acumulador con el carry entrante.
+	/// `ROR` del acumulador usando el carry entrante.
 	void ROR_A() { const eng::u8 c = C ? 1u : 0u; C = (A & 1u) != 0u; A = static_cast<eng::u8>((A >> 1u) | (c << 7u)); set_nz(A); }
-	/// Desplazamientos sobre memoria en la direccion `a` (leer, desplazar, escribir).
+	/// `ASL` en memoria (`a` = dirección): lee, desplaza y escribe.
 	void ASL_at(eng::u16 a) { eng::u8 v = mem->read(a); C = (v & 0x80u) != 0u; v = static_cast<eng::u8>(v << 1u); mem->write(a, v); set_nz(v); }
+	/// `LSR` en memoria.
 	void LSR_at(eng::u16 a) { eng::u8 v = mem->read(a); C = (v & 1u) != 0u; v = static_cast<eng::u8>(v >> 1u); mem->write(a, v); set_nz(v); }
+	/// `ROL` en memoria.
 	void ROL_at(eng::u16 a) { eng::u8 v = mem->read(a); const eng::u8 c = C ? 1u : 0u; C = (v & 0x80u) != 0u; v = static_cast<eng::u8>((v << 1u) | c); mem->write(a, v); set_nz(v); }
+	/// `ROR` en memoria.
 	void ROR_at(eng::u16 a) { eng::u8 v = mem->read(a); const eng::u8 c = C ? 1u : 0u; C = (v & 1u) != 0u; v = static_cast<eng::u8>((v >> 1u) | (c << 7u)); mem->write(a, v); set_nz(v); }
-	// Genera, para un desplazamiento NAME, los modos zp/zpx/abs/absx que operan
-	// sobre memoria llamando a NAME_at(direccion).
+
+	// Genera los modos zp / zpx / abs / absx de un desplazamiento a partir de su
+	// variante en memoria `NAME_at`.
 #define N2A_SHIFT_MODES(NAME) \
 	void NAME##_zp(eng::u8 a) { NAME##_at(a); } \
 	void NAME##_zpx(eng::u8 a) { NAME##_at(static_cast<eng::u8>(a + X)); } \
@@ -236,12 +300,13 @@ struct CPU {
 	N2A_SHIFT_MODES(ROR)
 #undef N2A_SHIFT_MODES
 
-	// --- Inc / Dec en memoria ---
-	/// Incrementa el byte en `a` y actualiza N/Z.
+	// --- Incremento / decremento en memoria --------------------------------
+	/// Incrementa el byte en `a` y actualiza `N`/`Z`.
 	void INC_at(eng::u16 a) { const eng::u8 v = static_cast<eng::u8>(mem->read(a) + 1u); mem->write(a, v); set_nz(v); }
-	/// Decrementa el byte en `a` y actualiza N/Z.
+	/// Decrementa el byte en `a` y actualiza `N`/`Z`.
 	void DEC_at(eng::u16 a) { const eng::u8 v = static_cast<eng::u8>(mem->read(a) - 1u); mem->write(a, v); set_nz(v); }
-	// Genera los modos zp/zpx/abs/absx de INC/DEC sobre memoria.
+
+	// Genera los modos zp / zpx / abs / absx de INC/DEC sobre memoria.
 #define N2A_MEM_MODES(NAME) \
 	void NAME##_zp(eng::u8 a) { NAME##_at(a); } \
 	void NAME##_zpx(eng::u8 a) { NAME##_at(static_cast<eng::u8>(a + X)); } \
@@ -251,65 +316,71 @@ struct CPU {
 	N2A_MEM_MODES(DEC)
 #undef N2A_MEM_MODES
 
-	/// Incrementa X y actualiza N/Z.
+	/// Incrementa X; actualiza `N`/`Z`.
 	void INX() { ++X; set_nz(X); }
-	/// Incrementa Y y actualiza N/Z.
+	/// Incrementa Y; actualiza `N`/`Z`.
 	void INY() { ++Y; set_nz(Y); }
-	/// Decrementa X y actualiza N/Z.
+	/// Decrementa X; actualiza `N`/`Z`.
 	void DEX() { --X; set_nz(X); }
-	/// Decrementa Y y actualiza N/Z.
+	/// Decrementa Y; actualiza `N`/`Z`.
 	void DEY() { --Y; set_nz(Y); }
 
-	/// Transfiere A a X (actualiza N/Z).
+	/// Transfiere A → X; actualiza `N`/`Z`.
 	void TAX() { X = A; set_nz(X); }
-	/// Transfiere A a Y (actualiza N/Z).
+	/// Transfiere A → Y; actualiza `N`/`Z`.
 	void TAY() { Y = A; set_nz(Y); }
-	/// Transfiere X a A (actualiza N/Z).
+	/// Transfiere X → A; actualiza `N`/`Z`.
 	void TXA() { A = X; set_nz(A); }
-	/// Transfiere Y a A (actualiza N/Z).
+	/// Transfiere Y → A; actualiza `N`/`Z`.
 	void TYA() { A = Y; set_nz(A); }
-	/// Transfiere SP a X (actualiza N/Z).
+	/// Transfiere SP → X; actualiza `N`/`Z`.
 	void TSX() { X = SP; set_nz(X); }
-	/// Transfiere X a SP (no modifica flags).
+	/// Transfiere X → SP (los flags no cambian).
 	void TXS() { SP = X; }
 
-	/// Apila A.
+	/// Apila el acumulador.
 	void PHA() { push(A); }
-	/// Desapila A (actualiza N/Z).
+	/// Desapila el acumulador; actualiza `N`/`Z`.
 	void PLA() { A = pull(); set_nz(A); }
-	/// Apila el byte de flags (con B y bit 5 a 1).
+	/// Apila el registro de flags (con el bit B y el bit 5 a 1).
 	void PHP() { push(static_cast<eng::u8>(0x20u | (N ? 0x80u : 0u) | (V ? 0x40u : 0u) | (D ? 0x08u : 0u) | (I ? 0x04u : 0u) | (Z ? 0x02u : 0u) | (C ? 0x01u : 0u))); }
-	/// Desapila el byte de flags y restaura N/V/D/I/Z/C.
+	/// Desapila el registro de flags y restaura `N`/`V`/`D`/`I`/`Z`/`C`.
 	void PLP() { const eng::u8 p = pull(); N = (p & 0x80u) != 0u; V = (p & 0x40u) != 0u; D = (p & 0x08u) != 0u; I = (p & 0x04u) != 0u; Z = (p & 0x02u) != 0u; C = (p & 0x01u) != 0u; }
 
-	/// Limpia carry. /// Pone carry. /// Limpia/pone IRQ-disable. /// Limpia overflow. /// Limpia/pone decimal.
+	/// Limpia el carry (`C = 0`).
 	void CLC() { C = false; }
+	/// Pone el carry (`C = 1`).
 	void SEC() { C = true; }
+	/// Habilita interrupciones IRQ (`I = 0`).
 	void CLI() { I = false; }
+	/// Deshabilita interrupciones IRQ (`I = 1`).
 	void SEI() { I = true; }
+	/// Limpia el flag de desbordamiento (`V = 0`).
 	void CLV() { V = false; }
+	/// Desactiva el modo decimal (`D = 0`).
 	void CLD() { D = false; }
+	/// Activa el modo decimal (`D = 1`).
 	void SED() { D = true; }
 
-	/// JMP absoluto: fija PC a `t`. El dispatcher ejecutara el bloque de `t`.
+	/// Salto absoluto: fija `PC` a `t`. El despachador ejecutará el bloque de `t`.
 	void JMP_abs(eng::u16 t) { PC = t; }
-	/// JMP indirecto: lee la direccion destino en `a` (little-endian) y la pone en PC.
+	/// Salto indirecto: lee la dirección destino en `a` (little-endian) y la pone en `PC`.
 	void JMP_ind(eng::u16 a) { PC = mem->read16(a); }
-	/// Llamada a subrutina: apila la direccion de regreso `ret` y salta a `t`.
+	/// Llamada a subrutina: apila la dirección de regreso `ret` y salta a `t`.
 	void JSR_abs(eng::u16 t, eng::u16 ret) { push16(ret); PC = t; }
-	/// Retorno de subrutina: recupera PC de la pila.
+	/// Retorno de subrutina: recupera `PC` de la pila.
 	void RTS() { PC = pull16(); }
-	/// Retorno de interrupcion: descarta el byte de flags y recupera PC.
+	/// Retorno de interrupción: descarta el byte de flags y recupera `PC`.
 	void RTI() { (void)pull(); PC = pull16(); }
-	/// Interrupcion por software: detiene la ejecucion y deja PC=0 (fin del bucle).
+	/// Interrupción por software: detiene la ejecución y deja `PC = 0` (fin del bucle).
 	void BRK() { halted = true; PC = 0u; }
 
-	/// BIT (zero page): Z = (A & v)==0; N = bit 7 de v; V = bit 6 de v.
+	/// `BIT` (página cero): `Z = (A & v) == 0`, `N = bit 7`, `V = bit 6` de `v`.
 	void BIT_zp(eng::u8 a) { const eng::u8 v = mem->read(a); Z = (A & v) == 0u; N = (v & 0x80u) != 0u; V = (v & 0x40u) != 0u; }
-	/// BIT (absoluto): idem con direccion de 16 bits.
+	/// `BIT` (absoluto): igual que `BIT_zp` con dirección de 16 bits.
 	void BIT_abs(eng::u16 a) { const eng::u8 v = mem->read(a); Z = (A & v) == 0u; N = (v & 0x80u) != 0u; V = (v & 0x40u) != 0u; }
 
-	/// NOP y variantes (los modos ignoran el operando).
+	/// `NOP` y sus variantes: no hacen nada (el operando se ignora).
 	void NOP() {}
 	void NOP_imm(eng::u8) {}
 	void NOP_zp(eng::u8) {}
@@ -317,8 +388,8 @@ struct CPU {
 	void NOP_abs(eng::u16) {}
 	void NOP_absx(eng::u16) {}
 
-	// --- No oficiales (aproximados) ---
-	// LAX: carga A y X con el mismo valor leido.
+	// --- Opcodes no oficiales (aproximados) --------------------------------
+	// `LAX`: carga A y X con el mismo valor leído.
 #define N2A_LAX(NAME) \
 	void NAME##_zp(eng::u8 a) { A = X = mem->read(a); set_nz(A); } \
 	void NAME##_zpy(eng::u8 a) { A = X = mem->read(static_cast<eng::u8>(a + Y)); set_nz(A); } \
@@ -328,7 +399,8 @@ struct CPU {
 	void NAME##_indy(eng::u8 a) { A = X = mem->read(static_cast<eng::u16>(mem->read16(a) + Y)); set_nz(A); }
 	N2A_LAX(LAX)
 #undef N2A_LAX
-	// SAX: guarda (A & X) en memoria.
+
+	// `SAX`: guarda `(A & X)` en memoria.
 #define N2A_SAX(NAME) \
 	void NAME##_zp(eng::u8 a) { mem->write(a, static_cast<eng::u8>(A & X)); } \
 	void NAME##_zpy(eng::u8 a) { mem->write(static_cast<eng::u8>(a + Y), static_cast<eng::u8>(A & X)); } \
@@ -336,19 +408,21 @@ struct CPU {
 	void NAME##_indx(eng::u8 a) { mem->write(mem->read16(static_cast<eng::u8>(a + X)), static_cast<eng::u8>(A & X)); }
 	N2A_SAX(SAX)
 #undef N2A_SAX
-	/// DCP: decrementa el byte en `a` y luego CMP A con el resultado.
+
+	/// `DCP`: decrementa el byte en `a` y luego compara A con el resultado.
 	void DCP_impl(eng::u16 a) { const eng::u8 v = static_cast<eng::u8>(mem->read(a) - 1u); mem->write(a, v); CMP_impl(A, v); }
-	/// ISB: incrementa el byte en `a` y luego SBC A con el resultado.
+	/// `ISB`: incrementa el byte en `a` y luego resta con préstamo A - resultado.
 	void ISB_impl(eng::u16 a) { const eng::u8 v = static_cast<eng::u8>(mem->read(a) + 1u); mem->write(a, v); SBC_impl(v); }
-	/// SLO: ASL del byte en `a` y ORA de A con el resultado.
+	/// `SLO`: desplaza a la izquierda el byte en `a` y hace OR con A.
 	void SLO_impl(eng::u16 a) { eng::u8 v = mem->read(a); C = (v & 0x80u) != 0u; v = static_cast<eng::u8>(v << 1u); mem->write(a, v); A = static_cast<eng::u8>(A | v); set_nz(A); }
-	/// RLA: ROL del byte en `a` y AND de A con el resultado.
+	/// `RLA`: rota a la izquierda el byte en `a` y hace AND con A.
 	void RLA_impl(eng::u16 a) { eng::u8 v = mem->read(a); const eng::u8 c = C ? 1u : 0u; C = (v & 0x80u) != 0u; v = static_cast<eng::u8>((v << 1u) | c); mem->write(a, v); A = static_cast<eng::u8>(A & v); set_nz(A); }
-	/// SRE: LSR del byte en `a` y EOR de A con el resultado.
+	/// `SRE`: desplaza a la derecha el byte en `a` y hace XOR con A.
 	void SRE_impl(eng::u16 a) { eng::u8 v = mem->read(a); C = (v & 1u) != 0u; v = static_cast<eng::u8>(v >> 1u); mem->write(a, v); A = static_cast<eng::u8>(A ^ v); set_nz(A); }
-	/// RRA: ROR del byte en `a` y ADC de A con el resultado.
+	/// `RRA`: rota a la derecha el byte en `a` y suma con acarreo a A.
 	void RRA_impl(eng::u16 a) { eng::u8 v = mem->read(a); const eng::u8 c = C ? 1u : 0u; C = (v & 1u) != 0u; v = static_cast<eng::u8>((v >> 1u) | (c << 7u)); mem->write(a, v); ADC_impl(v); }
-	// Genera los modos de un RMW no oficial a partir de su IMPL(direccion).
+
+	// Genera los modos de un RMW no oficial a partir de su núcleo `IMPL(dirección)`.
 #define N2A_RMW(NAME, IMPL) \
 	void NAME##_zp(eng::u8 a) { IMPL(a); } \
 	void NAME##_zpx(eng::u8 a) { IMPL(static_cast<eng::u8>(a + X)); } \
@@ -365,6 +439,5 @@ struct CPU {
 	N2A_RMW(RRA, RRA_impl)
 #undef N2A_RMW
 };
-)N2ASTUB";
 
 } // namespace n2a

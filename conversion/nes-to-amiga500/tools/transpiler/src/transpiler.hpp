@@ -1,11 +1,13 @@
 #pragma once
 
 /// \file transpiler.hpp
-/// Nucleo del transpilador NES (fase 1): parseo iNES, desensamblado recursivo,
-/// basic blocks y generacion de C++23 sobre `eng/core` (sin STL).
+/// Núcleo del transpilador NES→Amiga (fase 1): parsea la cabecera iNES, obtiene
+/// la PRG-ROM y sus vectores, la desensambla de forma recursiva, agrupa las
+/// instrucciones en *basic blocks* y emite un `.cpp` C++23 que usa el runtime del
+/// nodo (`runtime/include/nes_runtime.hpp`). Todo sobre `eng/core` (sin STL).
 ///
-/// Diseno en [`../../docs/TRANSPILER.md`](../../docs/TRANSPILER.md). Estado:
-/// prototipo NROM (F2). El runtime emitido es un *stub* (ver `cpu_stub_text.hpp`).
+/// Diseño y fases en [`../../docs/TRANSPILER.md`](../../docs/TRANSPILER.md).
+/// Alcance actual: NROM (mapper 0), opcodes oficiales + ilegales frecuentes.
 
 #include <eng/core/types/types.hpp>
 #include <eng/core/util/dynamic_string.hpp>
@@ -14,31 +16,48 @@
 #include <eng/core/util/string_view.hpp>
 #include <eng/core/util/vector.hpp>
 
-#include "cpu_stub_text.hpp"
 #include "opcodes.hpp"
 
 namespace n2a {
 
+/// Búfer de texto de salida del codegen: cadena que crece en el heap del host.
 using Dyn = eng::util::DynamicString<eng::util::HeapAlloc>;
 
+/// Una instrucción de 6502 ya decodificada y ubicada en el espacio de la CPU.
+///
+/// `operand` guarda el operando **tal cual aparece en la ROM** (inmediato de 8
+/// bits, dirección de página cero o dirección absoluta de 16 bits). `target` es
+/// el destino resuelto de ramas y de `JMP`/`JSR` absolutos; para el resto de
+/// modos vale 0 y no debe usarse. Los bits `has_operand`/`has_target` de `flags`
+/// indican cuáles de esos campos son válidos.
 struct Instruction {
-	eng::u16 addr = 0;
-	eng::u16 operand = 0;
-	eng::u16 target = 0;
-	eng::u8 opcode = 0;
-	eng::u8 flags = 0; ///< bit0 = tiene operando, bit1 = tiene destino resuelto
+	eng::u16 addr = 0;    ///< Dirección 6502 donde empieza la instrucción.
+	eng::u16 operand = 0; ///< Operando inmediato o dirección, según el modo.
+	eng::u16 target = 0;  ///< Destino resuelto de rama/JMP/JSR (si `has_target`).
+	eng::u8 opcode = 0;   ///< Byte de opcode (índice en `kOpcodeTable`).
+	eng::u8 flags = 0;    ///< bit0 = operando válido, bit1 = destino válido.
 };
 
+/// El campo `flags` de `Instruction` marca que `operand` es válido.
 inline constexpr eng::u8 kHasOperand = 0x01u;
+/// El campo `flags` de `Instruction` marca que `target` es válido.
 inline constexpr eng::u8 kHasTarget = 0x02u;
 
-/// Transpilador NES (NROM): lee una ROM iNES, desensambla la PRG-ROM de forma
-/// recursiva, construye basic blocks y emite C++23 autodocumentado sobre
-/// `eng/core` (sin STL). Flujo de uso:
-///   `load()` -> `disassemble()` -> `build_basic_blocks()` -> `generate()`.
-/// Los contenedores son de `eng/core` con `HeapAlloc` (solo host).
+/// Transpilador de una ROM NES (NROM) a C++23.
+///
+/// Ciclo de vida (llamar en este orden):
+/// 1. `load()`            — valida y descompone la ROM en `rom_`/`prg_`.
+/// 2. `disassemble()`     — decodifica las instrucciones alcanzables.
+/// 3. `build_basic_blocks()` — calcula líderes y metadatos de bloques.
+/// 4. `generate()`        — escribe el `.cpp` en un `Dyn`.
+///
+/// El objeto mantiene tablas de 0x10000 entradas indexadas por dirección 6502
+/// (instrucción, marcas); por eso su coste en memoria es de unos pocos cientos
+/// de KB, aceptable en la herramienta host (no en el Amiga).
 class Transpiler {
 public:
+	/// Reserva las tablas indexadas por dirección (0x0000..0xFFFF). El coste se
+	/// paga una vez y evita buscar en mapas durante el análisis.
 	Transpiler() {
 		(void)instr_.resize(kSpace, Instruction {});
 		(void)has_instr_.resize(kSpace, 0u);
@@ -52,7 +71,14 @@ public:
 		(void)worklist_.reserve(4096u);
 	}
 
-	/// Carga la ROM ya leida. `false` si no es un iNES valido o esta truncada.
+	/// Carga una ROM iNES ya leída en memoria.
+	///
+	/// Comprueba la firma `NES\x1A`, copia los bytes a `rom_` y delega en
+	/// `parse_header()` y `extract_prg()`. Es el único punto de entrada de datos.
+	///
+	/// \param data Puntero a los bytes de la ROM (no se conserva el puntero).
+	/// \param size Número de bytes.
+	/// \return `true` si es una ROM iNES NROM válida y no truncada.
 	bool load(const eng::u8* data, eng::usize size) {
 		if (size < 16u) {
 			return false;
@@ -67,6 +93,14 @@ public:
 		return parse_header() && extract_prg();
 	}
 
+	/// Desensambla de forma recursiva todas las instrucciones alcanzables.
+	///
+	/// Usa una pila de trabajo (`worklist_`) con los puntos de entrada: el vector
+	/// de reset y, si apuntan a la PRG, los de NMI e IRQ. Desde cada entrada
+	/// decodifica en línea hasta una instrucción de fin de flujo (`JMP`, `JSR`,
+	/// rama, `RTS`/`RTI`/`BRK`), apilando los destinos y las continuaciones. Las
+	/// direcciones ya vistas (`visited_`) no se repiten. Rellena `instr_` y
+	/// `has_instr_`; los bytes que no se alcanzan no se decodifican.
 	void disassemble() {
 		push_work(reset_);
 		if (nmi_ >= 0x8000u) {
@@ -163,6 +197,12 @@ public:
 		}
 	}
 
+	/// Calcula los *líderes* (inicios de basic block) a partir del CFG implícito.
+	///
+	/// Un líder es: el vector de reset/NMI/IRQ, el destino de una rama/`JMP`/`JSR`
+	/// y la instrucción siguiente a cualquier salto o fin de flujo. Después llama
+	/// a `compute_block_metadata()`, que deriva las etiquetas y los destinos que
+	/// necesitará el codegen. Debe ejecutarse tras `disassemble()`.
 	void build_basic_blocks() {
 		mark_leader(reset_);
 		if (has_instr_[nmi_] != 0u) {
@@ -200,14 +240,18 @@ public:
 		compute_block_metadata();
 	}
 
-	/// Calcula los metadatos que usan el codegen y la documentacion de bloques:
-	/// etiquetas internas (auto-bucles), destinos de rama/`JMP`/`JSR` y caidas
-	/// desde el bloque anterior. Se llama al final de `build_basic_blocks`.
+	/// Deriva los metadatos que usan el codegen y la ficha de cada bloque.
 	///
-	/// Una etiqueta `L_xxxx` solo se emite cuando un salto **dentro del mismo
-	/// bloque** la necesita (auto-bucle). Los saltos entre bloques se resuelven
-	/// volviendo al despacho (`cpu.PC = destino; return;`), porque una etiqueta no
-	/// es visible desde otra funcion. Asi no hay `-Wunused-label`.
+	/// Rellena, para cada dirección:
+	/// - `labels_`: la etiqueta `L_xxxx` se emite solo si un salto **dentro del
+	///   mismo bloque** la usa (auto-bucle). Los saltos entre bloques se resuelven
+	///   volviendo al despacho (`cpu.PC = destino; return;`) porque una etiqueta
+	///   C++ no es visible desde otra función; así se evita `-Wunused-label`.
+	/// - `branch_target_`, `jmp_target_`, `jsr_target_`: si la dirección es destino
+	///   de una rama, de un `JMP` absoluto o de un `JSR` (para la ficha del bloque).
+	/// - `fallin_`: si la dirección es la continuación natural del bloque anterior.
+	///
+	/// Se invoca al final de `build_basic_blocks()`; no genera código.
 	void compute_block_metadata() {
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			labels_[a] = 0u;
@@ -216,7 +260,7 @@ public:
 			jsr_target_[a] = 0u;
 			fallin_[a] = 0u;
 		}
-		// Destinos de flujo directo (rama, JMP abs, JSR abs).
+		// Destinos de flujo directo: rama, JMP absoluto y JSR absoluto.
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (has_instr_[a] == 0u) {
 				continue;
@@ -234,7 +278,7 @@ public:
 				jsr_target_[in.target] = 1u;
 			}
 		}
-		// Etiquetas de auto-bucle y caidas entre bloques.
+		// Etiquetas de auto-bucle y continuaciones entre bloques.
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (leaders_[a] == 0u) {
 				continue;
@@ -275,65 +319,91 @@ public:
 		}
 	}
 
-	/// Genera el fichero C++ completo en `out`.
+	/// Escribe el fichero C++ completo en `out`, en este orden:
+	/// 1. cabecera documentada e `#include <eng/core/types/types.hpp>`;
+	/// 2. `kPrgSize` y `PRG_ROM` (necesarios por el runtime);
+	/// 3. `#include "nes_runtime.hpp"` y los `using` de `CPU`/`NESMemory`;
+	/// 4. los *basic blocks* (`bb_XXXX`) con su ficha;
+	/// 5. la tabla de despacho, `game_main()` y el `main()` de host.
+	///
+	/// \param out Búfer de texto donde se acumula la salida (no se vacía).
 	void generate(Dyn& out) const {
 		emit_header(out);
 		emit_rom(out);
-		out.append(kCpuStubText);
+		out.append("#include \"nes_runtime.hpp\"\n");
+		out.append("using n2a::CPU;\n");
+		out.append("using n2a::NESMemory;\n\n");
 		emit_blocks(out);
 		emit_dispatch(out);
 	}
 
+	/// Número de mapper iNES de la ROM cargada (siempre 0 en esta versión).
 	[[nodiscard]] int mapper() const noexcept { return mapper_; }
+	/// Tamaño de la PRG-ROM en bytes.
 	[[nodiscard]] eng::u32 prg_size() const noexcept { return prg_size_; }
+	/// Número de instrucciones decodificadas.
 	[[nodiscard]] eng::usize instruction_count() const noexcept { return count_; }
+	/// Número de *basic blocks* detectados.
 	[[nodiscard]] eng::usize block_count() const noexcept { return block_count_; }
+	/// Vector de reset (`$FFFC`).
 	[[nodiscard]] eng::u16 reset_vector() const noexcept { return reset_; }
+	/// Vector de NMI (`$FFFA`).
 	[[nodiscard]] eng::u16 nmi_vector() const noexcept { return nmi_; }
+	/// Vector de IRQ/BRK (`$FFFE`).
 	[[nodiscard]] eng::u16 irq_vector() const noexcept { return irq_; }
+	/// Opcodes encontrados que no están en la tabla (posible código no alcanzado).
 	[[nodiscard]] eng::usize unknown_count() const noexcept { return unknown_; }
 
 private:
+	/// Tamaño del espacio de direcciones del 6502: índices `0x0000..0xFFFF`.
 	static constexpr eng::u32 kSpace = 0x10000u;
 
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> rom_ {};
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> prg_ {};
-	eng::u32 prg_size_ = 0;
-	int mapper_ = 0;
-	bool has_trainer_ = false;
-	eng::u16 reset_ = 0;
-	eng::u16 nmi_ = 0;
-	eng::u16 irq_ = 0;
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> rom_ {}; ///< ROM iNES completa.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> prg_ {}; ///< Solo la PRG-ROM.
+	eng::u32 prg_size_ = 0;                                   ///< Tamaño de PRG en bytes.
+	int mapper_ = 0;                                          ///< Número de mapper iNES.
+	bool has_trainer_ = false;                                ///< ¿Trae trainer de 512 B?
+	eng::u16 reset_ = 0;                                      ///< Vector de reset.
+	eng::u16 nmi_ = 0;                                        ///< Vector de NMI.
+	eng::u16 irq_ = 0;                                        ///< Vector de IRQ.
 
-	eng::util::Vector<Instruction, eng::util::HeapAlloc> instr_ {};
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> has_instr_ {};
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> leaders_ {};
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> labels_ {};
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> branch_target_ {}; ///< destino de una rama
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> jmp_target_ {};    ///< destino de un JMP abs
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> jsr_target_ {};    ///< destino de un JSR
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> fallin_ {};        ///< continuacion de bloque
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> visited_ {};
-	eng::util::Vector<eng::u16, eng::util::HeapAlloc> worklist_ {};
+	eng::util::Vector<Instruction, eng::util::HeapAlloc> instr_ {}; ///< Instrucción por dirección.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> has_instr_ {}; ///< 1 si la dirección tiene instrucción.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> leaders_ {};   ///< 1 si la dirección inicia bloque.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> labels_ {};    ///< 1 si hay que emitir `L_xxxx`.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> branch_target_ {}; ///< Destino de rama.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> jmp_target_ {};    ///< Destino de `JMP` abs.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> jsr_target_ {};    ///< Destino de `JSR`.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> fallin_ {};        ///< Continuación del bloque previo.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> visited_ {};       ///< Direcciones ya desensambladas.
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> worklist_ {};     ///< Pila de puntos de entrada.
 
-	eng::usize count_ = 0;
-	eng::usize unknown_ = 0;
-	eng::usize block_count_ = 0;
+	eng::usize count_ = 0;       ///< Instrucciones decodificadas.
+	eng::usize unknown_ = 0;     ///< Opcodes desconocidos encontrados.
+	eng::usize block_count_ = 0; ///< Bloques detectados.
 
-	// --- Helpers de texto ---
+	// --- Utilidades internas ---
+
+	/// Compara un mnemónico de la tabla con un literal (sin construir `StringView`
+	/// en el llamador). \return `true` si son iguales.
 	[[nodiscard]] static bool sv_equal(const char* mnemonic, const char* other) noexcept {
 		eng::util::StringView a(mnemonic);
 		eng::util::StringView b(other);
 		return a == b;
 	}
+	/// \return `true` si `in` tiene operando válido.
 	[[nodiscard]] static bool has_operand(const Instruction& in) noexcept {
 		return (in.flags & kHasOperand) != 0u;
 	}
+	/// \return `true` si `in` tiene destino de salto válido.
 	[[nodiscard]] static bool has_target(const Instruction& in) noexcept {
 		return (in.flags & kHasTarget) != 0u;
 	}
 
-	// --- Parseo iNES ---
+	// --- Parseo de la ROM ---
+
+	/// Lee la cabecera iNES (16 bytes) y deriva tamaño de PRG, mapper y trainer.
+	/// \return `true` si es NROM con PRG no vacía (único caso soportado hoy).
 	bool parse_header() {
 		const eng::u8 prg_pages = rom_[4];
 		const eng::u8 chr_pages = rom_[5];
@@ -346,6 +416,8 @@ private:
 		return prg_size_ != 0u && mapper_ == 0; // prototipo: solo NROM
 	}
 
+	/// Copia la PRG-ROM a `prg_` y extrae los tres vectores de los últimos 6 bytes.
+	/// \return `false` si el fichero está truncado o no hay vectores.
 	bool extract_prg() {
 		eng::usize offset = 16u;
 		if (has_trainer_) {
@@ -368,6 +440,8 @@ private:
 		return true;
 	}
 
+	/// Traduce una dirección 6502 a un desplazamiento dentro de `prg_`.
+	/// Aplica el espejo de 16 KB de NROM. \return vacío si la dirección no es PRG.
 	[[nodiscard]] eng::util::Optional<eng::usize> prg_offset(eng::u16 addr) const {
 		if (addr < 0x8000u) {
 			return {};
@@ -382,6 +456,7 @@ private:
 		return off;
 	}
 
+	/// Lee el byte de la PRG-ROM en la dirección 6502 `addr` (vacío si no es PRG).
 	[[nodiscard]] eng::util::Optional<eng::u8> read_byte(eng::u16 addr) const {
 		const auto off = prg_offset(addr);
 		if (!off) {
@@ -390,6 +465,7 @@ private:
 		return prg_[*off];
 	}
 
+	/// Lee la palabra little-endian de la PRG-ROM en `addr` (vacío si falta algún byte).
 	[[nodiscard]] eng::util::Optional<eng::u16> read_word(eng::u16 addr) const {
 		const auto lo = read_byte(addr);
 		const auto hi = read_byte(static_cast<eng::u16>(addr + 1u));
@@ -399,16 +475,19 @@ private:
 		return static_cast<eng::u16>(*lo | (static_cast<eng::u16>(*hi) << 8));
 	}
 
+	/// Apila una dirección de entrada si cae en la PRG (`>= $8000`).
 	void push_work(eng::u16 addr) {
 		if (addr >= 0x8000u) {
 			(void)worklist_.push_back(addr);
 		}
 	}
+	/// Apila el destino resuelto de `in`, si lo tiene.
 	void push_target(const Instruction& in) {
 		if (has_target(in)) {
 			push_work(in.target);
 		}
 	}
+	/// Marca `addr` como líder (si tiene instrucción y aún no lo era).
 	void mark_leader(eng::u16 addr) {
 		if (leaders_[addr] == 0u && has_instr_[addr] != 0u) {
 			leaders_[addr] = 1u;
@@ -417,7 +496,10 @@ private:
 	}
 
 	// --- Codegen ---
-	static const char* mode_suffix(AddrMode mode) noexcept {
+
+	/// Sufijo del método de `CPU` según el modo de direccionamiento
+	/// (`_imm`, `_zp`, `_absx`, …). \return Cadena estática; `""` para modos sin sufijo.
+	[[nodiscard]] static const char* mode_suffix(AddrMode mode) noexcept {
 		switch (mode) {
 		case AddrMode::Imm: return "_imm";
 		case AddrMode::Zp: return "_zp";
@@ -433,6 +515,9 @@ private:
 		}
 	}
 
+	/// Escribe en `out` el **nombre del método** de `CPU` para `info`:
+	/// mnemónico + sufijo de modo; los desplazamientos implícitos añaden `_A` y
+	/// los `NOP` usan un nombre por modo (`NOP_imm`, `NOP_abs`…).
 	static void append_method_name(Dyn& out, const OpcodeInfo& info) {
 		if (sv_equal(info.mnemonic, "NOP")) {
 			switch (info.mode) {
@@ -455,6 +540,8 @@ private:
 		}
 	}
 
+	/// Escribe el **argumento** de la llamada (`0xNN` o `0xNNNN`) según la anchura
+	/// del modo: 2 dígitos para inmediatos/página cero/indX/indY y 4 para absolutos.
 	static void append_arg(Dyn& out, const Instruction& in, const OpcodeInfo& info) {
 		out.append("0x");
 		const bool narrow = (info.mode == AddrMode::Imm || info.mode == AddrMode::Zp ||
@@ -463,6 +550,8 @@ private:
 		out.append_hex(in.operand, narrow ? 2u : 4u, true);
 	}
 
+	/// Escribe el comentario `// $ADDR: MNEMONICO $OPERANDO` al final de una línea
+	/// generada, para que el `.cpp` se lea como el desensamblador.
 	static void append_comment(Dyn& out, const Instruction& in, const OpcodeInfo& info) {
 		out.append("  // $");
 		out.append_hex(in.addr, 4u, true);
@@ -478,7 +567,9 @@ private:
 		}
 	}
 
-	static const char* branch_cond(const char* mnemonic) noexcept {
+	/// Condición C++ del flag que prueba una rama (`BNE` → `!cpu.Z`, …).
+	/// \return Cadena estática con la expresión; `"false"` si no es una rama conocida.
+	[[nodiscard]] static const char* branch_cond(const char* mnemonic) noexcept {
 		if (sv_equal(mnemonic, "BNE")) return "!cpu.Z";
 		if (sv_equal(mnemonic, "BEQ")) return "cpu.Z";
 		if (sv_equal(mnemonic, "BCC")) return "!cpu.C";
@@ -490,38 +581,41 @@ private:
 		return "false";
 	}
 
+	/// Escribe una referencia a etiqueta (`prefijo` + 4 dígitos hex).
 	static void append_label_ref(Dyn& out, eng::u16 addr, const char* prefix = "L_") {
 		out.append(prefix);
 		out.append_hex(addr, 4u, true);
 	}
 
-	/// Emite la cabecera documentada del fichero generado: que es, quien lo usa y
-	/// en que contexto, y que recursos necesita (regla de codigo autodocumentado).
+	/// Escribe la cabecera documentada del fichero generado: qué es, quién lo
+	/// compila/ejecuta, en qué contexto y qué recursos necesita. Termina con el
+	/// `#include` de `eng/core` que el resto del fichero presupone.
+	/// \param out Búfer de salida (se añade al final).
 	void emit_header(Dyn& out) const {
 		out.append("// ============================================================\n");
-		out.append("// Codigo C++23 generado por nes_transpiler (fase 1; eng/core, sin STL)\n");
+		out.append("// Código C++23 generado por nes_transpiler (fase 1; eng/core, sin STL)\n");
 		out.append("// ============================================================\n");
 		out.append("//\n");
-		out.append("// QUE ES\n");
-		out.append("//   Traduccion de la PRG-ROM de una ROM NES (mapper ");
+		out.append("// QUÉ ES\n");
+		out.append("//   Traducción de la PRG-ROM de una ROM NES (mapper ");
 		out.append_s32(mapper_);
 		out.append(", ");
 		out.append_u32(prg_size_);
 		out.append(" bytes de PRG) a basic blocks C++23.\n");
-		out.append("//   Cada bb_XXXX corresponde a un rango de direcciones 6502 y ejecuta las\n");
-		out.append("//   mismas operaciones mediante metodos de CPU.\n");
+		out.append("//   Cada función bb_XXXX cubre un rango de direcciones 6502 y ejecuta las\n");
+		out.append("//   mismas operaciones llamando a los métodos de CPU.\n");
 		out.append("//\n");
-		out.append("// QUIEN LO USA / CONTEXTO\n");
+		out.append("// QUIÉN LO USA / CONTEXTO\n");
 		out.append("//   - Lo compila el runtime del nodo (conversion/nes-to-amiga500/runtime/)\n");
 		out.append("//     para Amiga 500, o el host para tests.\n");
 		out.append("//   - Punto de entrada: game_main(), bucle de despacho por cpu.PC.\n");
-		out.append("//   - Los bloques llaman a CPU (cpu.LDA_abs(...)), unico punto de enganche\n");
-		out.append("//     con RAM/PPU/APU/mapper (interceptable por la capa HLE).\n");
+		out.append("//   - Los bloques usan CPU (cpu.LDA_abs(...)), único punto de enganche con\n");
+		out.append("//     RAM/PPU/APU/mapper (interceptable por la capa HLE).\n");
 		out.append("//\n");
 		out.append("// RECURSOS\n");
-		out.append("//   - Sin memoria dinamica; PRG_ROM es constexpr.\n");
-		out.append("//   - dispatch_table: 0x10000 punteros a funcion.\n");
-		out.append("//   - Depende solo de eng/core (tipos) en el runtime.\n");
+		out.append("//   - Sin memoria dinámica; PRG_ROM es constexpr.\n");
+		out.append("//   - dispatch_table: 0x10000 punteros a función.\n");
+		out.append("//   - Requiere el header del runtime: nes_runtime.hpp (se incluye tras PRG_ROM).\n");
 		out.append("//\n");
 		out.append("// VECTORES  Reset=$");
 		out.append_hex(reset_, 4u, true);
@@ -533,6 +627,8 @@ private:
 		out.append("#include <eng/core/types/types.hpp>\n\n");
 	}
 
+	/// Escribe `kPrgSize` y la tabla `PRG_ROM` con los bytes de la PRG, 16 por línea.
+	/// El runtime (`NESMemory::read`) las consulta; por eso van antes de su `#include`.
 	void emit_rom(Dyn& out) const {
 		out.append("static constexpr eng::usize kPrgSize = ");
 		out.append_u32(prg_size_);
@@ -553,6 +649,19 @@ private:
 		out.append("};\n\n");
 	}
 
+	/// Traduce una instrucción a una o varias líneas de C++.
+	///
+	/// Casos especiales:
+	/// - Ramas y `JMP` absoluto con destino **en el mismo bloque** → `goto L_xxxx`.
+	/// - Los mismos con destino en **otro bloque** → `cpu.PC = destino; return;`
+	///   (vuelve al despachador, porque la etiqueta no cruza funciones).
+	/// - `JMP (ind)` → `cpu.JMP_ind(...)`: el destino se conoce en ejecución.
+	/// - `JSR` → `cpu.JSR_abs(destino, retorno)`: apila la dirección de regreso.
+	/// - `RTS`/`RTI`/`BRK` → método de `CPU` seguido de `return`.
+	/// - Resto → `cpu.METODO(arg);` con un comentario con la instrucción original.
+	///
+	/// \param in          Instrucción a emitir.
+	/// \param block_start Dirección de inicio del bloque (para decidir `goto`).
 	void emit_one_instruction(Dyn& out, const Instruction& in, eng::u16 block_start) const {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
@@ -617,7 +726,7 @@ private:
 			out.append("(); return;\n");
 			return;
 		}
-		// Generica
+		// Instrucción corriente: llamada al método de CPU con su comentario.
 		out.append("    cpu.");
 		append_method_name(out, info);
 		out.append('(');
@@ -630,9 +739,19 @@ private:
 		out.append('\n');
 	}
 
-	/// Emite el comentario de documentacion de un basic block: rango 6502, numero
-	/// de instrucciones, que hace, quien lo llama y que recursos usa (regla de
-	/// codigo autodocumentado de `AGENTS.md`, aplicada al codigo generado).
+	/// Escribe en `out` la **ficha** que precede a la función `bb_<start>`.
+	///
+	/// Recorre el bloque para obtener su longitud y su última instrucción y de ahí
+	/// deduce: el rango de direcciones cubierto, cuántas instrucciones contiene,
+	/// cómo termina el flujo (cae, salta, llama, retorna, se detiene) y desde
+	/// dónde puede entrar la ejecución (reset/NMI/IRQ, rama, `JMP`, `JSR` o
+	/// continuación del bloque anterior).
+	///
+	/// No genera código ni modifica el estado: solo consulta las tablas que dejó
+	/// preparadas `compute_block_metadata()`. La invoca `emit_blocks()`, una vez
+	/// por cada inicio de bloque.
+	///
+	/// \param start Dirección 6502 de inicio del bloque (debe ser un líder).
 	void emit_block_doc(Dyn& out, eng::u16 start) const {
 		eng::u16 pc = start;
 		eng::u16 last_addr = start;
@@ -657,13 +776,13 @@ private:
 
 		out.append("//\n// bb_");
 		out.append_hex(start, 4u, true);
-		out.append(" - bloque 6502 $");
+		out.append(" — bloque 6502 $");
 		out.append_hex(start, 4u, true);
 		out.append("..$");
 		out.append_hex(static_cast<eng::u16>(end - 1u), 4u, true);
 		out.append(" (");
 		out.append_u32(count);
-		out.append(count == 1u ? " instruccion)\n// Que hace: " : " instrucciones)\n// Que hace: ");
+		out.append(count == 1u ? " instrucción)\n// Qué hace: " : " instrucciones)\n// Qué hace: ");
 
 		if (last == nullptr) {
 			out.append("bloque sin instrucciones.\n");
@@ -682,9 +801,9 @@ private:
 		} else if (sv_equal(last->mnemonic, "RTS")) {
 			out.append("ejecuta el tramo y retorna de subrutina (RTS).\n");
 		} else if (sv_equal(last->mnemonic, "RTI")) {
-			out.append("ejecuta el tramo y retorna de interrupcion (RTI).\n");
+			out.append("ejecuta el tramo y retorna de interrupción (RTI).\n");
 		} else if (sv_equal(last->mnemonic, "BRK")) {
-			out.append("ejecuta el tramo y detiene la ejecucion (BRK).\n");
+			out.append("ejecuta el tramo y detiene la ejecución (BRK).\n");
 		} else if (last->mode == AddrMode::Rel) {
 			out.append("ejecuta el tramo; si ");
 			out.append(last->mnemonic);
@@ -732,16 +851,21 @@ private:
 		}
 		if (fallin_[start] != 0u) {
 			if (any) out.append(", ");
-			out.append("continuacion del bloque previo");
+			out.append("continuación del bloque anterior");
 			any = true;
 		}
 		if (!any) {
-			out.append("despacho directo por cpu.PC (sin referencias estaticas)");
+			out.append("despacho directo por cpu.PC (sin referencias estáticas)");
 		}
 		out.append(".\n");
 		out.append("// Recursos: ninguno propio; usa CPU y su memoria (RAM/PPU/APU/mapper).\n");
 	}
 
+	/// Escribe la sección de *basic blocks*: primero las declaraciones anticipadas
+	/// de todas las funciones `bb_XXXX` y después cada función precedida de su
+	/// ficha (`emit_block_doc`). Dentro del bloque, cada instrucción se traduce con
+	/// `emit_one_instruction`; al final se emite la caída al bloque siguiente
+	/// (`goto` si es el mismo bloque, o `cpu.PC`/`return` si es otro).
 	void emit_blocks(Dyn& out) const {
 		out.append("// ---- Basic blocks ----\n\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -812,6 +936,10 @@ private:
 		}
 	}
 
+	/// Escribe el despacho y la entrada del programa: la firma `BlockFn`, la tabla
+	/// `dispatch_table` indexada por `cpu.PC`, el estado global `g_state`, el
+	/// inicializador `init_dispatch_table()`, `game_main()` y el `main()` de host
+	/// (excluido en Amiga o con `N2A_NO_HOST_MAIN`).
 	void emit_dispatch(Dyn& out) const {
 		out.append("// ---- Despacho y entrada ----\n\n");
 		out.append("/// Firma de un basic block: recibe el CPU (y su memoria) y muta el estado.\n");
@@ -820,10 +948,10 @@ private:
 		out.append("/// nullptr en las direcciones que no son inicio de bloque.\n");
 		out.append("static BlockFn dispatch_table[0x10000] = {};\n\n");
 		out.append("/// Estado global del juego (CPU + memoria), accesible por el runtime y por\n");
-		out.append("/// los tests host (para comprobar el resultado de una ejecucion).\n");
+		out.append("/// los tests host (para comprobar el resultado de una ejecución).\n");
 		out.append("struct GameState { CPU cpu; NESMemory mem; };\n");
 		out.append("static GameState g_state;\n\n");
-		out.append("/// Rellena dispatch_table con la direccion de inicio de cada basic block.\n");
+		out.append("/// Rellena dispatch_table con la dirección de inicio de cada basic block.\n");
 		out.append("/// Se llama una vez al arrancar, antes de entrar en game_main().\n");
 		out.append("static void init_dispatch_table() {\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -855,7 +983,7 @@ private:
 		out.append("    }\n}\n\n");
 		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
 		out.append("/// Entrada host para tests. En Amiga el runtime llama a game_main() y este\n");
-		out.append("/// simbolo queda excluido (por __m68k__ o por N2A_NO_HOST_MAIN).\n");
+		out.append("/// símbolo queda excluido (por __m68k__ o por N2A_NO_HOST_MAIN).\n");
 		out.append("int main() { game_main(); return 0; }\n");
 		out.append("#endif\n");
 	}

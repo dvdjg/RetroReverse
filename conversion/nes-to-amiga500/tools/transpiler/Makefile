@@ -8,6 +8,9 @@
 CXX ?= g++
 AMIGA_CPP ?= ../../../../../../Amiga-Cpp
 ENG_INC ?= $(AMIGA_CPP)/engine/include
+# El runtime (nes_runtime.hpp) no lo necesita la herramienta, pero sí el C++
+# generado que compilan los tests; `tests/run.sh` lo resuelve por su cuenta.
+RUNTIME_INC ?= ../../runtime/include
 CXXFLAGS ?= -std=gnu++23 -O2 -Wall -Wextra -Werror=narrowing
 
 SRC := src/main.cpp

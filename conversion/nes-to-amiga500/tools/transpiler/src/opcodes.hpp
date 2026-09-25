@@ -2,8 +2,11 @@
 
 /// \file opcodes.hpp
 /// Tabla de opcodes del 6502 (oficiales + ilegales frecuentes) para el
-/// transpilador NES -> C++23. Se guarda como lista de entradas y se expande a una
-/// tabla de 256 ranuras en tiempo de compilacion (`constexpr`), sin `std::map`.
+/// transpilador NES → C++23.
+///
+/// Se declara como **lista de entradas** (`kOpEntries`) y se expande a una tabla
+/// de 256 ranuras indexada por opcode en tiempo de compilación (`constexpr`), sin
+/// `std::map` ni búsquedas en ejecución.
 
 #include <eng/core/types/types.hpp>
 #include <eng/core/util/array.hpp>
@@ -23,20 +26,22 @@ enum class AddrMode : eng::u8 {
 	IndX,
 	IndY,
 	Rel,
-	None, ///< opcode no reconocido
+	None, ///< Sin modo: la entrada no corresponde a ningún opcode conocido.
 };
 
+/// Descripción de un opcode: cómo se llama, cómo direcciona y cuántos bytes ocupa.
 struct OpcodeInfo {
-	const char* mnemonic = nullptr;
-	AddrMode mode = AddrMode::None;
-	eng::u8 size = 0u; ///< bytes totales (opcode + operandos)
+	const char* mnemonic = nullptr; ///< Mnemónico (`"LDA"`), o `nullptr` si es desconocido.
+	AddrMode mode = AddrMode::None; ///< Modo de direccionamiento.
+	eng::u8 size = 0u;              ///< Bytes totales: opcode + operandos.
 };
 
+/// Entrada de la lista de opcodes: el `code` es el byte del 6502.
 struct OpEntry {
-	eng::u8 code;
-	const char* mnemonic;
-	AddrMode mode;
-	eng::u8 size;
+	eng::u8 code;         ///< Byte de opcode.
+	const char* mnemonic; ///< Mnemónico asociado.
+	AddrMode mode;        ///< Modo de direccionamiento.
+	eng::u8 size;         ///< Bytes totales de la instrucción.
 };
 
 inline constexpr OpEntry kOpEntries[] = {
@@ -213,8 +218,10 @@ inline constexpr OpEntry kOpEntries[] = {
 	{0x73, "RRA", AddrMode::IndY, 2},
 };
 
-/// Expande las entradas a una tabla de 256 ranuras (las no listadas quedan
-/// `None`). `constexpr`: el compilador la pliega y no hay coste en runtime.
+/// Expande `kOpEntries` a una tabla de 256 ranuras indexada por opcode (las no
+/// listadas quedan en `None`, con `size == 0`). Es `constexpr`, así que se pliega
+/// en tiempo de compilación y no tiene coste en ejecución.
+/// \return Tabla de 256 `OpcodeInfo`.
 [[nodiscard]] constexpr eng::util::Array<OpcodeInfo, 256> build_opcode_table() noexcept {
 	eng::util::Array<OpcodeInfo, 256> table {};
 	for (const OpEntry& e : kOpEntries) {
@@ -223,6 +230,7 @@ inline constexpr OpEntry kOpEntries[] = {
 	return table;
 }
 
+/// Tabla de opcodes lista para consultar: `kOpcodeTable[opcode]`.
 inline constexpr auto kOpcodeTable = build_opcode_table();
 
 } // namespace n2a

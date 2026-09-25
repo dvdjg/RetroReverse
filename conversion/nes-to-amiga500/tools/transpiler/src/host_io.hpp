@@ -1,9 +1,13 @@
 #pragma once
 
 /// \file host_io.hpp
-/// E/S de fichero y consola para la **herramienta host** (el transpilador). Usa la
-/// libreria C (`<cstdio>`) y los contenedores del engine; **no** usa la STL de
-/// C++ (`<fstream>`, `<iostream>`, `<filesystem>`, `<string>`, `<format>`).
+/// Entrada/salida de la herramienta **host** (el transpilador): lectura y
+/// escritura de ficheros y mensajes por consola.
+///
+/// Usa la biblioteca C (`<cstdio>`) y los contenedores de `eng/core`; **no** usa
+/// la STL de C++ (`<fstream>`, `<iostream>`, `<filesystem>`, `<string>`,
+/// `<format>`). Se separa aquí para que el resto del código no dependa de E/S y
+/// sea más fácil de probar.
 
 #include <eng/core/types/span.hpp>
 #include <eng/core/types/types.hpp>
@@ -15,9 +19,17 @@
 
 namespace n2a {
 
+/// Búfer de bytes en el heap del host (para ROMs y salidas).
 using ByteBuffer = eng::util::Vector<eng::u8, eng::util::HeapAlloc>;
 
-/// Lee un fichero entero a `out`. `false` si no se puede abrir o leer completo.
+/// Lee un fichero completo a `out` en modo binario.
+///
+/// Redimensiona `out` al tamaño del fichero y lo rellena de una vez. Si ya tenía
+/// contenido, se sobreescribe.
+///
+/// \param path Ruta del fichero (cadena terminada en NUL).
+/// \param out  Destino; queda con exactamente `size` bytes.
+/// \return `true` si se abrió y se leyó entero; `false` si no se pudo abrir o leer.
 inline bool read_whole_file(const char* path, ByteBuffer& out) {
 	std::FILE* f = std::fopen(path, "rb");
 	if (f == nullptr) {
@@ -40,7 +52,11 @@ inline bool read_whole_file(const char* path, ByteBuffer& out) {
 	return got == static_cast<eng::usize>(n);
 }
 
-/// Escribe `text` a un fichero (binario). `false` si falla.
+/// Escribe `text` a un fichero en modo binario (lo crea o lo trunca).
+///
+/// \param path Ruta de destino.
+/// \param text Texto a escribir (típicamente el `.cpp` generado).
+/// \return `true` si se escribió todo; `false` si no se pudo abrir o escribir.
 inline bool write_whole_file(const char* path, eng::util::StringView text) {
 	std::FILE* f = std::fopen(path, "wb");
 	if (f == nullptr) {
@@ -54,7 +70,8 @@ inline bool write_whole_file(const char* path, eng::util::StringView text) {
 	return written == text.size();
 }
 
-/// Escribe `text` + salto de linea en stdout.
+/// Escribe `text` seguido de un salto de línea en la salida estándar.
+/// \param text Texto a mostrar (no añade nada si está vacío).
 inline void out_line(eng::util::StringView text) {
 	if (!text.empty()) {
 		std::fwrite(text.data(), 1, static_cast<size_t>(text.size()), stdout);
@@ -62,7 +79,8 @@ inline void out_line(eng::util::StringView text) {
 	std::fputc('\n', stdout);
 }
 
-/// Escribe `text` + salto de linea en stderr.
+/// Escribe `text` seguido de un salto de línea en la salida de error.
+/// \param text Mensaje de diagnóstico.
 inline void err_line(eng::util::StringView text) {
 	if (!text.empty()) {
 		std::fwrite(text.data(), 1, static_cast<size_t>(text.size()), stderr);

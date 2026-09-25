@@ -64,7 +64,7 @@ nes-to-amiga500/
 | Fase | Descripción | Estado |
 |---|---|---|
 | F0 | Fundaciones: estructura, docs, ADR, toolchains de build | **EN CURSO** (este scaffolding) |
-| F1 | CPU 6502 runtime fiel (host) validada con `nestest` | pendiente (base ya existe en `platforms/consoles/nes/`) |
+| F1 | CPU 6502 runtime fiel (host) validada con `nestest` | en curso: módulo [`runtime/include/nes_runtime.hpp`](runtime/include/nes_runtime.hpp); falta validación `nestest` |
 | F2 | Transpilador estático 6502 → C++23 (NROM) | **prototipo funcional** (`tools/transpiler/`) |
 | F3 | Fallback PPU+APU software (host) + validación vs `mesen` | pendiente |
 | F4 | Runtime Amiga mínimo (arranca y pinta con fallback) | pendiente |

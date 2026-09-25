@@ -47,6 +47,12 @@ Dependencias duras: `F1→F2→F3→F4` (cadena crítica) y `F5,F6,F7→F8` (HLE
 **Objetivo**: una clase `CPU` 6502 (oficiales **e ilegales**) y un `NESMemory`/bus correctos, en
 C++23, que sirvan de sustrato al transpilador y al fallback.
 
+**Estado: EN CURSO.** Ya existe el módulo
+[`../runtime/include/nes_runtime.hpp`](../runtime/include/nes_runtime.hpp) con `NESMemory` y `CPU` (registros,
+flags, pila, modos y familias de opcodes, oficiales + ilegales), del que el `.cpp` generado depende.
+Pendiente: semántica exacta y validación con `nestest` (reutilizando la base de
+`platforms/consoles/nes/`), y conteo de ciclos.
+
 - Reutilizar la base ya validada en
   [`../../../platforms/consoles/nes/reimplementation/`](../../../platforms/consoles/nes/reimplementation/)
   (H1/H2: `nestest` OK con ilegales).
