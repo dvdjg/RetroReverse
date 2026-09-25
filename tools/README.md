@@ -353,6 +353,7 @@ Además del toolkit Amiga, `tools/` incluye utilidades agnósticas para el resto
 | `python/capstone_disasm.py` | Desensamblado Capstone (`m6502`, `m68k`) → `.asm` + `.ranges.json`/`.ranges.txt` |
 | `python/ppm_diff.py` | Diff de framebuffers PPM (validación diferencial) |
 | `python/re_functions_to_ranges.py` | Salida de libRetroReversing (`functions.json`) → rangos para `ApplyRanges` |
+| `python/re_trace_to_ranges.py` | Trace de ejecución de libRetroReversing (`trace_log.txt`) → rangos (PCs únicos) |
 | `ghidra/ApplyRanges.java` | Puente trazas/cobertura → Ghidra: crea funciones en los rangos |
 
 `Z80` **no** está en Capstone 5 (llegó en la rama `next`); para Z80 usar **Rizin**. Atajo reproducible:

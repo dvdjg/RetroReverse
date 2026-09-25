@@ -142,6 +142,15 @@ play → frames con input → `save_state` → `pause` (= `libRR_export_all_file
 long_jumps.json}` y `src/{main.asm,data.asm,jumps.asm,functions/*.s,trace_log.txt}` (**CDL/disasm real**).
 Cobertura → `ApplyRanges`: `tools/python/re_functions_to_ranges.py <proyecto>` → `coverage.ranges.txt`.
 
+Todo el flujo está envuelto en [`scripts/re-slice.sh`](../../scripts/re-slice.sh): ejecuta
+`vertical_slice --re` (que arranca/exporta el RE y deja la evidencia en `--out`), y genera
+`coverage.functions.ranges.txt` + `coverage.trace.ranges.txt` para Ghidra.
+`vertical_slice --re` también marca `"re": true` en el manifiesto.
+
+Ciclo completo verificado (Mega Drive, *Golden Axe*): RE → 17 funciones / 189 PCs ejecutados →
+Ghidra 12 (raw 68k + `ApplyRanges`) crea funciones sin cuelgues. Para MD no hay loader Sega en
+Ghidra 12; se importa con `-loader BinaryLoader -loader-baseAddr 0x0 -processor 68000:BE:32:MC68020`.
+
 
 ## Cores disponibles (`external/`)
 

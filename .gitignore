@@ -40,6 +40,7 @@ platforms/**/extraction/savestates/
 platforms/**/extraction/screenshots/
 platforms/**/extraction/memory_dumps/
 platforms/**/extraction/dumps/
+platforms/**/extraction/re/
 
 # --- Salidas generadas de reimpl (tests) ---
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/anim/

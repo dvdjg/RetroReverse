@@ -98,6 +98,7 @@ int main(int argc, char** argv) {
     std::vector<Range> ranges;
     bool have_ranges = false;
     std::string trace_writes;
+    bool re = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -112,27 +113,41 @@ int main(int argc, char** argv) {
         else if (a == "--scenario") scenario = next();
         else if (a == "--dump-ram") { ranges = parse_ranges(next()); have_ranges = true; }
         else if (a == "--trace-writes") trace_writes = next();
+        else if (a == "--re") re = true;
         else { std::fprintf(stderr, "opción desconocida: %s\n", a.c_str()); return 2; }
     }
     if (core.empty() || rom.empty() || out.empty()) {
         std::fprintf(stderr,
             "uso: vertical_slice --core <core> --rom <rom> --out <dir> "
             "[--frames N] [--warmup N] [--interval N] [--dump-ram A:L,...] "
-            "[--trace-writes A:L] [--scenario idle|start] [--det K]\n");
+            "[--trace-writes A:L] [--scenario idle|start] [--det K] [--re]\n");
         return 2;
     }
 
-    const fs::path root(out);
+    // Absolutizar y situar el CWD en --out (así la evidencia del reversing cae ahí).
+    core = fs::absolute(core).string();
+    rom = fs::absolute(rom).string();
+    const fs::path root = fs::absolute(out);
     fs::create_directories(root / "traces");
     fs::create_directories(root / "savestates");
     fs::create_directories(root / "screenshots");
     fs::create_directories(root / "memory_dumps");
+    fs::current_path(root);
 
     try {
         LibretroAdapter emu(core);
         std::printf("core: %s\n", emu.core_name().c_str());
         emu.load_rom(rom);
         std::printf("rom: %s\n", rom.c_str());
+
+        // Modo reversing: arrancar el runtime RE (por defecto está en paused).
+        if (re) {
+            if (emu.has_re())
+                std::printf("re play -> %s\n", emu.re_command(
+                    R"({"category":"play","state":{"startAt":0,"speed":100,"fullLogging":true,"paused":false,"endAt":-1,"loopFrame":1}})").c_str());
+            else
+                std::printf("AVISO: el core no expone rr_re_command (seguiré sin reversing)\n");
+        }
 
         // RAM del sistema (si el core la expone) y rangos por defecto.
         const std::size_t ram = emu.system_ram_size();
@@ -247,6 +262,13 @@ int main(int argc, char** argv) {
             std::printf("escrituras trazadas: %zu\n", write_count);
         }
 
+        // --- Cierre del reversing: pause dispara la exportación (CDL/disassembly) ---
+        if (re && emu.has_re()) {
+            emu.re_command(R"({"category":"save_state","state":{"name":"end"}})");
+            std::printf("re pause/export -> %s\n", emu.re_command(
+                R"({"category":"pause","state":{"paused":true,"fullLogging":true,"speed":100,"startAt":-1}})").c_str());
+        }
+
         // --- Manifiesto ---
         std::ofstream man(root / "traces" / "manifest.json");
         man << "{\n"
@@ -259,6 +281,7 @@ int main(int argc, char** argv) {
             << "  \"warmup\": " << warmup << ",\n"
             << "  \"interval\": " << interval << ",\n"
             << "  \"scenario\": \"" << scenario << "\",\n"
+            << "  \"re\": " << (re ? "true" : "false") << ",\n"
             << "  \"savestate_size\": " << state_size << ",\n"
             << "  \"system_ram_size\": " << ram << ",\n"
             << "  \"determinism\": {\"checked_frames\": " << det_checked
