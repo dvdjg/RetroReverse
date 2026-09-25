@@ -5,9 +5,9 @@ consolas y ordenadores (Amiga 500, NES, …) — de forma **automatizada y asist
 objetivo de producir una versión **C++23 + SDL3** que **no se distinga** del original
 (*pixel-perfect* y temporizaciones exactas).
 
-> **Un solo repositorio** (decisión [ADR 0004](docs/adr/0004-migracion-amiga-reverse.md)): aquí
-> convive el **marco** con su **subproyecto Amiga** (`platforms/computers/amiga500/demos/arte/`, expediente «Arte»). El repo se
-> llama hoy `Amiga-Reverse` en GitHub; puede renombrarse a `RetroReverse` para coherencia.
+> **Un solo repositorio** (decisión [ADR 0004](docs/adr/0004-migracion-amiga-reverse.md)): el
+> **marco** y su **plataforma Amiga** (`platforms/computers/amiga500/demos/arte/`, expediente
+> «Arte») conviven aquí. Repositorio: **`dvdjg/RetroReverse`** (privado).
 
 > **Aviso legal**: repositorio **privado** de estudio personal. Se analiza **para aprender** y se
 > documentan **técnicas y algoritmos** (ideas). El contenido **propio** va bajo **MIT**; el material

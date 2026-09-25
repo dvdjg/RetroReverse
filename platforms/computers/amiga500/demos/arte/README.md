@@ -66,11 +66,10 @@ Los scripts viven en el **toolkit compartido** [`../tools/`](../../../../../tool
 ## Cómo reproducir
 
 ```powershell
-cd Amiga-Reverse\sanity-arte
-python ..\platforms\computers\amiga500\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
-node   ..\platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node   ..\platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec extraction\specs\imp-dump.json --out out --boot 5
-node   ..\platforms\computers\amiga500\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
+python platforms\computers\amiga500\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --verbose
+node   platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\rom\sanity.uae --adf platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node   platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\rom\sanity.uae --adf platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --spec platforms\computers\amiga500\demos\arte\extraction\specs\imp-dump.json --out platforms\computers\amiga500\demos\arte\extraction --boot 5
+node   platforms\computers\amiga500\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\rom\sanity.uae --adf platforms\computers\amiga500\demos\arte\rom\raw\sanity-arte.adf --boot 21 --out platforms\computers\amiga500\demos\arte\extraction --prefix arte-title
 ```
 
 Comandos exactos y notas en [`tools/README.md`](tools/README.md).
