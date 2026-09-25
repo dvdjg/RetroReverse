@@ -40,6 +40,7 @@ platforms/computers/amiga500/demos/arte/reimplementation/reference/**/anim_arte/
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/canvas/
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/sphere_frame_*.raw
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/*_test
+platforms/computers/amiga500/demos/arte/reimplementation/build/
 
 # --- Volcados binarios auxiliares de herramientas (regenerables, no son fuente) ---
 tools/node/*.bin
