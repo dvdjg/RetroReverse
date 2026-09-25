@@ -1,0 +1,70 @@
+{
+  "game_id": "pacman",
+  "romset": "pacman",
+  "board": "namco_pacman (Midway/PuckMan hardware) — arcade dedicado",
+  "source": {
+    "driver": "MAME src/mame/pacman/pacman.cpp (+ pacman.h, pacman_v.cpp)",
+    "license": "BSD-3-Clause",
+    "retrieved": "2026",
+    "note": "Mapa extraído del driver oficial. Verificar contra el romset concreto."
+  },
+  "cpu": [
+    { "id": "maincpu", "type": "Z80", "clock_hz": 3072000, "confidence": "alta" }
+  ],
+  "sound": { "chip": "Namco WSG", "voices": 3, "confidence": "alta" },
+  "screen": {
+    "width": 224,
+    "height": 288,
+    "refresh_hz": 60.606,
+    "vblank_note": "El driver cita VBlank 60.6 Hz",
+    "confidence": "alta"
+  },
+  "interrupts": {
+    "irq": "VBlank (habilitada por latch 0x5000)",
+    "vector": "I/O port $0 fija el vector de interrupción",
+    "nmi": "no usado en el pacman base",
+    "confidence": "alta"
+  },
+  "memory_map": [
+    { "range": "0x0000-0x3fff", "type": "rom", "name": "program", "mirror": "0x8000", "size": "16K" },
+    { "range": "0x4000-0x43ff", "type": "ram", "name": "videoram", "mirror": "0xa000", "note": "tilemap (VRAM)" },
+    { "range": "0x4400-0x47ff", "type": "ram", "name": "colorram", "mirror": "0xa000" },
+    { "range": "0x4800-0x4bff", "type": "ram", "name": "unused/bug", "mirror": "0xa000", "note": "Pacman accede aquí por un bug en la rutina que traduce la posición interna al llegar al túnel derecho" },
+    { "range": "0x4c00-0x4fef", "type": "ram", "name": "workram", "mirror": "0xa000" },
+    { "range": "0x4ff0-0x4fff", "type": "ram", "name": "spriteram", "note": "8 pares de 2 bytes: (imagen 2-7, flipY b0, flipX b1) + color" },
+    { "range": "0x5060-0x506f", "type": "ram", "name": "spriteram2", "note": "coordenadas x/y de 8 sprites (solo escritura)" }
+  ],
+  "io_read": [
+    { "addr": "0x5000", "name": "IN0" },
+    { "addr": "0x5040", "name": "IN1" },
+    { "addr": "0x5080", "name": "DSW1" },
+    { "addr": "0x50c0", "name": "DSW2", "note": "solo en algunos sets (Ponpoko, mschamp, Van Van Car, Rock-N-Roll Trivia 2)" }
+  ],
+  "io_write": [
+    { "range": "0x5000-0x5007", "name": "latch", "bits": {
+        "0": "interrupt enable",
+        "1": "sound enable",
+        "2": "sin conexión (8K)",
+        "3": "flip screen",
+        "4": "1 player start lamp",
+        "5": "2 players start lamp",
+        "6": "coin lockout (sin transistores en placa)",
+        "7": "coin counter"
+    } },
+    { "range": "0x5040-0x505f", "name": "Namco WSG (3 voces)", "note": "accumulator/frequency/volume por nibbles" },
+    { "addr": "0x50c0", "name": "watchdog reset" }
+  ],
+  "bugs_to_reproduce": [
+    { "id": "up_animation", "desc": "La animación de Pac-Man hacia arriba está 1 píxel demasiado abajo.", "confidence": "alta" },
+    { "id": "right_tunnel_ram", "desc": "La traducción de posición en el túnel derecho usa RAM fuera de rango (0x4800-0x4bff).", "confidence": "alta" },
+    { "id": "split_screen_256", "desc": "El nivel 256 provoca el fallo de mitad de pantalla (ver Dossier).", "confidence": "alta" }
+  ],
+  "known_addresses": [
+    { "addr": "0x2a23", "desc": "rutina pseudo-aleatoria (RNG); usada cuando los fantasmas están azules.", "confidence": "media", "source": "comentarios del driver MAME" }
+  ],
+  "assets_expected": [
+    "program ROMs (0x0000-0x3fff)",
+    "graphics ROMs (tiles/sprites) + color PROMs",
+    "tilemap: 28x36 tiles (224x288 px, 8x8)"
+  ]
+}

@@ -43,7 +43,7 @@ Transformación: `X' = m[0]*x + m[3]*y + m[6]*z`  (etc.).
 - **`transform(a0, a1, a2)`**: `a0`=puntos (3 words/punto), `a1`=matriz, `a2`=salida; **3 puntos/llamada**.
 - **`orthonormalize(a0, a1)`**: `a0`=matriz (se modifica in situ), `a1`=salida; preserva `d2-d7/a2`.
   Detalle de registros y coste en `reference/orthonormalize_amiga.asm`.
-- Convención y uso en el engine: [`../../../PORTING.md`](../../../PORTING.md).
+- Convención y uso en el engine: [`../../../PORTING.md`](../../../../../../../PORTING.md).
 
 ## Por qué así (criterio 68000)
 

@@ -132,7 +132,7 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 
 Evaluación completa en [`GHIDRA_AMIGA_EVAL.md`](GHIDRA_AMIGA_EVAL.md) y
 [`GHIDRA_DECOMP_VS_REIMPL.md`](GHIDRA_DECOMP_VS_REIMPL.md); herramienta en
-[`../../toolkit/ghidra/`](../../toolkit/ghidra/README.md). Salidas en `out/ghidra/` (regenerables).
+[`../../toolkit/ghidra/`](../../../../../../tools/ghidra/README.md). Salidas en `out/ghidra/` (regenerables).
 
 - **Loaders**: Ghidra 12.0.1 + extensión `ghidra-amiga` cargan **Hunk** y **`.uss`** y resuelven
   las llamadas a librería con símbolos **NDK 3.9**. `out/disk` **no contiene Hunk** (trackloader);

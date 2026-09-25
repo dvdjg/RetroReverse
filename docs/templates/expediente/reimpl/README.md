@@ -2,7 +2,7 @@
 
 Destino final del expediente: reescribir como **algoritmo propio** cada técnica recuperada.
 
-**Contrato de técnica y uso en el engine**: ver [`../../PORTING.md`](../../PORTING.md)
+**Contrato de técnica y uso en el engine**: ver [`../../PORTING.md`](../../../../PORTING.md)
 (funcionamiento + C/C++ de referencia + ASM canónico + contrato de llamada/ABI + checklist).
 
 ## Reglas

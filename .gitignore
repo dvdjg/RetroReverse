@@ -24,15 +24,15 @@ desktop.ini
 *.log
 
 # --- Salidas generadas de reimpl (tests) ---
-sanity-arte/reimpl/**/anim/
-sanity-arte/reimpl/**/anim_arte/
-sanity-arte/reimpl/**/canvas/
-sanity-arte/reimpl/**/sphere_frame_*.raw
+platforms/computers/amiga500/demos/arte/reimpl/**/anim/
+platforms/computers/amiga500/demos/arte/reimpl/**/anim_arte/
+platforms/computers/amiga500/demos/arte/reimpl/**/canvas/
+platforms/computers/amiga500/demos/arte/reimpl/**/sphere_frame_*.raw
 
-# --- Volcados binarios auxiliares del toolkit (regenerables, no son fuente) ---
-toolkit/node/*.bin
-toolkit/out/
+# --- Volcados binarios auxiliares de herramientas (regenerables, no son fuente) ---
+tools/node/*.bin
+tools/out/
 
 # --- Binarios de test compilados (sin extension, p. ej. bajo WSL) ---
-sanity-arte/reimpl/**/*_test
+platforms/computers/amiga500/demos/arte/reimpl/**/*_test
 

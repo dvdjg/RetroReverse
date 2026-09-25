@@ -1,6 +1,6 @@
 # tools — comandos del expediente <Título>
 
-Este expediente usa el **toolkit compartido** [`../../toolkit/`](../../toolkit/README.md).
+Este expediente usa el **toolkit compartido** [`../../toolkit/`](../../../../tools/README.md).
 No crear scripts propios salvo necesidad real; documentar aquí los comandos exactos.
 
 ## DMS -> ADF

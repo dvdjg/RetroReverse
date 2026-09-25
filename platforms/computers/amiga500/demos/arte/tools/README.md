@@ -1,7 +1,7 @@
 # tools — comandos del expediente Sanity-Arte
 
 Este expediente **no tiene scripts propios**: usa el toolkit compartido
-[`../../toolkit/`](../../toolkit/README.md). Aquí quedan documentados los comandos exactos
+[`../../toolkit/`](../../../../../../tools/README.md). Aquí quedan documentados los comandos exactos
 usados para este título, para reproducirlo.
 
 ## 0. DMS -> ADF (verificado)

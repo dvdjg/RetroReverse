@@ -1,7 +1,7 @@
 # reimpl — recreación en C++ (Sanity-Arte)
 
 Destino final: reescribir como **algoritmo propio** cada técnica recuperada. Reglas generales en
-[`../../_template/reimpl/README.md`](../../_template/reimpl/README.md).
+[`../../_template/reimpl/README.md`](../../../../../../docs/templates/expediente/reimpl/README.md).
 
 **Criterio (usuario)**: las **rutinas optimizadas** del ensamblador se conservan como **versión
 canónica** en `reference/*_amiga.asm` (desensamblado del binario, con comentarios) y se usan en la

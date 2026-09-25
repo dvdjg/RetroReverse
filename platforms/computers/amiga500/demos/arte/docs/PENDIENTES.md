@@ -52,8 +52,8 @@ subproyecto de un marco mayor de conversión de juegos clásicos a PC).
 
 ## F. Integración con el marco RetroReverse (mismo repo)
 
-Ver [`../../docs/MIGRATION_AMIGA_REVERSE.md`](../../docs/MIGRATION_AMIGA_REVERSE.md) y
-[`../../docs/ROADMAP.md`](../../docs/ROADMAP.md) (fase P2).
+Ver [`../../docs/MIGRATION_AMIGA_REVERSE.md`](../../../../../../docs/MIGRATION_AMIGA_REVERSE.md) y
+[`../../docs/ROADMAP.md`](../../../../../../docs/ROADMAP.md) (fase P2).
 
 | # | Pendiente | Valor |
 |---|---|---|
@@ -72,4 +72,4 @@ Ver [`../../docs/MIGRATION_AMIGA_REVERSE.md`](../../docs/MIGRATION_AMIGA_REVERSE
 6. **F1–F4** (integración en el marco mayor).
 
 > Nota: los pendientes **A/B/C** son del expediente actual; **F** depende de la reestructuración
-> (documentación del marco en [`../../docs/`](../../docs/)).
+> (documentación del marco en [`../../docs/`](../../../../../../docs/)).

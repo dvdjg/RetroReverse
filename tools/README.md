@@ -32,7 +32,7 @@ toolkit/
 ```
 
 Las *specs* de enganche son específicas de cada título y viven en el expediente, p. ej.
-`../sanity-arte/specs/sanity-arte.json`.
+`../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`.
 
 ## Requisitos
 
@@ -87,8 +87,8 @@ Evitar relanzar en bucle: lanzar **una vez** y sondear dentro de esa sesión. Au
 cierra por PID):
 
 ```powershell
-./capture-live.ps1 -Config ../sanity-arte/out/sanity.uae `
-  -Adf ../sanity-arte/out/disk/sanity-arte.adf `
+./capture-live.ps1 -Config ../platforms/computers/amiga500/demos/arte/out/sanity.uae `
+  -Adf ../platforms/computers/amiga500/demos/arte/out/disk/sanity-arte.adf `
   -ProbeAddr 0x26758 -ProbePattern 0fff0ffc0fd9 -OutDir ./shots
 ```
 
@@ -208,7 +208,7 @@ node hook-trampoline.mjs --config out\game.uae --adf out\disk\game.adf `
   --spec ..\sanity-arte\specs\sanity-arte.json --out out --boot 4
 ```
 
-Spec JSON (ejemplo real: `../sanity-arte/specs/sanity-arte.json`):
+Spec JSON (ejemplo real: `../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`):
 
 | Campo | Descripción |
 |---|---|
@@ -246,7 +246,7 @@ node probe-layout.mjs --config out\game.uae --adf out\disk\game.adf --spec specs
 ```
 
 Campos de la spec: `entryPatternHex`, `retOffset`, `headerReg`, `headerMagics`, `lenOffsets`,
-`searchStart/Size`, `regions`, `minRun`. Ejemplo real: `../sanity-arte/specs/imp-routine.json`.
+`searchStart/Size`, `regions`, `minRun`. Ejemplo real: `../platforms/computers/amiga500/demos/arte/specs/imp-routine.json`.
 
 ## `dump-display.mjs` (CLI)
 
@@ -321,14 +321,14 @@ Análisis con **Ghidra** y la extensión `BartmanAbyss/ghidra-amiga` (loaders **
 `.uss`** y **Kickstart ROM**, analyzer de llamadas a librería + símbolos **NDK 3.9**, y el
 **decompilador a C**). Scripts headless: `InfoDump`, `DumpDecomp`, `FindSig`, `DumpRange`.
 Instalación, comandos y limitaciones: [`ghidra/README.md`](ghidra/README.md). Evaluación completa:
-[`../sanity-arte/docs/GHIDRA_AMIGA_EVAL.md`](../sanity-arte/docs/GHIDRA_AMIGA_EVAL.md).
+[`../platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md`](../platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md).
 
 Rizin/radare2 es la alternativa ligera para disasm + xrefs/CFG (sin decompilador en el build base).
 Ver `../LECCIONES_APRENDIDAS.md` §7bis.
 
 ## Añadir soporte a un rip nuevo
 
-1. Copiar una spec existente (p. ej. `../sanity-arte/specs/sanity-arte.json`) al `specs/` del
+1. Copiar una spec existente (p. ej. `../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`) al `specs/` del
    expediente y adaptar `patternHex`/offsets/registros a la rutina hallada (usar
    `winuae-session.findPattern` o `bin_scan.py` para localizar la firma).
 2. Ejecutar `dump-ram.mjs` para el volcado inicial y `hook-trampoline.mjs` para los módulos.

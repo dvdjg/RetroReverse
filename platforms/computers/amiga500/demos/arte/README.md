@@ -9,8 +9,8 @@ una versión de alto nivel -> **volver a construir la misma demo desde el códig
 engine propio. El ensamblador se usa como fuente de conocimiento y solo para las partes críticas
 si es imprescindible (detalle en `docs/ROADMAP.md`).
 
-Estructura y reglas generales: [`../STRUCTURE.md`](../STRUCTURE.md).
-Método reutilizable: [`../LECCIONES_APRENDIDAS.md`](../LECCIONES_APRENDIDAS.md).
+Estructura y reglas generales: [`../STRUCTURE.md`](../../../../../STRUCTURE.md).
+Método reutilizable: [`../LECCIONES_APRENDIDAS.md`](../../../../../LECCIONES_APRENDIDAS.md).
 
 ## Estado
 
@@ -53,7 +53,7 @@ sanity-arte/
   reimpl/                 recreación en C++
 ```
 
-Los scripts viven en el **toolkit compartido** [`../toolkit/`](../toolkit/README.md):
+Los scripts viven en el **toolkit compartido** [`../toolkit/`](../../../../../tools/README.md):
 
 | Script | Uso |
 |---|---|

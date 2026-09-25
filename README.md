@@ -65,36 +65,36 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout destino en
 Expediente de **ingeniería inversa de software Amiga 68k**. Objetivo: **recuperar las técnicas**
 (sobre todo gráficas), **comprender el asm 68k**, **inferir el C++ equivalente** y **reconstruir**
 en un engine propio. Las rutinas optimizadas (p. ej. Q15 con `muls.w`/`swap` del motor 3D) son la
-**referencia canónica** que se porta. Ver [`sanity-arte/README.md`](sanity-arte/README.md).
+**referencia canónica** que se porta. Ver [`sanity-arte/README.md`](platforms/computers/amiga500/demos/arte/README.md).
 
 ## Índice de expedientes
 
 | Título | Año | Plataforma | Estado | Carpeta |
 |---|---|---|---|---|
-| **Arte** (Sanity) | 1993 | A500 OCS/ECS | En curso | [`sanity-arte/`](sanity-arte/README.md) |
+| **Arte** (Sanity) | 1993 | A500 OCS/ECS | En curso | [`sanity-arte/`](platforms/computers/amiga500/demos/arte/README.md) |
 
 Cada título vive en su propia carpeta y sigue la **estructura canónica** de [`STRUCTURE.md`](STRUCTURE.md).
-Para uno nuevo se copia [`_template/`](_template/).
+Para uno nuevo se copia [`_template/`](docs/templates/expediente/).
 
 ## Técnicas recuperadas y portadas
 
-Recreaciones en C++ en [`sanity-arte/reimpl/`](sanity-arte/reimpl/README.md); estado en
-[`ROADMAP.md`](sanity-arte/docs/ROADMAP.md):
+Recreaciones en C++ en [`sanity-arte/reimpl/`](platforms/computers/amiga500/demos/arte/reimpl/README.md); estado en
+[`ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md):
 
 | Técnica | Módulo | Reimpl |
 |---|---|---|
-| Seno Q1.14 | `SINE.soslibrary` | [`sine_table`](sanity-arte/reimpl/sine_table/README.md) |
-| Motor 3D Q15 (matriz + transform + ortonormalización) | `0x0B0C2C` | [`motor_3d`](sanity-arte/reimpl/motor_3d/README.md) |
-| Blobs con lookup tables | `0x0B0C2C` | [`blob_render`](sanity-arte/reimpl/blob_render/README.md) |
-| Distorsión SINE (8 osciladores) | `0x096A28` | [`sine_wobble`](sanity-arte/reimpl/sine_wobble/README.md) |
-| Scrolltext (fuente 3 planos) | `0x02162C` | [`scrolltext`](sanity-arte/reimpl/scrolltext/README.md) |
-| Fade de paleta por nibbles | `0x0B0C2C` | [`palette_fade`](sanity-arte/reimpl/palette_fade/README.md) |
-| Esfera texturizada 16 col. | (Chaos) | [`sphere`](sanity-arte/reimpl/sphere/README.md) |
-| Túnel / corridor (raycast por filas) | `0x03AFFC` | [`tunnel`](sanity-arte/reimpl/tunnel/README.md) |
-| Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](sanity-arte/reimpl/zoom/README.md) |
+| Seno Q1.14 | `SINE.soslibrary` | [`sine_table`](platforms/computers/amiga500/demos/arte/reimpl/sine_table/README.md) |
+| Motor 3D Q15 (matriz + transform + ortonormalización) | `0x0B0C2C` | [`motor_3d`](platforms/computers/amiga500/demos/arte/reimpl/motor_3d/README.md) |
+| Blobs con lookup tables | `0x0B0C2C` | [`blob_render`](platforms/computers/amiga500/demos/arte/reimpl/blob_render/README.md) |
+| Distorsión SINE (8 osciladores) | `0x096A28` | [`sine_wobble`](platforms/computers/amiga500/demos/arte/reimpl/sine_wobble/README.md) |
+| Scrolltext (fuente 3 planos) | `0x02162C` | [`scrolltext`](platforms/computers/amiga500/demos/arte/reimpl/scrolltext/README.md) |
+| Fade de paleta por nibbles | `0x0B0C2C` | [`palette_fade`](platforms/computers/amiga500/demos/arte/reimpl/palette_fade/README.md) |
+| Esfera texturizada 16 col. | (Chaos) | [`sphere`](platforms/computers/amiga500/demos/arte/reimpl/sphere/README.md) |
+| Túnel / corridor (raycast por filas) | `0x03AFFC` | [`tunnel`](platforms/computers/amiga500/demos/arte/reimpl/tunnel/README.md) |
+| Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](platforms/computers/amiga500/demos/arte/reimpl/zoom/README.md) |
 
 Pendientes: el **blit/copper del zoom** y la **rutina de render del túnel** (init localizado, render
-por dispatch indirecto). Inventario completo en [`sanity-arte/docs/PENDIENTES.md`](sanity-arte/docs/PENDIENTES.md).
+por dispatch indirecto). Inventario completo en [`sanity-arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
 
 ## Cómo empezar (Amiga)
 
@@ -110,7 +110,7 @@ node toolkit\node\hook-trampoline.mjs --config sanity-arte\out\sanity.uae --adf 
 ..\toolkit\ghidra\decompile-modules.ps1 -ModulesJson sanity-arte\out\modules\modules.json -OutDir sanity-arte\out\ghidra
 ```
 
-Comandos completos: [`sanity-arte/tools/README.md`](sanity-arte/tools/README.md).
+Comandos completos: [`sanity-arte/tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md).
 
 ## Metodología (RE Amiga)
 
@@ -128,16 +128,16 @@ Método completo en [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md); contra
 
 ## Toolkit reutilizable
 
-Utilidades **parametrizables**, documentadas en [`toolkit/README.md`](toolkit/README.md):
+Utilidades **parametrizables**, documentadas en [`toolkit/README.md`](tools/README.md):
 
 | Área | Herramientas |
 |---|---|
 | **DMS / binarios** | `python/dms_unpack.py`, `python/bin_scan.py` |
 | **Emulador (WinUAE-DBG + GDB)** | `node/winuae-session.mjs`, `dump-ram.mjs`, `hook-trampoline.mjs`, `probe-*.mjs`, `launch/side/stop.mjs`, `capture-live.ps1` |
 | **Vídeo / assets** | `node/dump-display.mjs`, `node/decode-bitplanes.mjs`, `python/copper_decode.py`, `python/planar_decode.py`, `python/ollama_vision.py` |
-| **Desensamblado / decompilado** | `ghidra/` (headless + pipeline), ver [`toolkit/ghidra/README.md`](toolkit/ghidra/README.md) |
+| **Desensamblado / decompilado** | `ghidra/` (headless + pipeline), ver [`toolkit/ghidra/README.md`](tools/ghidra/README.md) |
 
-Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](toolkit/python/AMIGA_BITMAPS.md).
+Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](tools/python/AMIGA_BITMAPS.md).
 
 ## Entorno / toolchain
 
@@ -181,20 +181,20 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](toolkit/python/AMI
 
 | Documento | Contenido |
 |---|---|
-| [`sanity-arte/README.md`](sanity-arte/README.md) | Estado, inventario y cómo reproducir |
-| [`docs/ROADMAP.md`](sanity-arte/docs/ROADMAP.md) | Fases, criterios de cierre, estado de efectos |
-| [`docs/PENDIENTES.md`](sanity-arte/docs/PENDIENTES.md) | Inventario vivo de trabajo abierto |
-| [`docs/HALLAZGOS.md`](sanity-arte/docs/HALLAZGOS.md) | Datos concretos con evidencia |
-| [`docs/TECNICAS.md`](sanity-arte/docs/TECNICAS.md) | Efecto a efecto + receta de reimplementación |
-| [`docs/GHIDRA_AMIGA_EVAL.md`](sanity-arte/docs/GHIDRA_AMIGA_EVAL.md) | Evaluación de Ghidra + extensión |
-| [`docs/GHIDRA_DECOMP_VS_REIMPL.md`](sanity-arte/docs/GHIDRA_DECOMP_VS_REIMPL.md) | Decompilado vs. reimpl y cross-check con rz-ghidra |
-| [`docs/PORT_ENGINE_ZOOM_Y_TUNEL.md`](sanity-arte/docs/PORT_ENGINE_ZOOM_Y_TUNEL.md) | Guía de port a un engine A500 50 Hz |
-| [`tools/README.md`](sanity-arte/tools/README.md) | Comandos exactos del expediente |
-| [`recovered/maps/modules.md`](sanity-arte/recovered/maps/modules.md) | Módulos, direcciones, tamaños, sha1 |
+| [`sanity-arte/README.md`](platforms/computers/amiga500/demos/arte/README.md) | Estado, inventario y cómo reproducir |
+| [`docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md) | Fases, criterios de cierre, estado de efectos |
+| [`docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md) | Inventario vivo de trabajo abierto |
+| [`docs/HALLAZGOS.md`](platforms/computers/amiga500/demos/arte/docs/HALLAZGOS.md) | Datos concretos con evidencia |
+| [`docs/TECNICAS.md`](platforms/computers/amiga500/demos/arte/docs/TECNICAS.md) | Efecto a efecto + receta de reimplementación |
+| [`docs/GHIDRA_AMIGA_EVAL.md`](platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md) | Evaluación de Ghidra + extensión |
+| [`docs/GHIDRA_DECOMP_VS_REIMPL.md`](platforms/computers/amiga500/demos/arte/docs/GHIDRA_DECOMP_VS_REIMPL.md) | Decompilado vs. reimpl y cross-check con rz-ghidra |
+| [`docs/PORT_ENGINE_ZOOM_Y_TUNEL.md`](platforms/computers/amiga500/demos/arte/docs/PORT_ENGINE_ZOOM_Y_TUNEL.md) | Guía de port a un engine A500 50 Hz |
+| [`tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md) | Comandos exactos del expediente |
+| [`recovered/maps/modules.md`](platforms/computers/amiga500/demos/arte/recovered/maps/modules.md) | Módulos, direcciones, tamaños, sha1 |
 
 ## Añadir un expediente nuevo
 
-1. Copiar [`_template/`](_template/) a `<titulo>/` (o a `platforms/...` cuando se aplique el layout).
+1. Copiar [`_template/`](docs/templates/expediente/) a `<titulo>/` (o a `platforms/...` cuando se aplique el layout).
 2. Rellenar `README.md` y `docs/ROADMAP.md` (fase 0 = extraer la imagen).
 3. Añadir la spec en `specs/` y documentar los comandos del toolkit en `tools/README.md`.
 4. Ir volcando: `out/` → revisar → promover a `recovered/` → reimplementar en `reimpl/`.

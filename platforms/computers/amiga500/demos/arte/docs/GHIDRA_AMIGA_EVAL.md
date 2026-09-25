@@ -2,7 +2,7 @@
 
 Evaluación práctica de `BartmanAbyss/ghidra-amiga` para la labor de este expediente, ejecutada
 completa (pasos 1–4). Herramienta documentada en
-[`../../toolkit/ghidra/README.md`](../../toolkit/ghidra/README.md).
+[`../../toolkit/ghidra/README.md`](../../../../../../tools/ghidra/README.md).
 
 **Entorno**: Ghidra 12.0.1, extensión compilada con Gradle 9.2.1, JDK 21.
 Todo el material regenerable queda en `out/ghidra/`.
