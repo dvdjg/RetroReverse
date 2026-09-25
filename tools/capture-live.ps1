@@ -11,7 +11,7 @@ Uso:
 
 Ejemplo (corridor de Sanity-Arte; la paleta del tunel aparece en 0x2675A):
   ./capture-live.ps1 -Config ../platforms/computers/amiga500/demos/arte/out/sanity.uae `
-                     -Adf    ../platforms/computers/amiga500/demos/arte/out/disk/sanity-arte.adf `
+                     -Adf    ../platforms/computers/amiga500/demos/arte/rom/raw/sanity-arte.adf `
                      -ProbeAddr 0x26758 -ProbePattern 0fff0ffc0fd9 -OutDir ./shots
 
 Notas:

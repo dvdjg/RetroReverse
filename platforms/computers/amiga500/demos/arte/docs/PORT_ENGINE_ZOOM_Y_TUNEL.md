@@ -109,7 +109,7 @@ inviable en 68000). La técnica clásica de Chaos es un **mapa de coordenadas fi
 
 - **Una vez** (al entrar al efecto, o "asado" en disco): para cada píxel `(x,y)` calcular
   `offset(x,y)` = índice a la textura (`trueX,trueY`, o un `uint16` de offset). Se guarda como
-  **mapa de bytes/words**. Esto es idéntico a la esfera de 16 colores (`reimpl/sphere`), que usa un
+  **mapa de bytes/words**. Esto es idéntico a la esfera de 16 colores (`reimplementation/reference/sphere`), que usa un
   mapa fijo de `90×96` words + textura.
 - **Por frame** (50 Hz): sólo se **suma** el desplazamiento de animación (`time/vel`) al offset y se
   **indexa la textura**. El bucle de píxel es `color = textura[(offset[x,y] + d) & 0xFFFF]`.
@@ -119,7 +119,7 @@ inviable en 68000). La técnica clásica de Chaos es un **mapa de coordenadas fi
     (técnica "chunky to planar": 4-6 blits por bloque de 16 píxeles con tablas de 256 entradas);
   - la demo usa un mapa de coordenadas + `move`/`eor`/`and`, que es exactamente esto.
 - **Copper**: la paleta de 32 colores se carga/`fade`a en la Copperlist (cubierto por
-  `reimpl/palette_fade`); si el túnel cambia el fondo por bandas, hacerlo con el copper.
+  `reimplementation/reference/palette_fade`); si el túnel cambia el fondo por bandas, hacerlo con el copper.
 - **Doble buffer** y punteros BPL por frame.
 
 ### 3.3 Qué en ASM y qué en C
@@ -181,5 +181,5 @@ llega a 50 Hz**: es la parte que hay que escribir en ASM (o delegar al blitter) 
 - **Planarizar mal**: los 5 planos deben escribirse con offsets por módulo (`BPL1MOD/BPL2MOD`)
   correctos; un error de módulo desplaza la imagen entera.
 
-*(Ver también `recovered/code/ALGORITMOS_ZOOM_Y_TUNEL.md`, `docs/TECNICAS.md` y
+*(Ver también `extraction/disassembly/ALGORITMOS_ZOOM_Y_TUNEL.md`, `docs/TECNICAS.md` y
 `tools/python/AMIGA_BITMAPS.md`.)*

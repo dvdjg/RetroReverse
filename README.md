@@ -78,20 +78,20 @@ Para uno nuevo se copia [`docs/templates/expediente/`](docs/templates/expediente
 
 ## Técnicas recuperadas y portadas
 
-Recreaciones en C++ en [`platforms/computers/amiga500/demos/arte/reimpl/`](platforms/computers/amiga500/demos/arte/reimpl/README.md); estado en
+Recreaciones en C++ en [`platforms/computers/amiga500/demos/arte/reimplementation/reference/`](platforms/computers/amiga500/demos/arte/reimplementation/reference/README.md); estado en
 [`ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md):
 
 | Técnica | Módulo | Reimpl |
 |---|---|---|
-| Seno Q1.14 | `SINE.soslibrary` | [`sine_table`](platforms/computers/amiga500/demos/arte/reimpl/sine_table/README.md) |
-| Motor 3D Q15 (matriz + transform + ortonormalización) | `0x0B0C2C` | [`motor_3d`](platforms/computers/amiga500/demos/arte/reimpl/motor_3d/README.md) |
-| Blobs con lookup tables | `0x0B0C2C` | [`blob_render`](platforms/computers/amiga500/demos/arte/reimpl/blob_render/README.md) |
-| Distorsión SINE (8 osciladores) | `0x096A28` | [`sine_wobble`](platforms/computers/amiga500/demos/arte/reimpl/sine_wobble/README.md) |
-| Scrolltext (fuente 3 planos) | `0x02162C` | [`scrolltext`](platforms/computers/amiga500/demos/arte/reimpl/scrolltext/README.md) |
-| Fade de paleta por nibbles | `0x0B0C2C` | [`palette_fade`](platforms/computers/amiga500/demos/arte/reimpl/palette_fade/README.md) |
-| Esfera texturizada 16 col. | (Chaos) | [`sphere`](platforms/computers/amiga500/demos/arte/reimpl/sphere/README.md) |
-| Túnel / corridor (raycast por filas) | `0x03AFFC` | [`tunnel`](platforms/computers/amiga500/demos/arte/reimpl/tunnel/README.md) |
-| Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](platforms/computers/amiga500/demos/arte/reimpl/zoom/README.md) |
+| Seno Q1.14 | `SINE.soslibrary` | [`sine_table`](platforms/computers/amiga500/demos/arte/reimplementation/reference/sine_table/README.md) |
+| Motor 3D Q15 (matriz + transform + ortonormalización) | `0x0B0C2C` | [`motor_3d`](platforms/computers/amiga500/demos/arte/reimplementation/reference/motor_3d/README.md) |
+| Blobs con lookup tables | `0x0B0C2C` | [`blob_render`](platforms/computers/amiga500/demos/arte/reimplementation/reference/blob_render/README.md) |
+| Distorsión SINE (8 osciladores) | `0x096A28` | [`sine_wobble`](platforms/computers/amiga500/demos/arte/reimplementation/reference/sine_wobble/README.md) |
+| Scrolltext (fuente 3 planos) | `0x02162C` | [`scrolltext`](platforms/computers/amiga500/demos/arte/reimplementation/reference/scrolltext/README.md) |
+| Fade de paleta por nibbles | `0x0B0C2C` | [`palette_fade`](platforms/computers/amiga500/demos/arte/reimplementation/reference/palette_fade/README.md) |
+| Esfera texturizada 16 col. | (Chaos) | [`sphere`](platforms/computers/amiga500/demos/arte/reimplementation/reference/sphere/README.md) |
+| Túnel / corridor (raycast por filas) | `0x03AFFC` | [`tunnel`](platforms/computers/amiga500/demos/arte/reimplementation/reference/tunnel/README.md) |
+| Zoom/créditos (núcleo: Q16, trayectoria, bandas) | `0x07E42C` | [`zoom`](platforms/computers/amiga500/demos/arte/reimplementation/reference/zoom/README.md) |
 
 Pendientes: el **blit/copper del zoom** y la **rutina de render del túnel** (init localizado, render
 por dispatch indirecto). Inventario completo en [`platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md`](platforms/computers/amiga500/demos/arte/docs/PENDIENTES.md).
@@ -116,7 +116,7 @@ Comandos completos: [`platforms/computers/amiga500/demos/arte/tools/README.md`](
 
 ```
 imagen (.dms/.adf/.ipf) → descomprimir/verificar → ¿AmigaDOS o trackloader?
-  → WinUAE-DBG + volcado RAM → hook del decruncher → out/modules/
+  → WinUAE-DBG + volcado RAM → hook del decruncher → extraction/modules/
   → objdump/capstone (.asm canónico) + Ghidra (CFG/xrefs/decompilado)
   → media (bitplanes/paletas/copper) → reimpl C++ (+ ASM canónico)
 ```
@@ -190,7 +190,7 @@ Guía de bitmaps OCS/ECS: [`tools/python/AMIGA_BITMAPS.md`](tools/python/AMIGA_B
 | [`docs/GHIDRA_DECOMP_VS_REIMPL.md`](platforms/computers/amiga500/demos/arte/docs/GHIDRA_DECOMP_VS_REIMPL.md) | Decompilado vs. reimpl y cross-check con rz-ghidra |
 | [`docs/PORT_ENGINE_ZOOM_Y_TUNEL.md`](platforms/computers/amiga500/demos/arte/docs/PORT_ENGINE_ZOOM_Y_TUNEL.md) | Guía de port a un engine A500 50 Hz |
 | [`tools/README.md`](platforms/computers/amiga500/demos/arte/tools/README.md) | Comandos exactos del expediente |
-| [`recovered/maps/modules.md`](platforms/computers/amiga500/demos/arte/recovered/maps/modules.md) | Módulos, direcciones, tamaños, sha1 |
+| [`extraction/maps/modules.md`](platforms/computers/amiga500/demos/arte/extraction/maps/modules.md) | Módulos, direcciones, tamaños, sha1 |
 
 ## Añadir un expediente nuevo
 

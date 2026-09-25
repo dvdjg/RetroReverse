@@ -80,7 +80,7 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 
 ## Pipeline en lote: `decompile-modules.ps1`
 
-Decompila **todos** los módulos de un `modules.json` (o `index.json`) a `out/ghidra/`, importando
+Decompila **todos** los módulos de un `modules.json` (o `index.json`) a `extraction/ghidra/`, importando
 cada binario como Raw Binary en su dirección de carga (`dest` del JSON; si falta, base 0).
 
 ```powershell
@@ -92,7 +92,7 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 ```
 
 Salida por módulo: `<mod>.decomp.c` (pseudo‑C de todas sus funciones) + `<mod>.info.txt`.
-`out/modules_all/index.json` usa `offset` (offset en el ADF, **no** dirección de carga) → base 0.
+`extraction/modules_all/index.json` usa `offset` (offset en el ADF, **no** dirección de carga) → base 0.
 Resultado en `sanity-arte`: 53 módulos (12 de `modules/` + 41 de `modules_all/`).
 
 ## Extraer datos por xref (para los decoders)
@@ -116,8 +116,8 @@ fuente y el Rizin precompilado no incluye `RizinConfig.cmake`. Se construye desd
 ```bash
 # en WSL:
 bash /mnt/c/.../tools/ghidra/wsl/pdg-dump.sh \
-  /mnt/c/.../platforms/computers/amiga500/demos/arte/out/modules_all/blk_0B0C2C_l1_63064.bin \
-  /mnt/c/.../platforms/computers/amiga500/demos/arte/out/ghidra/blk_0B0C2C.rzghidra.pdg.c 0xc16 0xcba 0xe1e
+  /mnt/c/.../platforms/computers/amiga500/demos/arte/extraction/modules_all/blk_0B0C2C_l1_63064.bin \
+  /mnt/c/.../platforms/computers/amiga500/demos/arte/extraction/ghidra/blk_0B0C2C.rzghidra.pdg.c 0xc16 0xcba 0xe1e
 ```
 
 Su salida coincide con la de Ghidra (misma semántica Q15). Detalle y resultados en

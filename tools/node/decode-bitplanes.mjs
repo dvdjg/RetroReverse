@@ -7,9 +7,9 @@
  * bitmap-decode de mcp-winuae-emu.
  *
  * Uso:
- *   node decode-bitplanes.mjs --file out/ram/chip000000.bin --base 0x0 \
+ *   node decode-bitplanes.mjs --file extraction/ram/chip000000.bin --base 0x0 \
  *     --addr 0x3a600 --width 320 --height 256 --depth 5 --rowbytes 40 \
- *     --layout interleaved --palette out/display/arte-title-palette.json --out out/display/try.png
+ *     --layout interleaved --palette extraction/display/arte-title-palette.json --out extraction/display/try.png
  */
 
 import * as fs from 'node:fs';

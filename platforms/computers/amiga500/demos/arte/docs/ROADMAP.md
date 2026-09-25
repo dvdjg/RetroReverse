@@ -40,13 +40,13 @@ dependencias.
 ## Fase 3 — Volcado de módulos descomprimidos — HECHO
 - **Resultado**: `probe-layout.mjs` determinó el contrato de `IMP!` (destino = `A0` = cabecera,
   longitud = long en `+4`). `hook-trampoline.mjs` (modo routine) volcó **12 bloques únicos** a
-  `out/modules/` + `modules.json` (ver `recovered/maps/modules.md`). Falta identificar módulo↔bloque.
+  `extraction/modules/` + `modules.json` (ver `extraction/maps/modules.md`). Falta identificar módulo↔bloque.
 - Enganchar el trampoline de decrunch de SOS (entrada `0xC02584`, patrón
   `48e7fffe20184bfa0026b0bc43724d21`; `jsr` al de-cruncher en `+0x26`, retorno en `+0x28`).
 - En cada llamada: capturar `(destino=A1, longitud=D1, header=A0)` al entrar y volcar el rango
   `[A1, A1+D1)` al salir.
-- Guardar cada bloque único como `out/modules/mod_<n>_<addr>_<len>.bin` + metadatos.
-- **Cierre**: aparece en `out/modules/` el código/datos de los módulos conocidos
+- Guardar cada bloque único como `extraction/modules/mod_<n>_<addr>_<len>.bin` + metadatos.
+- **Cierre**: aparece en `extraction/modules/` el código/datos de los módulos conocidos
   (`SINE.soslibrary`, `drwho96.raw`, `mod.*`, `hloadpic.raw.im`, `txt.Scrolltext`, …) sin
   comprimir y listos para desensamblar.
 - **Riesgo**: el stub GDB puede requerir step-over manual de los breakpoints software; si se
@@ -72,7 +72,7 @@ dependencias.
 - Capturar custom registers (`$DFFxxx`) y Copperlist en un efecto activo.
 - Decodificar bitplanes/samples a PNG/WAV (`bitmap_decode` del módulo MCP o propio).
 - **Cierre**: imágenes y samples por efecto comparables con la captura de pantalla.
-- **Estado**: `dump-display.mjs` captura custom regs + Copperlist + paleta (en `out/display/`;
+- **Estado**: `dump-display.mjs` captura custom regs + Copperlist + paleta (en `extraction/display/`;
   copiados a `recovered/media/`). La decodificación a PNG queda pendiente: hay que capturar con la
   Copperlist **activa** (no de blanqueo) o usar la lectura fiable de registros.
 
@@ -80,7 +80,7 @@ dependencias.
 - Desensamblar con `m68k-objdump` las rutinas de efecto y anotarlas.
 - Redactar `docs/TECNICAS.md`: descripción + receta de reimplementación en el engine propio.
 - **Cierre**: cada efecto documentado tiene pseudocódigo/algoritmo, parámetros y coste.
-- **Estado**: primera recreación en `reimpl/sine_table/` (seno Q1.14, test host OK).
+- **Estado**: primera recreación en `reimplementation/reference/sine_table/` (seno Q1.14, test host OK).
 
 ## Estado de efectos (reimpls portadas)
 

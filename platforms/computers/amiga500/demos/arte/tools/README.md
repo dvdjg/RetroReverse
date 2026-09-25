@@ -22,10 +22,10 @@ node tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\ou
   --boot 20 --regions 0x0:0x80000,0xc00000:0x80000 --out out --prefix sanity --screenshot
 ```
 
-Salida: `out/ram/sanity_000000.bin`, `out/ram/sanity_c00000.bin`, `out/screens/sanity-boot.png`.
+Salida: `extraction/ram/sanity_000000.bin`, `extraction/ram/sanity_c00000.bin`, `extraction/screens/sanity-boot.png`.
 
 > Nota: los volcados iniciales se hicieron antes de unificar el toolkit y están en
-> `out/ram/chip000000.bin`, `out/ram/slowc00000.bin` (mismos rangos).
+> `extraction/ram/chip000000.bin`, `extraction/ram/slowc00000.bin` (mismos rangos).
 
 ## 2. Diagnóstico de breakpoints
 
@@ -37,12 +37,12 @@ node tools\node\probe-breakpoints.mjs --config platforms\computers\amiga500\demo
 
 ```powershell
 node tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
-  --spec specs\imp-dump.json --out out --boot 5
+  --spec extraction\specs\imp-dump.json --out out --boot 5
 ```
 
-- `specs/sanity-arte.json` describe el trampoline `CrM!` (no era el usado).
-- `specs/imp-routine.json` (sondeo del contrato de `IMP!`, con `probe-layout.mjs`).
-- `specs/imp-dump.json` (hook del `IMP!` en modo routine): volcó 12 bloques a `out/modules/`.
+- `extraction/specs/sanity-arte.json` describe el trampoline `CrM!` (no era el usado).
+- `extraction/specs/imp-routine.json` (sondeo del contrato de `IMP!`, con `probe-layout.mjs`).
+- `extraction/specs/imp-dump.json` (hook del `IMP!` en modo routine): volcó 12 bloques a `extraction/modules/`.
 
 ## 4. Extracción de display (Copperlist + assets)
 
@@ -51,7 +51,7 @@ node tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\art
   --boot 21 --out out --prefix arte-title
 ```
 
-Salida en `out/display/` (`-custom.json`, `-copper.txt`, `-copper.bin`, `-palette.json`, `-bitplanes.bin`, `-png`).
+Salida en `extraction/display/` (`-custom.json`, `-copper.txt`, `-copper.bin`, `-palette.json`, `-bitplanes.bin`, `-png`).
 
 ## Análisis de volcados/ADF
 
@@ -62,7 +62,7 @@ python tools\python\bin_scan.py platforms\computers\amiga500\demos\arte\out\modu
 
 ## 5. Análisis con Ghidra (CFG/xrefs + decompilador)
 
-Toolkit: `tools\ghidra\` (ver su README). Proyecto Ghidra en `out/ghidra/` (regenerable).
+Toolkit: `tools\ghidra\` (ver su README). Proyecto Ghidra en `extraction/ghidra/` (regenerable).
 La extensión `ghidra-amiga` resuelve los Hunks y los `.uss` y nombra las llamadas NDK.
 
 ```powershell
@@ -86,7 +86,7 @@ $sd = "tools\ghidra"; $out = "platforms\computers\amiga500\demos\arte\out\ghidra
   -scriptPath $sd -postScript DumpDecomp.java "$platforms\computers\amiga500\demos\arte\out\b0c2c.decomp.c" 0xCBA
 ```
 
-Resultados en `out/ghidra/` (`.info.txt`, `.decomp.c`, `.bogo.bin`, …). Evaluación completa:
+Resultados en `extraction/ghidra/` (`.info.txt`, `.decomp.c`, `.bogo.bin`, …). Evaluación completa:
 [`../docs/GHIDRA_AMIGA_EVAL.md`](../docs/GHIDRA_AMIGA_EVAL.md).
 
 Rizin (triaje rápido de xrefs/CFG, sin decompilador):
@@ -104,7 +104,7 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 & tools\ghidra\decompile-modules.ps1 -ModulesJson platforms\computers\amiga500\demos\arte\out\modules_all\index.json -OutDir platforms\computers\amiga500\demos\arte\out\ghidra
 ```
 
-Genera `out/ghidra/<mod>.decomp.c` + `<mod>.info.txt` por módulo (53 en total).
+Genera `extraction/ghidra/<mod>.decomp.c` + `<mod>.info.txt` por módulo (53 en total).
 
 ### 5ter. Datos por xref (para los decoders)
 
@@ -118,8 +118,8 @@ Genera `out/ghidra/<mod>.decomp.c` + `<mod>.info.txt` por módulo (53 en total).
 ```bash
 # una vez: bash tools/ghidra/wsl/build-rzghidra.sh
 bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/tools/ghidra/wsl/pdg-dump.sh \
-  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/platforms/computers/amiga500/demos/arte/out/modules_all/blk_0B0C2C_l1_63064.bin \
-  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/platforms/computers/amiga500/demos/arte/out/ghidra/blk_0B0C2C.rzghidra.pdg.c \
+  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/platforms/computers/amiga500/demos/arte/extraction/modules_all/blk_0B0C2C_l1_63064.bin \
+  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/platforms/computers/amiga500/demos/arte/extraction/ghidra/blk_0B0C2C.rzghidra.pdg.c \
   0xc16 0xcba 0xe1e
 ```
 

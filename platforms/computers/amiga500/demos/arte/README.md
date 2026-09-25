@@ -1,7 +1,7 @@
 # Arte (Sanity, 1993) — expediente de desensamblado
 
 Plataforma: **Amiga 500 OCS/ECS** (Kickstart 1.3). Origen: `Sanity-Arte.dms`.
-Objetivo: recuperar las **técnicas** del demo y reimplementarlas en C++ (`reimpl/`).
+Objetivo: recuperar las **técnicas** del demo y reimplementarlas en C++ (`reimplementation/reference/`).
 
 **Objetivo confirmado**: el interés principal son las **técnicas gráficas** de la demo. El flujo es
 comprender el ensamblador 68k extraído -> inferir los programas C++ más aproximados -> regenerar
@@ -35,7 +35,7 @@ platforms/computers/amiga500/demos/arte/
     ROADMAP.md            fases, criterios de cierre, riesgos
     HALLAZGOS.md          datos concretos (direcciones, firmas, strings)
     TECNICAS.md           efecto a efecto + receta de reimplementación
-  specs/
+  extraction/specs/
     sanity-arte.json      spec de enganche del decruncher (para hook-trampoline.mjs)
   tools/
     README.md             comandos exactos para reproducir este expediente
@@ -50,7 +50,7 @@ platforms/computers/amiga500/demos/arte/
     code/                 bootblock/, sos_cruncher/, <módulo>/
     media/                gfx/ audio/ copper/ palettes/ reference/
     maps/                 memoria, módulos, dispatch
-  reimpl/                 recreación en C++
+  reimplementation/reference/                 recreación en C++
 ```
 
 Los scripts viven en el **toolkit compartido** [`../tools/`](../../../../../tools/README.md):
@@ -69,7 +69,7 @@ Los scripts viven en el **toolkit compartido** [`../tools/`](../../../../../tool
 cd Amiga-Reverse\sanity-arte
 python ..\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
 node   ..\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node   ..\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec specs\imp-dump.json --out out --boot 5
+node   ..\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec extraction\specs\imp-dump.json --out out --boot 5
 node   ..\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
 ```
 

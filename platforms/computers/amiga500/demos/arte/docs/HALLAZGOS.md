@@ -85,8 +85,8 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 - `probe-layout.mjs` (diff de RAM antes/después de una sola llamada) determinó que `IMP!` escribe
   en **`[A0, A0 + long(A0+4))`**, donde `A0` = puntero a la cabecera `'IMP!'`. Ejemplo capturado:
   cabecera `0x07B3C4`, `len1=0x97C`.
-- El hook en modo routine (`specs/imp-dump.json`) volcó **12 bloques únicos** a `out/modules/`
-  (ver `recovered/maps/modules.md`).
+- El hook en modo routine (`extraction/specs/imp-dump.json`) volcó **12 bloques únicos** a `extraction/modules/`
+  (ver `extraction/maps/modules.md`).
 
 ## Estado de vídeo
 
@@ -96,9 +96,9 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 - `0x26614` es también **destino de un módulo** (`mod_003/007/011`): al leerlo como "Copperlist" se
   obtiene a veces código, no una lista. No usar esa lectura como verdad.
 - Primera captura (candidata): Copperlist coherente con `BPLCON0=0x5600` (5 planos), `DIW=$5981`,
-  `COLOR00..`; guardada en `recovered/media/copper/` marcada como **no verificada**.
+  `COLOR00..`; guardada en `assets/copper/` marcada como **no verificada**.
 - **No leer `$DFF1C0+` en OCS/ECS**: error y posible caída del emulador.
-- Referencia fiable del aspecto: `recovered/media/reference/arte-title-screenshot.png`.
+- Referencia fiable del aspecto: `extraction/screenshots/arte-title-screenshot.png`.
 - El **canal lateral** (`tools/node/side-read.mjs`) sí es fiable para `state`/`regs`/`mem` de RAM.
 - Reconstruir un frame desde los registros en vivo falla por los **splits de Copper** (cambian
   `BPLCON0`/punteros por zonas): un rango contiguo no reconstruye la imagen. La **captura de
@@ -116,40 +116,40 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 ## Tabla de módulos y efectos
 
 - Lista completa de nombres extraída de la tabla SOS (Slow RAM `0xC036FA`–`0xC03ABA`):
-  ver [`../recovered/maps/modules.md`](../recovered/maps/modules.md). Incluye `SINE.soslibrary`,
+  ver [`../extraction/maps/modules.md`](../extraction/maps/modules.md). Incluye `SINE.soslibrary`,
   `DBUG.soslibrary`, `mod.*` (música), `drwho96.raw` / `hloadpic.raw.im` (gráficos), `txt.Scrolltext`,
   `main` y varios módulos internos `SOS*`.
 - Los bloques volcados se clasificaron en **código SOS** y **Copperlists** (mismo doc).
-- Referencias visuales capturadas (timing variable): `recovered/media/reference/`
+- Referencias visuales capturadas (timing variable): `extraction/screenshots/`
   (título `arte-title-screenshot.png`, efecto 3D de pasillo `arte-effect-corridor.png`).
 - **Captura en vivo del corridor** (2026): el bloque `0x03AFFC` (el túnel/corridor) **se carga en
   chip RAM `0x26614`** (paleta en `0x2675A` = `+0x146`); el efecto **parchea la Copperlist en
   runtime** copiando los 32 colores. Referencias: `reference/corridor-live.png` (corridor) y
   `reference/sphere-live.png` (esfera). Detalle y **límite** (mapa del original no recuperado) en
-  `recovered/media/palettes/tunnel-VALIDACION.md`.
+  `assets/palettes/tunnel-VALIDACION.md`.
 
 ## Análisis con Ghidra (2026)
 
 Evaluación completa en [`GHIDRA_AMIGA_EVAL.md`](GHIDRA_AMIGA_EVAL.md) y
 [`GHIDRA_DECOMP_VS_REIMPL.md`](GHIDRA_DECOMP_VS_REIMPL.md); herramienta en
-[`../../tools/ghidra/`](../../../../../../tools/ghidra/README.md). Salidas en `out/ghidra/` (regenerables).
+[`../../tools/ghidra/`](../../../../../../tools/ghidra/README.md). Salidas en `extraction/ghidra/` (regenerables).
 
 - **Loaders**: Ghidra 12.0.1 + extensión `ghidra-amiga` cargan **Hunk** y **`.uss`** y resuelven
   las llamadas a librería con símbolos **NDK 3.9**. `out/disk` **no contiene Hunk** (trackloader);
   probado con `SOS_RUN`/`SOS_HYB` (runtime SOS) y `demoscene-repo/effects/empty.exe`.
 - **`.uss`**: verificada la base de `mod_002` **`0xC05EF2`** contra
-  `recovered/code/sos_library/mod_2_soslibrary.asm` → coincide instrucción a instrucción; las
+  `extraction/disassembly/sos_library/mod_2_soslibrary.asm` → coincide instrucción a instrucción; las
   únicas diferencias son **reubicaciones** (`jmp $10` → `jmp $C05F02`). Los `.uss` capturados en
   *boot* no contienen los módulos; hay que exportarlos **con el efecto cargado**.
 - **Motor 3D** (`blk_0B0C2C`, base 0): el decompilado de `0xC16` (matriz) y `0xCBA` (transform)
-  coincide **término a término** con `reimpl/motor_3d`. Tablas Q15 en **`0x1056`** (senos) y
+  coincide **término a término** con `reimplementation/reference/motor_3d`. Tablas Q15 en **`0x1056`** (senos) y
   **`0x1256`** (cosenos), 256 words cada una, indexadas por `ángulo & 0x7fe`; `0x1056` crece
   `0,201,402,603…` (compatible con un **cuarto de seno**). La **matriz ortonormal** (`0x0E1E` +
-  raíz entera `0x0F1C`) se ha **portado** a `reimpl/motor_3d` (`orthonormalize`, test OK).
+  raíz entera `0x0F1C`) se ha **portado** a `reimplementation/reference/motor_3d` (`orthonormalize`, test OK).
 - **Zoom** (`blk_07E42C`, base 0): el decompilado (`FUN_0000024c`/`FUN_000002d4`) **confirma**
   `ALGORITMOS_ZOOM_Y_TUNEL.md` y añade un detalle: la trayectoria **parchea la Copperlist por
   bandas** (`BPLCON0=0x200`/`0x5200`, stride 20 B) para el recorte vertical. **Núcleo portado** a
-  `reimpl/zoom` (`zoom_step`/`traj_step`/`copper_bands`, test OK); blit/copper pendientes.
+  `reimplementation/reference/zoom` (`zoom_step`/`traj_step`/`copper_bands`, test OK); blit/copper pendientes.
 - **Túnel** (`blk_03AFFC`): **0 funciones** → es datos (Copperlist + paleta `@0x146` + datos), no
   el render. En `arte tunnel stars.uss` el buffer está en `0x26614` (61.4 % match); el puntero es
   `0xC0454E` y lo fija el **init** `FUN_00c0424a` (`0xC0424A`, reserva 350000/470000 B y llama a

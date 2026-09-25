@@ -1,8 +1,8 @@
 # decompile-modules.ps1 - pipeline headless: decompila en lote los modulos de un modules.json
 #
-# Lee un JSON de modulos (out/modules/modules.json o out/modules_all/index.json), importa cada
+# Lee un JSON de modulos (extraction/modules/modules.json o extraction/modules_all/index.json), importa cada
 # binario como Raw Binary en su direccion de carga y vuelca el pseudo-C de todas sus funciones a
-# out/ghidra/. Salida NO curada (regenerable). Ver tools/ghidra/README.md y STRUCTURE.md regla 8.
+# extraction/ghidra/. Salida NO curada (regenerable). Ver tools/ghidra/README.md y STRUCTURE.md regla 8.
 #
 # Uso:
 #   ./decompile-modules.ps1 -ModulesJson ..\..\platforms\computers\amiga500\demos\arte\out\modules\modules.json `
@@ -11,7 +11,7 @@
 # Campos del JSON:
 #   - "file": nombre del binario (relativo al JSON)
 #   - "dest" (o el campo -BaseField): direccion de carga en hex sin 0x; si falta -> base 0
-#   (out/modules_all/index.json usa "offset" = offset en el ADF, NO direccion de carga -> base 0)
+#   (extraction/modules_all/index.json usa "offset" = offset en el ADF, NO direccion de carga -> base 0)
 
 [CmdletBinding()]
 param(

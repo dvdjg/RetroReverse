@@ -47,7 +47,7 @@ en programas nuevos, dejando trazabilidad de dónde salió cada cosa.
         <unidad>.asm         desensamblado (objdump con --adjust-vma)
         <unidad>.symbols     etiquetas y nombres inferidos
         notes.md             análisis, contrato de la rutina, entradas/salidas
-        SOURCE               ruta + sha1 del binario de origen en out/modules/
+        SOURCE               ruta + sha1 del binario de origen en extraction/modules/
     media/                   media recuperada y decodificada
       gfx/                   imágenes (PNG/ILBM) + paleta usada
       audio/                 samples (WAV) / módulos (MOD)
@@ -79,7 +79,7 @@ en programas nuevos, dejando trazabilidad de dónde salió cada cosa.
    de llamada/ABI + checklist) y su uso en el engine están en [`PORTING.md`](PORTING.md).
 4. **Media**: se conserva en `recovered/media/` para referencia y comparación. No se redistribuye
    fuera del entorno de estudio (derechos del autor original).
-5. **Una unidad = una carpeta** en `recovered/code/`; el nombre de la carpeta es el nombre del
+5. **Una unidad = una carpeta** en `extraction/disassembly/`; el nombre de la carpeta es el nombre del
    módulo/rutina (`SINE_soslibrary`, `bootblock`, `cruncher_sos`, …).
 6. **Trazabilidad**: todo artefacto curado indica su origen (`SOURCE` o el `sha1` en
    `modules.json`) y el comando de `tools/` que lo regenera.
@@ -88,11 +88,11 @@ en programas nuevos, dejando trazabilidad de dónde salió cada cosa.
    `tools/README.md`; el expediente solo aporta su `specs/*.json` y su lista de comandos en el
    `tools/README.md` del nodo.
 8. **Ghidra (análisis, no curación)**: Ghidra consume los volcados de `out/` (módulos
-   descomprimidos de `out/modules/`, `.uss`/Hunk) y su salida va **siempre a `out/ghidra/`**:
+   descomprimidos de `extraction/modules/`, `.uss`/Hunk) y su salida va **siempre a `extraction/ghidra/`**:
    pseudo‑C, xrefs, volcados auxiliares y el proyecto. **No se cura** su salida (los nombres
    `FUN_xxxx` y la detección de funciones cambian entre versiones de Ghidra). Lo que merezca
-   conservarse se resume a mano en `recovered/code/<unidad>/notes.md` y `docs/TECNICAS.md`.
-   Contrato: `out/modules/*.bin` → Ghidra → `reimpl/`. Ver `tools/ghidra/README.md` y
+   conservarse se resume a mano en `extraction/disassembly/<unidad>/notes.md` y `docs/TECNICAS.md`.
+   Contrato: `extraction/modules/*.bin` → Ghidra → `reimpl/`. Ver `tools/ghidra/README.md` y
    `platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_EVAL.md`.
 
 ## Convenciones de nombres

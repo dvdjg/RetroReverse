@@ -10,7 +10,7 @@ subproyecto de un marco mayor de conversión de juegos clásicos a PC).
 | # | Pendiente | Depende de | Valor | Verificable |
 |---|---|---|---|---|
 | A1 | **Render del túnel**: aislar la rutina por-frame (init `0xC0424A` localizado; render por dispatch SOS) | tabla de dispatch SOS | alto (único efecto sin validar) | sí (emulador) |
-| A2 | **Zoom**: portar blit/copper (`FUN_0000193e`) + extraer tablas reales (`$3EE2/$3944/$38AA/$3A78`) | `reimpl/zoom` (núcleo hecho) | medio | host + emulador |
+| A2 | **Zoom**: portar blit/copper (`FUN_0000193e`) + extraer tablas reales (`$3EE2/$3944/$38AA/$3A78`) | `reimplementation/reference/zoom` (núcleo hecho) | medio | host + emulador |
 | A3 | **Plasma** (`0x09A940`) | — | medio | host |
 | A4 | **Rubber-rotator** (¿`0x078A2C`?) | identificación | medio | host |
 | A5 | **ASM canónico** restante (zoom, esfera, túnel) | A1/A2 | alto (uso directo) | — |
@@ -20,7 +20,7 @@ subproyecto de un marco mayor de conversión de juegos clásicos a PC).
 
 | # | Pendiente | Depende de | Valor |
 |---|---|---|---|
-| B1 | Rellenar la sección **Contrato** (registros, Q15/Q16, preservación) en cada `reimpl/*/README.md` | — | alto |
+| B1 | Rellenar la sección **Contrato** (registros, Q15/Q16, preservación) en cada `reimplementation/reference/*/README.md` | — | alto |
 | B2 | **Test cruzado host ↔ Amiga**: compilar el C++/ASM con `m68k-amiga-elf-g++`, correr en WinUAE y comparar | B1 | alto |
 | B3 | **Empaquetado para el engine**: header de interfaz + integración de build (vbcc/gcc) | B1/B2 | alto |
 
@@ -59,7 +59,7 @@ Ver [`../../docs/MIGRATION_AMIGA_REVERSE.md`](../../../../../../docs/MIGRATION_A
 |---|---|---|
 | F1 | Migrar el expediente al **layout del marco** (`platforms/computers/amiga500/games/arte/`) | alto |
 | F2 | Adaptar los artefactos al **HIGS** (spec agnóstica de hardware) | alto |
-| F3 | Convertir `reimpl/` en **reimplementación SDL** validada diferencialmente vs emulador | alto |
+| F3 | Convertir `reimplementation/reference/` en **reimplementación SDL** validada diferencialmente vs emulador | alto |
 | F4 | Empaquetar el **toolkit** como biblioteca reutilizable del marco (crates/módulos) | medio |
 
 ## Orden propuesto

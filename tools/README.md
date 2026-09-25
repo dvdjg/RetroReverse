@@ -32,7 +32,7 @@ tools/
 ```
 
 Las *specs* de enganche son específicas de cada título y viven en el expediente, p. ej.
-`../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`.
+`../platforms/computers/amiga500/demos/arte/extraction/specs/sanity-arte.json`.
 
 ## Requisitos
 
@@ -88,7 +88,7 @@ cierra por PID):
 
 ```powershell
 ./capture-live.ps1 -Config ../platforms/computers/amiga500/demos/arte/out/sanity.uae `
-  -Adf ../platforms/computers/amiga500/demos/arte/out/disk/sanity-arte.adf `
+  -Adf ../platforms/computers/amiga500/demos/arte/rom/raw/sanity-arte.adf `
   -ProbeAddr 0x26758 -ProbePattern 0fff0ffc0fd9 -OutDir ./shots
 ```
 
@@ -156,7 +156,7 @@ import { WinUAE, sleep } from './node/winuae-session.mjs';
 
 const uae = new WinUAE({
   configFile: 'expediente/out/game.uae',   // .uae de hardware
-  adf:        'expediente/out/disk/game.adf',
+  adf:        'expediente/rom/raw/game.adf',
   winuaeDir:  'C:\\...\\WinUAE-DBG\\bin',   // opcional
   gdbPort:    2345,                          // opcional
 });
@@ -167,8 +167,8 @@ await uae.pauseRetry();    // pausa con reintentos (el stub tarda en atender 0x0
 const regs = await uae.regs();
 console.log(regs.PC.toString(16));
 
-await uae.dumpRegion(0x000000, 0x80000, 'out/ram/chip.bin');  // lectura por bloques, tolerante
-await uae.screenshot('out/screens/estado.png');               // monitor screenshot
+await uae.dumpRegion(0x000000, 0x80000, 'extraction/ram/chip.bin');  // lectura por bloques, tolerante
+await uae.screenshot('extraction/screens/estado.png');               // monitor screenshot
 
 const addr = await uae.findPattern(0xc00000, 0x80000, '2c78c000...');  // firma en RAM
 await uae.setBreakpoint(addr);
@@ -196,7 +196,7 @@ node dump-ram.mjs --config out\game.uae --adf out\disk\game.adf `
 | `--boot` | 20 | segundos antes de pausar |
 | `--regions` | `0x0:0x80000,0xc00000:0x80000` | regiones `0xSTART:SIZE` |
 | `--out` / `--prefix` | `out` / `ram` | destino y prefijo |
-| `--screenshot` | off | captura a `out/screens/<prefix>-boot.png` |
+| `--screenshot` | off | captura a `extraction/screens/<prefix>-boot.png` |
 
 ## `hook-trampoline.mjs` (CLI)
 
@@ -208,7 +208,7 @@ node hook-trampoline.mjs --config out\game.uae --adf out\disk\game.adf `
   --spec ..\platforms\computers\amiga500\demos\arte\specs\sanity-arte.json --out out --boot 4
 ```
 
-Spec JSON (ejemplo real: `../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`):
+Spec JSON (ejemplo real: `../platforms/computers/amiga500/demos/arte/extraction/specs/sanity-arte.json`):
 
 | Campo | Descripción |
 |---|---|
@@ -221,7 +221,7 @@ Spec JSON (ejemplo real: `../platforms/computers/amiga500/demos/arte/specs/sanit
 | `maxSeconds`, `chunk` | duración y tamaño de lectura |
 | `allowed` | rangos válidos de destino `{start,end}` (evita punteros falsos) |
 
-Salida: `out/modules/mod_<n>_<addr>_<len>.bin` + `out/modules/modules.json` (con `sha1`).
+Salida: `extraction/modules/mod_<n>_<addr>_<len>.bin` + `extraction/modules/modules.json` (con `sha1`).
 
 **Extensión**: la forma «trampoline» cubre decrunchers con firma y destino/longitud en
 registros. Otras formas (p. ej. destino derivado de una cabecera) requieren ampliar este script
@@ -246,7 +246,7 @@ node probe-layout.mjs --config out\game.uae --adf out\disk\game.adf --spec specs
 ```
 
 Campos de la spec: `entryPatternHex`, `retOffset`, `headerReg`, `headerMagics`, `lenOffsets`,
-`searchStart/Size`, `regions`, `minRun`. Ejemplo real: `../platforms/computers/amiga500/demos/arte/specs/imp-routine.json`.
+`searchStart/Size`, `regions`, `minRun`. Ejemplo real: `../platforms/computers/amiga500/demos/arte/extraction/specs/imp-routine.json`.
 
 ## `dump-display.mjs` (CLI)
 
@@ -328,7 +328,7 @@ Ver `../LECCIONES_APRENDIDAS.md` §7bis.
 
 ## Añadir soporte a un rip nuevo
 
-1. Copiar una spec existente (p. ej. `../platforms/computers/amiga500/demos/arte/specs/sanity-arte.json`) al `specs/` del
+1. Copiar una spec existente (p. ej. `../platforms/computers/amiga500/demos/arte/extraction/specs/sanity-arte.json`) al `specs/` del
    expediente y adaptar `patternHex`/offsets/registros a la rutina hallada (usar
    `winuae-session.findPattern` o `bin_scan.py` para localizar la firma).
 2. Ejecutar `dump-ram.mjs` para el volcado inicial y `hook-trampoline.mjs` para los módulos.

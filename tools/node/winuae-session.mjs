@@ -16,7 +16,7 @@
  *   await uae.resume();
  *   await sleep(15000);
  *   await uae.pauseRetry();
- *   await uae.dumpRegion(0x000000, 0x80000, 'out/ram/chip.bin');
+ *   await uae.dumpRegion(0x000000, 0x80000, 'extraction/ram/chip.bin');
  *   await uae.close();
  */
 

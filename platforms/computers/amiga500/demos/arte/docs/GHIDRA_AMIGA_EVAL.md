@@ -5,13 +5,13 @@ completa (pasos 1–4). Herramienta documentada en
 [`../../tools/ghidra/README.md`](../../../../../../tools/ghidra/README.md).
 
 **Entorno**: Ghidra 12.0.1, extensión compilada con Gradle 9.2.1, JDK 21.
-Todo el material regenerable queda en `out/ghidra/`.
+Todo el material regenerable queda en `extraction/ghidra/`.
 
 ---
 
 ## Paso 1 — Compilar/instalar y probar con un Hunk real
 
-**Hallazgo previo (importante)**: `out/disk/` **no contiene ningún Hunk** — el disco de «Arte» es
+**Hallazgo previo (importante)**: `rom/raw/` **no contiene ningún Hunk** — el disco de «Arte» es
 un *trackloader* (bootblock `DOS\0` + firma `SOS1`, sin filesystem). El `00 00 03 F3` que aparece
 en el ADF (offset `0x16A2`) y en `mod_004` (offset `0x221B`) es **coincidencia dentro de código/
 datos**, no un `HUNK_HEADER` (los campos siguientes no son una tabla de hunks válida). Confianza
@@ -21,10 +21,10 @@ Por tanto se probó con **Hunks reales** del propio expediente y del entorno:
 
 | Fichero | Hunks | Resultado |
 |---|---|---|
-| `recovered/reference/sanity-os-v26/SOS_RUN` | 1 | carga OK |
+| `rom/reference/sanity-os-v26/SOS_RUN` | 1 | carga OK |
 | `demoscene-repo/effects/empty/empty.exe` | 3 (code/data/bss) | carga OK |
 
-Evidencia (headless log + `out/ghidra/*.info.txt`):
+Evidencia (headless log + `extraction/ghidra/*.info.txt`):
 
 - Loader autodetectado: **`Amiga Hunk Executable`**; lenguaje `68000:BE:32:default`.
 - Bloques: `EXEC`, `CODE_00`, `DATA_01`, `BSS_02` (según hunks), **stubs** `dos_library`/
@@ -54,7 +54,7 @@ hit 00c05efe  BOGO      -> módulo @ 0xC05EF2   (= mod_002, base documentada)
 hit 00c73c1e  BOGO      -> módulo @ 0xC73C12
 ```
 
-Comparando el bloque del `.uss` en `0xC05EF2` con `out/modules/mod_002_c05ef2_26676.bin` (base
+Comparando el bloque del `.uss` en `0xC05EF2` con `extraction/modules/mod_002_c05ef2_26676.bin` (base
 documentada `0xC05EF2`): **8670/26676 B idénticos (32.5 %)** y **todas** las diferencias son
 **reubicaciones** de referencias absolutas que el loader parchea en runtime:
 
@@ -65,7 +65,7 @@ disco @0x000000: 4E F9 00 00 00 10   ; jmp $10
 disco @0x00002E: 23 C0 00 00 00 7A   ; move.l d0,$7A
 ```
 
-El `.asm` (`recovered/code/sos_library/mod_2_soslibrary.asm`, base `0xC05EF2`) coincide
+El `.asm` (`extraction/disassembly/sos_library/mod_2_soslibrary.asm`, base `0xC05EF2`) coincide
 instrucción a instrucción con el `.uss` (`movea.l $4.w,a6` @ `0xC05F02`, `jsr -$180(a6)` @
 `0xC05F14`, …). **Conclusión**: las direcciones del `.uss` corresponden 1:1 con el `.asm`;
 la única diferencia es la reubicación. Confianza **alta**.
@@ -78,16 +78,16 @@ está cargado**; los `.uss` del test-suite (`arte *.uss`) son válidos para esto
 
 ## Paso 3 — Evaluar el decompilador sobre la rutina Q15 ya entendida
 
-Módulo `out/modules_all/blk_0B0C2C_l1_63064.bin` importado como **Raw Binary** base `0x0`
+Módulo `extraction/modules_all/blk_0B0C2C_l1_63064.bin` importado como **Raw Binary** base `0x0`
 (los offsets coinciden con `code_b0c2c.asm`, que también es base 0). Función en `0x0CBA`
-(transformación Q15), `out/ghidra/b0c2c.decomp.c`:
+(transformación Q15), `extraction/ghidra/b0c2c.decomp.c`:
 
 ```c
 *unaff_A2 = (short)((uint)(((int)*in_A1 * (int)sVar1 + (int)in_A1[3] * (int)sVar2 +
                            (int)in_A1[6] * (int)sVar3) * 2) >> 0x10);
 ```
 
-Coincide **exactamente** con la reimplementación `reimpl/motor_3d/src/transform3d.cpp`:
+Coincide **exactamente** con la reimplementación `reimplementation/reference/motor_3d/src/transform3d.cpp`:
 
 ```cpp
 o.x = (i16)(((M.m[0]*x + M.m[3]*y + M.m[6]*z) * 2) >> 16);
@@ -135,7 +135,7 @@ expediente (que sigue siendo ligero y reproducible). Confianza **alta**.
 1. **Desensamblado canónico**: mantener `m68k-amiga-elf-objdump`/capstone (base del `.asm` curado).
 2. **Comprensión y C++ aproximado**: Ghidra — importar el **Hunk** (si lo hay) o el **`.uss` con el
    efecto cargado**, o el **volcado crudo** con `BinaryLoader -loader-baseAddr`; usar el decompilador
-   sobre las rutinas de interés y volcar a `out/ghidra/`.
+   sobre las rutinas de interés y volcar a `extraction/ghidra/`.
 3. **Triaje**: Rizin sobre el mismo volcado para xrefs/CFG y localizar llamantes.
 4. **Trazabilidad**: los `.asm` curados van a `recovered/` (con `SOURCE` + sha1); las salidas de
    Ghidra/Rizin a `out/` (regenerables), referenciadas desde `TECNICAS.md`.

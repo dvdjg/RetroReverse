@@ -165,14 +165,14 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **SOS carga sus librerías por nombre de 4 letras (OpenLibrary), no por tag**: `jsr -$138(a6)`
   (= `_OpenLibrary` en el mapa de LVOs) con `move.l #$44425547 ("DBUG"), d0` abre
   `DBUG.soslibrary`. El mapa completo de LVOs de SOS está en
-  `platforms/computers/amiga500/demos/arte/recovered/reference/sanity-os-v26/LVO_MAP.md` (extraído de `sos.includes`).
+  `platforms/computers/amiga500/demos/arte/rom/reference/sanity-os-v26/LVO_MAP.md` (extraído de `sos.includes`).
   **Corrección**: interpretaciones previas de `-$138` como "resolución de módulos por tag",
   `-$11A` como "primitiva" y `-$54` como "FindTask" eran incorrectas (son OpenLibrary, GetPISS y
   SetInt respectivamente).
 - **Asociación bloque IMP! del ADF ↔ módulo volcado por `l1`**: cada bloque `IMP!` del disco lleva
   `l1` (tamaño descomprimido) y `l2` (tamaño comprimido) tras la firma. El hook de runtime capturó
   `len` = `l1`; la coincidencia es exacta (12/12 en «Arte»). Permite mapear cada bloque del disco a
-  su módulo descomprimido **sin decrunchar** (`recovered/maps/imp_blocks.json`).
+  su módulo descomprimido **sin decrunchar** (`extraction/maps/imp_blocks.json`).
 - **El `track`/`offset` del directorio SOS NO es la posición física del bloque IMP!** en el disco
   (tracks del directorio 0–13 vs tracks reales de los bloques 14–69). El campo `track`/`offset`
   del directorio es un índice lógico del loader; para localizar el dato físico hay que usar la
@@ -198,7 +198,7 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   `IMP!` del disco es **Imploder** ("ripped out of beermon"); (2) las librerías
   `DBUG/SINE/TEXT/AGAC.soslibrary`; (3) `main` es el loader; (4) el "effect handler" interpreta
   un `script` (los `.scr` del paquete). Referencia guardada en
-  `platforms/computers/amiga500/demos/arte/recovered/reference/sanity-os-v26/`.
+  `platforms/computers/amiga500/demos/arte/rom/reference/sanity-os-v26/`.
 - **Formato de copperlist SOS**: MOVE = `[opcode 0][reg][valor]` (4 bytes, igual que el estándar
   `0x01xx` pero con opcode `0`). Los punteros BPL/SPR y colores van a 0 en el bloque (el demo los
   parchea por frame). Un bloque de efecto puede contener **varias copperlists encadenadas**
@@ -281,7 +281,7 @@ Probado a fondo (ver `platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_
   (`rizin -a m68k -b 32 -E big -m <base> -c "aaa; pdf @ <addr>"`), pero **sin decompilador** en el
   build base (`pdc`/`pdd` no existen). Complementario, no sustituto.
 - **Pipeline en lote**: `tools/ghidra/decompile-modules.ps1` decompila todos los módulos de un
-  `modules.json`/`index.json` a `out/ghidra/` (base = `dest` del JSON; `index.json` de `modules_all`
+  `modules.json`/`index.json` a `extraction/ghidra/` (base = `dest` del JSON; `index.json` de `modules_all`
   usa `offset` de ADF → base 0). Resultado en `sanity-arte`: 53 módulos.
 - **Datos por xref**: `XrefsTo.java` lista referencias a una dirección y vuelca los bytes →
   alimenta `planar_decode`/`copper_decode`/`bin_scan`. Ej.: tabla de senos `0x1056` de `0B0C2C`.
@@ -310,7 +310,7 @@ Probado a fondo (ver `platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_
   código ajeno.
 - **Si el repo pasara a público**: convendría excluir de git el material de terceros de
   `recovered/` y conservar solo el **análisis** y las **reimplementaciones propias**. Ver
-  `platforms/computers/amiga500/demos/arte/recovered/README.md`.
+  `platforms/computers/amiga500/demos/arte/docs/RECOVERED.md`.
 
 ## 9. Plantilla de expediente
 

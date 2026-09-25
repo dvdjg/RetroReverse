@@ -9,8 +9,8 @@ Uso:
                        [--min-str 6] [--max-strings 80] [--no-entropy]
 
 Ejemplos:
-    python bin_scan.py out/disk/game.adf
-    python bin_scan.py out/ram/slowc00000.bin --base 0xc00000
+    python bin_scan.py rom/raw/game.adf
+    python bin_scan.py extraction/ram/slowc00000.bin --base 0xc00000
 """
 from __future__ import annotations
 

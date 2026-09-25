@@ -21,7 +21,7 @@ no con volcado de código ajeno.
 
 - Evidencia: rutinas en Slow RAM `0xC02426` (`IMP!`), `0xC02584` (trampoline `CrM!`),
   `0xC025B2` (`CrM!`), `0xC026AA` (`CrM2`); desensamblado en
-  `recovered/code/sos_cruncher/sos-crunchers.asm`.
+  `extraction/disassembly/sos_cruncher/sos-crunchers.asm`.
 - Qué hace: descomprime bloques (módulos, gráficos, música) en runtime; el disco solo lleva datos
   comprimidos.
 - Cómo: cabecera con firma ASCII + dos longs big-endian; `IMP!` descomprime **hacia atrás**
@@ -34,7 +34,7 @@ no con volcado de código ajeno.
 
 ## Copperlist del título
 
-- Evidencia: `recovered/media/copper/arte-title-copper.txt` (capturada de `COP1LC=0x26614`).
+- Evidencia: `assets/copper/arte-title-copper.txt` (capturada de `COP1LC=0x26614`).
 - Qué hace: instala DIW/DDF, `BPLCON0=$5600` (**5 planos**), modulos `-40`, punteros BPL/SPR,
   `DMACON`, y una paleta (`COLOR00..`).
 - Nota: la captura correspondía a una lista de **blanqueo** (punteros BPL a 0) durante una
@@ -54,7 +54,7 @@ no con volcado de código ajeno.
   #223333`. En la captura de referencia dominan `(51,0,0)` y `(170,170,170)` → paleta confirmada.
 - Layout planar OCS: 5 planos de 40 B × 200 líneas = 200 B/línea; 102852 B ≈ 514 líneas =
   ~2.5 pantallas apiladas (el buffer se reutiliza para varios estados/efectos del título).
-- Imágenes decodificadas: `recovered/media/gfx/mod7_block0_320x200.png` (título lleno, 56%
+- Imágenes decodificadas: `assets/graphics/mod7_block0_320x200.png` (título lleno, 56%
   datos), `mod7_block1_320x200.png` (28%), `block2` (8%). Bloque 0 = frame principal.
 - Receta para el engine: el demo pinta en planares OCS (5 planos) y deja que el Copper parchee los
   punteros BPL1PT..BPL5PT por frame (por eso en la copia almacenada los punteros están a 0).
@@ -67,13 +67,13 @@ no con volcado de código ajeno.
 
 - Evidencia: módulo `SINE.soslibrary` referenciado por SOS; el demo mueve objetos/ángulos por frame.
 - Idea: tabla de seno precalculada y consulta entera (sin `sin()`/punto flotante en runtime).
-- Receta para el engine (PORTADO): `reimpl/sine_table/` — tabla Q1.14 de 1024 entradas, fase de 16
+- Receta para el engine (PORTADO): `reimplementation/reference/sine_table/` — tabla Q1.14 de 1024 entradas, fase de 16
   bits con wrap natural, `sin_q14`/`cos_q14` O(1). Test host `make test`.
 
 ## Scrolltext con fuente de 3 planos (módulo 0x02162C)
 
-- Evidencia: bloque `out/modules_all/blk_02162C_45924.bin` (descomprimido del ADF),
-  desensamblado en `recovered/code/code_2162c/code_2162c.asm`. Confianza **alta** (rutina
+- Evidencia: bloque `extraction/modules_all/blk_02162C_45924.bin` (descomprimido del ADF),
+  desensamblado en `extraction/disassembly/code_2162c/code_2162c.asm`. Confianza **alta** (rutina
   completa desensamblada, fuente y texto extraídos).
 - Contenido del módulo:
   - `0x1A80`: **mapa de caracteres** `" abcdefghijklmnopqrstuvwxyz0123456789.,!?:"-` (43 chars).
@@ -103,8 +103,8 @@ no con volcado de código ajeno.
 
 ## Motor 3D (módulo 0x0B0C2C) — transformación de puntos con matriz Q15
 
-- Evidencia: `out/modules_all/blk_0B0C2C_63064.bin` (descomprimido del ADF), desensamblado en
-  `recovered/code/code_b0c2c/code_b0c2c.asm`. Confianza **alta** (rutinas completas).
+- Evidencia: `extraction/modules_all/blk_0B0C2C_63064.bin` (descomprimido del ADF), desensamblado en
+  `extraction/disassembly/code_b0c2c/code_b0c2c.asm`. Confianza **alta** (rutinas completas).
 - Contenido: motor 3D de la demo (estrellas 3D / vectorización, la rutina que el autor del
   scrolltext llama "la más optimizada"), más rutinas de fade de paleta y render.
 
@@ -146,7 +146,7 @@ ortonormalidad (camera system): `muls.w d5,d6; muls.w d4,d7; sub.l d7,d6; ...` p
 Usado para la cámara (evita drift de la matriz). Orden exacto: `fila0 = fila1×fila2`,
 `fila1 = fila2×fila0`, normalizar ambas con `(x*32767)/|fila|` (raíz entera en `0x0F1C`),
 `fila2 = fila0'×fila1'`.
-**Portado**: `reimpl/motor_3d/src/transform3d.cpp::orthonormalize` (test OK).
+**Portado**: `reimplementation/reference/motor_3d/src/transform3d.cpp::orthonormalize` (test OK).
 
 ### Fade de paleta por nibbles (0x31C-0x3E2)
 
@@ -166,22 +166,22 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
 
 ## Túnel / corridor (bloque 0x03AFFC)
 
-- Evidencia: `out/modules_all/blk_03AFFC_l1_102852.bin` (descomprimido del ADF `0x03AFFC`,
+- Evidencia: `extraction/modules_all/blk_03AFFC_l1_102852.bin` (descomprimido del ADF `0x03AFFC`,
   track 21, l1=102852). Es el **buffer del efecto «corridor»** (= el túnel de Arte). **No contiene
   código** (rts=0). Confianza **alta** en la identificación; ver
-  `recovered/media/palettes/tunnel-VALIDACION.md` para el detalle.
+  `assets/palettes/tunnel-VALIDACION.md` para el detalle.
 - Cabecera `[1d 01 ff fe]` + display: `DIWSTRT=$2981, DIWSTOP=$29C1, DDFSTRT=$38, DDFSTOP=$D0,
   BPLCON0=$5200` → **5 bitplanes / 32 colores**, 320 px. `DMACON=$802F`.
 - **Carga en RAM confirmada en vivo:** el bloque se copia a **chip RAM `0x26614`** (la paleta
   aparece en `0x2675A = +0x146`). El efecto **parchea la Copperlist en runtime** (95 bytes): copia
   los 32 colores de la paleta en los registros COLORxx.
-- **Paleta del túnel** (32 colores 12-bit): `recovered/media/palettes/tunnel-palette.json`
+- **Paleta del túnel** (32 colores 12-bit): `assets/palettes/tunnel-palette.json`
   (`FFF,FFC,FD9,…,000`, degradado de profundidad). En la captura real del efecto, la cobertura de
   esta paleta es del **100 %**. Confianza **alta**.
 - Técnica: **texture-mapped tunnel** (efecto de Chaos), como el resto de efectos del grupo; el
   look de la demo lo confirma. La captura en vivo (`reference/corridor-live.png`) muestra el túnel
   con pilares y convergencia al centro.
-- **Reimpl:** `reimpl/tunnel/` reproduce la geometría del **remake público** (`artsy`) —raycast por
+- **Reimpl:** `reimplementation/reference/tunnel/` reproduce la geometría del **remake público** (`artsy`) —raycast por
   filas— con la **paleta real** de Arte y el compositing del canvas. Validado con Ollama: la
   estructura «strongly resembles» el original.
 - **LÍMITE (mapa de textura):** el **mapa/gráficos exactos del original NO se han recuperado** por
@@ -189,12 +189,12 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
   Se documentan los intentos; la reimpl con paleta real se toma como **versión final** del efecto.
 - Receta para el engine: túnel texture-mapped con tabla de ángulos/profundidad + textura, punteros
   BPL/Copper actualizados por frame y **paleta cargada en la Copperlist** (cubierto por
-  `reimpl/palette_fade`).
+  `reimplementation/reference/palette_fade`).
 
 
 ## Plasma (bloque 0x09A940) — efecto procedural
 
-- Evidencia: `out/modules_all/blk_09A940_51648.bin` (descomprimido del ADF). Buffer de display.
+- Evidencia: `extraction/modules_all/blk_09A940_51648.bin` (descomprimido del ADF). Buffer de display.
   Confianza **media**.
 - **El plasma es un efecto PROCEDURAL**: el buffer no contiene una imagen estática (está vacío/
   denso sin coherencia al decodificar). Se genera en runtime calculando ondas de seno 2D
@@ -230,8 +230,8 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
 
 ## Zoom / render de imagen a 4 planos (módulo 0x07E42C)
 
-- Evidencia: `out/modules_all/blk_07E42C_20268.bin` (descomprimido del ADF), desensamblado en
-  `recovered/code/mod_07e42c/` (por hacer). Confianza **media-alta** (rutina desensamblada).
+- Evidencia: `extraction/modules_all/blk_07E42C_20268.bin` (descomprimido del ADF), desensamblado en
+  `extraction/disassembly/mod_07e42c/` (por hacer). Confianza **media-alta** (rutina desensamblada).
 - Contexto: el bloque 0x07E42C es una variante de sos.library con **107 `jmp`** (dispatch grande)
   y muchas rutinas de dibujo (122 `dbra`, 104 `bset.b`). Es el candidato a las rutinas de
   **zoom de imágenes / distorsión** ("zooming-pictures" del scrolltext).
@@ -254,8 +254,8 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
 
 ## Motor de blobs/sprites con lookup tables (0x0B0C2C, zona 0x34C6-0x5342)
 
-- Evidencia: `out/modules_all/blk_0B0C2C_63064.bin`, desensamblado en
-  `recovered/code/code_b0c2c/`. Confianza **alta** (rutina completa desensamblada).
+- Evidencia: `extraction/modules_all/blk_0B0C2C_63064.bin`, desensamblado en
+  `extraction/disassembly/code_b0c2c/`. Confianza **alta** (rutina completa desensamblada).
 - Es el **render de blobs** de la demo: dibuja sprites/blobs en **3 bitplanes** usando una
   **tabla de lookup precalculada** para expandir cada byte de sprite a su patrón de 16 bits sin
   calcular en el bucle caliente.
@@ -287,8 +287,8 @@ cada color `(a0)` se acerca al destino `(a1)+` incrementando/decrementando `+1`,
 
 ## Efecto de distorsión/ondas con SINE (módulo 0x096A28)
 
-- Evidencia: `out/modules_all/blk_096A28_3260.bin` (descomprimido del ADF), desensamblado en
-  `recovered/code/mod_096a28/effect_sine_0x150-0x950.asm`. Confianza **alta** (rutinas completas).
+- Evidencia: `extraction/modules_all/blk_096A28_3260.bin` (descomprimido del ADF), desensamblado en
+  `extraction/disassembly/mod_096a28/effect_sine_0x150-0x950.asm`. Confianza **alta** (rutinas completas).
 - Es un efecto que **carga la librería SINE** (`move.l #$53494e45 ("SINE"), d0; jsr -$138(a6)`)
   y aplica **8 osciladores de fase** para distorsionar la imagen por bandas/scanlines.
 

@@ -22,7 +22,7 @@
  *
  * Ejemplo:
  *   node dump-ram.mjs --config ../platforms/computers/amiga500/demos/arte/out/sanity.uae \
- *     --adf ../platforms/computers/amiga500/demos/arte/out/disk/sanity-arte.adf --boot 20 \
+ *     --adf ../platforms/computers/amiga500/demos/arte/rom/raw/sanity-arte.adf --boot 20 \
  *     --regions 0x0:0x80000,0xc00000:0x80000 --out ../platforms/computers/amiga500/demos/arte/out --prefix arte --screenshot
  */
 

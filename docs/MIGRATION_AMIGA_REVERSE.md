@@ -21,14 +21,14 @@ llevarlo al **leaf node** del marco:
 
 | Dentro del nodo (`demos/arte/`) | Destino (leaf node) | Notas |
 |---|---|---|
-| `out/disk/*.adf`, `bootblock.bin` | `rom/raw/` + `rom/layout.json` | «ROM» = imagen de disco; mapa en `layout.json` |
+| `rom/raw/*.adf`, `bootblock.bin` | `rom/raw/` + `rom/layout.json` | «ROM» = imagen de disco; mapa en `layout.json` |
 | `out/{ram,modules,modules_all,display,screens,logs,ghidra}` | `extraction/` | Evidencia pesada, regenerable |
-| `recovered/code/` | `extraction/disassembly/` | `.asm` + `notes.md` + `SOURCE` |
-| `recovered/maps/` | `extraction/` + `hardware_spec/` | Mapa del juego vs del sistema |
+| `extraction/disassembly/` | `extraction/disassembly/` | `.asm` + `notes.md` + `SOURCE` |
+| `extraction/maps/` | `extraction/` + `hardware_spec/` | Mapa del juego vs del sistema |
 | `recovered/media/{gfx,palettes,audio}` | `assets/` | Assets decodificados (no originales crudos) |
-| `recovered/media/reference/*.png` | `extraction/screenshots/` | Capturas (evidencia visual) |
-| `recovered/media/scrolltext/` | `assets/text/` (o fuera de git) | Texto original (©); decidir |
-| `recovered/reference/sanity-os-v26/` | `rom/reference/` (o fuera de git) | Material de terceros (SOS); © autores |
+| `extraction/screenshots/*.png` | `extraction/screenshots/` | Capturas (evidencia visual) |
+| `assets/text/` | `assets/text/` (o fuera de git) | Texto original (©); decidir |
+| `rom/reference/sanity-os-v26/` | `rom/reference/` (o fuera de git) | Material de terceros (SOS); © autores |
 | `reimpl/*` | `reimplementation/reference/` | **C/C++ de referencia + ASM canónico** |
 | `specs/*.json` | `extraction/specs/` | Specs de enganche (extracción) |
 | `docs/*.md` (recetas) | `docs/` + `spec/` (HIGS) | Parte se traduce a HIGS |

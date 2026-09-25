@@ -4,7 +4,7 @@
 Formato planar clásico: cada plano es una imagen de 1 bit, `planes` planos por
 línea, bytes contiguos por línea (el módulo entre líneas suele ser 0 en los
 buffers de los demos, o `ancho_bytes`). Acepta paleta en formato de
-`recovered/media/palettes/*.json` (lista de "#rrggbb").
+`assets/palettes/*.json` (lista de "#rrggbb").
 
 Uso:
   python planar_decode.py <bitplanes.bin> <planes> <width_px> <height> <paleta.json> [--out a.png]

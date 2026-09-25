@@ -12,15 +12,15 @@ Estados: `HECHO` · `EN CURSO` · `PENDIENTE` · `BLOQUEADO`. Cada fase con **cr
 
 ## Fase 2 — Arranque y volcado de RAM — PENDIENTE
 - Lanzar WinUAE-DBG con la config correcta y volcar RAM + screenshot.
-- **Cierre**: volcados en `out/ram/` con 0 fallos + captura.
+- **Cierre**: volcados en `extraction/ram/` con 0 fallos + captura.
 
 ## Fase 3 — Módulos descomprimidos — PENDIENTE
 - Identificar y enganchar el decruncher; volcar bloques.
-- **Cierre**: `out/modules/` con los módulos sin comprimir.
+- **Cierre**: `extraction/modules/` con los módulos sin comprimir.
 
 ## Fase 4 — Bucle y rutinas de efecto — PENDIENTE
 - Localizar dispatch de efectos y bucle por frame.
-- **Cierre**: mapa rutina <-> efecto en `recovered/maps/dispatch.md`.
+- **Cierre**: mapa rutina <-> efecto en `extraction/maps/dispatch.md`.
 
 ## Fase 5 — Assets — PENDIENTE
 - Capturar custom registers + Copperlist; decodificar bitmaps/samples.

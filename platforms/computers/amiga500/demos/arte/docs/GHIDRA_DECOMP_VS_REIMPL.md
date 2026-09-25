@@ -4,7 +4,7 @@ Segunda fase de la evaluación de Ghidra (ver `GHIDRA_AMIGA_EVAL.md`). Aquí: (3
 **pseudo‑C decompilado** contra las reimplementaciones de efectos ya portados, (4) extracción de
 **datos por xref** para alimentar los decoders, y (5) **rz-ghidra** como segundo decompilador.
 
-Todo lo generado está en `out/ghidra/` (regenerable). Comandos en `tools/README.md` y
+Todo lo generado está en `extraction/ghidra/` (regenerable). Comandos en `tools/README.md` y
 `tools/ghidra/README.md`.
 
 ---
@@ -13,11 +13,11 @@ Todo lo generado está en `out/ghidra/` (regenerable). Comandos en `tools/README
 
 ### 3.1 Motor 3D (`blk_0B0C2C`, base 0) — coincide
 
-`out/ghidra/blk_0B0C2C_l1_63064.decomp.c`:
+`extraction/ghidra/blk_0B0C2C_l1_63064.decomp.c`:
 
 | Función | Offset | Reimpl | Veredicto |
 |---|---|---|---|
-| construcción de matriz de rotación | `0xC16` | `build_rotation()` (`reimpl/motor_3d/src/transform3d.cpp`) | **idéntico** |
+| construcción de matriz de rotación | `0xC16` | `build_rotation()` (`reimplementation/reference/motor_3d/src/transform3d.cpp`) | **idéntico** |
 | transformación de punto (×3) | `0xCBA` | `transform()` | **idéntico** |
 | proyección (producto punto por fila) | `0xDAC`/`0xDE4` | — (implícito en `transform`) | consistente |
 | matriz ortonormal por cross‑product | `0xE1E` (+ `0xF1C`) | **no portado** | hallazgo |
@@ -37,16 +37,16 @@ Coincide término a término con `build_rotation()` (p. ej. decompilado
 `in_A0[8] = Q15(sVar3*sVar4)` ↔ reimpl `M.m[8] = q15_mul(cb, ca)`). **Confianza alta.**
 
 > **Hallazgo**: `0xE1E` (matriz ortonormal por cross‑product + normalización `(x*32767)/|v|`)
-> **no está en `reimpl/motor_3d`**. Es la técnica del *camera system* que evita el *drift* de la
+> **no está en `reimplementation/reference/motor_3d`**. Es la técnica del *camera system* que evita el *drift* de la
 > matriz; merece portarse (ver `TECNICAS.md` → «Construcción de matriz ortonormal»).
 
 ### 3.2 Zoom (`blk_07E42C`, base 0) — confirma el doc y añade detalle
 
-`out/ghidra/blk_07E42C_l1_20268.decomp.c`:
+`extraction/ghidra/blk_07E42C_l1_20268.decomp.c`:
 
 - `FUN_0000024c` (`0x24C`): `$2d0 += 6` hasta `$b5`; `$2ce = Q16(tabla[$3ee2+$2d2+$2d0] * 0xdc)
   + 0x11d`; 4 iteraciones de `FUN_0000193e`. **Coincide** con
-  `recovered/code/ALGORITMOS_ZOOM_Y_TUNEL.md` §1 (rutina `$24C`).
+  `extraction/disassembly/ALGORITMOS_ZOOM_Y_TUNEL.md` §1 (rutina `$24C`).
 - `FUN_000002d4` (`0x2D4`): trayectoria con tablas `$3944` (×0x190), `$38aa` (×0x384),
   `$3a78` (×0x12c) y sesgos; índice `$238 += 2`, reset a `-1` en `0x9a`. **Coincide** con §1.
 - **Detalle nuevo (no documentado)**: `FUN_000002d4` **parchea una Copperlist** por bandas
@@ -58,9 +58,9 @@ la base directa para portarlo.
 
 ### 3.3 Túnel / corridor (`blk_03AFFC`) — sin código
 
-`out/ghidra/blk_03AFFC_l1_102852.decomp.c` → **0 funciones**. Confirma lo ya sabido: el bloque
+`extraction/ghidra/blk_03AFFC_l1_102852.decomp.c` → **0 funciones**. Confirma lo ya sabido: el bloque
 `0x03AFFC` es **datos** (Copperlist + paleta `@0x146` + datos), no el render del corridor.
-La reimpl (`reimpl/tunnel/`) reproduce la geometría del **remake público** (`artsy`), no código
+La reimpl (`reimplementation/reference/tunnel/`) reproduce la geometría del **remake público** (`artsy`), no código
 recuperado. **Conclusión**: no se puede validar el render del original por decompilado porque la
 rutina **no está localizada**. Confianza alta en el negativo (0 funciones).
 
@@ -112,7 +112,7 @@ desde fuente (ver `tools/ghidra/wsl/build-rzghidra.sh`), porque en Windows nativ
 (sin binarios precompilados; el Rizin precompilado no trae `RizinConfig.cmake`).
 
 Mismo input (`blk_0B0C2C`, base 0, m68k BE), `pdg @ 0xcba` →
-`out/ghidra/blk_0B0C2C.rzghidra.pdg.c`:
+`extraction/ghidra/blk_0B0C2C.rzghidra.pdg.c`:
 
 ```c
 // Ghidra
