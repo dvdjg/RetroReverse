@@ -47,7 +47,7 @@ repite 4 veces (d7=3):
 
 **Receta para el engine**: tabla de factores de escala (por frame) + tabla de trayectoria; por
 frame, `muls Q16` del factor, y blit del bloque escalado a un buffer de 4 planos. Las imágenes
-fuente pueden ser **no rectangulares** (ver `tools/python/AMIGA_BITMAPS.md`).
+fuente pueden ser **no rectangulares** (ver `platforms/computers/amiga500/tools/python/AMIGA_BITMAPS.md`).
 
 **Estado**: localizado y documentado; reimpl **pendiente**.
 

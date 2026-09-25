@@ -57,20 +57,20 @@ Los scripts viven en el **toolkit compartido** [`../tools/`](../../../../../tool
 
 | Script | Uso |
 |---|---|
-| `tools/python/dms_unpack.py` | DMS -> ADF verificado (crc/checksum por pista) |
+| `platforms/computers/amiga500/tools/python/dms_unpack.py` | DMS -> ADF verificado (crc/checksum por pista) |
 | `tools/python/bin_scan.py` | strings/entropía de ADF o volcado |
-| `tools/node/dump-ram.mjs` | lanza WinUAE-DBG y vuelca regiones de RAM |
-| `tools/node/hook-trampoline.mjs` | engancha el decruncher por firma y vuelca bloques |
-| `tools/node/probe-breakpoints.mjs` | verifica que el stub aplica breakpoints |
+| `platforms/computers/amiga500/tools/node/dump-ram.mjs` | lanza WinUAE-DBG y vuelca regiones de RAM |
+| `platforms/computers/amiga500/tools/node/hook-trampoline.mjs` | engancha el decruncher por firma y vuelca bloques |
+| `platforms/computers/amiga500/tools/node/probe-breakpoints.mjs` | verifica que el stub aplica breakpoints |
 
 ## Cómo reproducir
 
 ```powershell
 cd Amiga-Reverse\sanity-arte
-python ..\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
-node   ..\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node   ..\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec extraction\specs\imp-dump.json --out out --boot 5
-node   ..\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
+python ..\platforms\computers\amiga500\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
+node   ..\platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node   ..\platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec extraction\specs\imp-dump.json --out out --boot 5
+node   ..\platforms\computers\amiga500\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
 ```
 
 Comandos exactos y notas en [`tools/README.md`](tools/README.md).

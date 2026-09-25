@@ -5,7 +5,7 @@ Cada bloque volcado en `extraction/modules/` sigue pendiente de asociación nomb
 
 ## Bloques descomprimidos (hook `IMP!`)
 
-Volcados con `tools/node/hook-trampoline.mjs` + `extraction/specs/imp-dump.json` (12 únicos, dedupe por
+Volcados con `platforms/computers/amiga500/tools/node/hook-trampoline.mjs` + `extraction/specs/imp-dump.json` (12 únicos, dedupe por
 sha1). `dest` en Chip (`0x0`-`0x80000`) o Slow (`0xC00000`-`0xE00000`). Los buffers se reutilizan
 (misma `dest` con distinto `len` = módulos distintos decodificados en el mismo hueco), por eso el
 hook captura **cada** decodificación aunque el buffer se sobreescriba después.

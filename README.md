@@ -100,11 +100,11 @@ por dispatch indirecto). Inventario completo en [`platforms/computers/amiga500/d
 
 ```powershell
 # 1) Extraer el disco (verificado por pista)
-python tools\python\dms_unpack.py Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
+python platforms\computers\amiga500\tools\python\dms_unpack.py Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
 
 # 2) Arrancar en WinUAE-DBG y volcar RAM + módulos
-node tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec platforms\computers\amiga500\demos\arte\specs\imp-dump.json --out platforms\computers\amiga500\demos\arte\out --boot 5
+node platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec platforms\computers\amiga500\demos\arte\specs\imp-dump.json --out platforms\computers\amiga500\demos\arte\out --boot 5
 
 # 3) Desensamblar / decompilar (objdump/capstone + Ghidra)
 tools\ghidra\decompile-modules.ps1 -ModulesJson platforms\computers\amiga500\demos\arte\out\modules\modules.json -OutDir platforms\computers\amiga500\demos\arte\out\ghidra
@@ -137,7 +137,7 @@ Utilidades **parametrizables**, documentadas en [`tools/README.md`](tools/README
 | **Vídeo / assets** | `node/dump-display.mjs`, `node/decode-bitplanes.mjs`, `python/copper_decode.py`, `python/planar_decode.py`, `python/ollama_vision.py` |
 | **Desensamblado / decompilado** | `ghidra/` (headless + pipeline), ver [`tools/ghidra/README.md`](tools/ghidra/README.md) |
 
-Guía de bitmaps OCS/ECS: [`tools/python/AMIGA_BITMAPS.md`](tools/python/AMIGA_BITMAPS.md).
+Guía de bitmaps OCS/ECS: [`platforms/computers/amiga500/tools/python/AMIGA_BITMAPS.md`](platforms/computers/amiga500/tools/python/AMIGA_BITMAPS.md).
 
 ## Entorno / toolchain
 

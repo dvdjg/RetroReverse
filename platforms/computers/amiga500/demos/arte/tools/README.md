@@ -10,7 +10,7 @@ exactos usados para este título, para reproducirlo.
 ## 0. DMS -> ADF (verificado)
 
 ```powershell
-python tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
+python platforms\computers\amiga500\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
 ```
 
 Esperado: `80 pistas decodificadas`, ADF de 901120 bytes.
@@ -18,7 +18,7 @@ Esperado: `80 pistas decodificadas`, ADF de 901120 bytes.
 ## 1. Volcado de RAM (Chip 512K + Slow 512K) + captura
 
 ```powershell
-node tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
+node platforms\computers\amiga500\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
   --boot 20 --regions 0x0:0x80000,0xc00000:0x80000 --out out --prefix sanity --screenshot
 ```
 
@@ -30,13 +30,13 @@ Salida: `extraction/ram/sanity_000000.bin`, `extraction/ram/sanity_c00000.bin`, 
 ## 2. Diagnóstico de breakpoints
 
 ```powershell
-node tools\node\probe-breakpoints.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 15
+node platforms\computers\amiga500\tools\node\probe-breakpoints.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 15
 ```
 
 ## 3. Volcado de módulos descomprimidos (de-cruncher SOS `CrM!`/`CrM2`)
 
 ```powershell
-node tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
+node platforms\computers\amiga500\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
   --spec extraction\specs\imp-dump.json --out out --boot 5
 ```
 
@@ -47,7 +47,7 @@ node tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\
 ## 4. Extracción de display (Copperlist + assets)
 
 ```powershell
-node tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
+node platforms\computers\amiga500\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf `
   --boot 21 --out out --prefix arte-title
 ```
 

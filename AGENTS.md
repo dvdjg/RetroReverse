@@ -46,7 +46,7 @@ registros y buffers cambian por frame); la clave está en el código.
 
 ## Bitmaps Amiga OCS/ECS (guía de reconstrucción)
 
-Ver `tools/python/AMIGA_BITMAPS.md` (guía completa del usuario): registros custom a leer,
+Ver `platforms/computers/amiga500/tools/python/AMIGA_BITMAPS.md` (guía completa del usuario): registros custom a leer,
 algoritmo de intercalado planar, heurísticas de ancho/altura/stride, detección de tiles/bobs,
 lectura desde ADF. Puntos clave:
 

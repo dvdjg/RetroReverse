@@ -76,7 +76,7 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
 
 ## Breakpoints del stub
 
-- Verificado con `tools/node/probe-breakpoints.mjs`: el stub **sí aplica `Z0`** y devuelve
+- Verificado con `platforms/computers/amiga500/tools/node/probe-breakpoints.mjs`: el stub **sí aplica `Z0`** y devuelve
   `T05swbreak:;` (confirmado en `0xC0255A`, dentro del bucle `IMP!`).
 - `pause()` (interrupt `0x03`) puede tardar; usar reintentos.
 
@@ -99,7 +99,7 @@ El demo pasa la mayor parte del tiempo en un cruncher **`IMP!`**, no en el `CrM!
   `COLOR00..`; guardada en `assets/copper/` marcada como **no verificada**.
 - **No leer `$DFF1C0+` en OCS/ECS**: error y posible caída del emulador.
 - Referencia fiable del aspecto: `extraction/screenshots/arte-title-screenshot.png`.
-- El **canal lateral** (`tools/node/side-read.mjs`) sí es fiable para `state`/`regs`/`mem` de RAM.
+- El **canal lateral** (`platforms/computers/amiga500/tools/node/side-read.mjs`) sí es fiable para `state`/`regs`/`mem` de RAM.
 - Reconstruir un frame desde los registros en vivo falla por los **splits de Copper** (cambian
   `BPLCON0`/punteros por zonas): un rango contiguo no reconstruye la imagen. La **captura de
   pantalla** es la referencia fiable; para los planos fuente habría que emular el Copper.

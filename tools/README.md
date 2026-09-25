@@ -4,6 +4,13 @@ Herramientas genéricas, **independientes del título**, para extraer imágenes,
 enganchar descompresores de cualquier software Amiga 68k. Cada utilidad está documentada aquí
 y acepta su configuración por CLI/env, de modo que se reutiliza en cualquier expediente.
 
+> **Split de plataformas**: `tools/` (marco) contiene ahora las utilidades **genéricas**
+> (`python/bin_scan.py`, `python/ollama_vision.py`, `ghidra/`). Las **específicas de Amiga**
+> (WinUAE/GDB, DMS, planar/copper, `AMIGA_BITMAPS.md`, `capture-live.ps1`, `imp_decrunch.py`,
+> `bin/ancient`) viven en
+> [`../platforms/computers/amiga500/tools/`](../platforms/computers/amiga500/tools/README.md).
+> Las secciones siguientes se mantienen como **referencia** de su uso.
+
 ```
 tools/
   node/
@@ -83,7 +90,7 @@ Cerrar esa instancia por **su PID** (`Stop-Process -Id <pid>`), solo el propio.
 ## Receta: capturar un efecto concreto en vivo (una sola invocación)
 
 Evitar relanzar en bucle: lanzar **una vez** y sondear dentro de esa sesión. Automatizado en
-**`tools/capture-live.ps1`** (lanza en primer plano, sondea una firma, vuelca RAM + screenshot y
+**`platforms/computers/amiga500/tools/capture-live.ps1`** (lanza en primer plano, sondea una firma, vuelca RAM + screenshot y
 cierra por PID):
 
 ```powershell

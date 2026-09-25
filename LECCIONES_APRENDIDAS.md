@@ -54,8 +54,8 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
   línea de comandos**, no solo en el `.uae`.
 - Para no depender de las tools MCP, importar el módulo Node del repo hermano:
   `mcp-winuae-emu/dist/winuae-connection.js` (`WinUAEConnection` + `GdbProtocol`).
-  Es exactamente lo que hacen `tools/node/dump-ram.mjs` y
-  `tools/node/hook-trampoline.mjs`.
+  Es exactamente lo que hacen `platforms/computers/amiga500/tools/node/dump-ram.mjs` y
+  `platforms/computers/amiga500/tools/node/hook-trampoline.mjs`.
 - Flujo: `connect()` (hace Ctrl+C y handshake) -> `continue()` -> esperar -> `pause()` ->
   `readRegisters()` / `readMemory()`.
 - `memcfg` (monitor) da el mapa real de bancos: no asumir 0x000000/0xC00000, confirmarlo.
@@ -65,13 +65,13 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 
 ### 4bis. Sesión persistente y canal lateral (evitar relanzar)
 
-- **Lanzar WinUAE UNA vez** y reutilizarlo (`tools/node/launch.mjs` deja el emulador detached).
+- **Lanzar WinUAE UNA vez** y reutilizarlo (`platforms/computers/amiga500/tools/node/launch.mjs` deja el emulador detached).
   Relanzarlo por cada experimento es lento y un error de método: las herramientas deben conectar
   al que ya corre, no arrancar otro.
 - **Canal lateral (2346)**: independiente de GDB; lee/escribe en runtime **sin pausar la CPU**.
   Comandos: `hello`, `state`, `regs`, `mem <addr> <len>` (≤4096 B), `poke <addr> <hex>`,
   `lock acquire <owner> <observe|assist|takeover>` / `lock release`, `screenshot <path>`,
-  `pause`/`resume`, `runstatus`, `audit writes`. Cliente: `tools/node/side.mjs`.
+  `pause`/`resume`, `runstatus`, `audit writes`. Cliente: `platforms/computers/amiga500/tools/node/side.mjs`.
 - **Trampa de formato numérico**: el servidor parsea los números en **base 10** salvo que lleven
   `0x` o letras hex. Enviar SIEMPRE `0x` (p. ej. `mem 0xdff080 0x140`); si no, `1000` se
   interpreta como 1000 decimal en vez de `0x1000` (nos pasó: leía 128000 B de 524288).
@@ -242,7 +242,7 @@ tras el decrunch. El `.adf` solo sirve para el loader y los datos aún comprimid
 - **Referencia fiable**: la **captura de pantalla** (`screenshot`) refleja lo realmente mostrado.
   Usarla como fuente para reimplementar, aunque no dé los bitplanes fuente.
 - No leer `$DFF1C0+` en OCS/ECS: provoca error y puede tumbar el emulador (limitar a `$DFF1BE`).
-- El canal lateral (`tools/node/side-read.mjs`, puerto 2346) sí es útil de forma fiable para
+- El canal lateral (`platforms/computers/amiga500/tools/node/side-read.mjs`, puerto 2346) sí es útil de forma fiable para
   `state`/`regs` (PC, ciclos, registros de CPU) y para `mem` de RAM genérica.
 
 ## 7. Desensamblado
