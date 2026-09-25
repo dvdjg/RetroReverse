@@ -25,6 +25,10 @@ Cada título vive en su propia carpeta y sigue la **estructura canónica** de
 [`STRUCTURE.md`](STRUCTURE.md). Para abrir uno nuevo se copia [`_template/`](_template/) y se sigue
 su roadmap.
 
+> **Marco (proyecto padre)**: este repo es el **caso piloto Amiga** de `RetroReverse`, un marco para
+> **convertir juegos clásicos a PC** (pipeline de RE + reimplementación validada). La integración y
+> el plan de migración están en `../RetroReverse/docs/MIGRATION_AMIGA_REVERSE.md`.
+
 ## Cómo está organizado
 
 ```
@@ -117,6 +121,7 @@ Guía de bitmaps OCS/ECS: [`toolkit/python/AMIGA_BITMAPS.md`](toolkit/python/AMI
 |---|---|
 | [`sanity-arte/README.md`](sanity-arte/README.md) | Estado, inventario y cómo reproducir |
 | [`docs/ROADMAP.md`](sanity-arte/docs/ROADMAP.md) | Fases, criterios de cierre, riesgos, estado de efectos |
+| [`docs/PENDIENTES.md`](sanity-arte/docs/PENDIENTES.md) | **Inventario vivo de trabajo abierto** (efectos, contrato, orquestación, migración) |
 | [`docs/HALLAZGOS.md`](sanity-arte/docs/HALLAZGOS.md) | Datos concretos con evidencia (direcciones, firmas, formatos) |
 | [`docs/TECNICAS.md`](sanity-arte/docs/TECNICAS.md) | Efecto a efecto + receta de reimplementación |
 | [`docs/GHIDRA_AMIGA_EVAL.md`](sanity-arte/docs/GHIDRA_AMIGA_EVAL.md) | Evaluación de Ghidra + extensión (loaders, `.uss`, decompilador) |
