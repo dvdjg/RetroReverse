@@ -1,5 +1,5 @@
 // reimpl/sphere/src/tables.hpp
-// Tablas recuperadas del generador del mapa de la esfera de «Arte».
+// Tablas recuperadas del generador del mapa de la esfera de Â«ArteÂ».
 // extent_table: $2e2b02 (semicirculo). profile_table: $2e2c02 (arcsin, signed).
 // Extraidas del generador original (via lib/sphere_map.ml). 256 bytes cada una.
 #pragma once

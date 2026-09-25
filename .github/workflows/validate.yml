@@ -17,3 +17,14 @@ jobs:
         run: python -m pip install --upgrade pip jsonschema
       - name: Validar specs HIGS
         run: bash scripts/validate-higs.sh
+
+  encoding:
+    name: Codificación (UTF-8 sin BOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validar codificación
+        run: bash scripts/validate-encoding.sh

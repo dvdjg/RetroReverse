@@ -272,6 +272,8 @@ Método completo en [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md); contra
 ```powershell
 # HIGS (esquema + lint)
 wsl -d Ubuntu -- bash -lc "bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/scripts/validate-higs.sh"
+# Codificación (UTF-8 sin BOM ni mojibake)
+wsl -d Ubuntu -- bash -lc "bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/scripts/validate-encoding.sh"
 # Reimpl «Arte» (tests host)
 wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/platforms/computers/amiga500/demos/arte/reimplementation/reference && make test-all"
 # Adaptador libretro (core de prueba)

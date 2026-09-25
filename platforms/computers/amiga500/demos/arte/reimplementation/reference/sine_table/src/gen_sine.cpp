@@ -1,4 +1,4 @@
-﻿// gen_sine.cpp â€” genera la tabla de seno Q1.14 (1024 entradas).
+// gen_sine.cpp â€” genera la tabla de seno Q1.14 (1024 entradas).
 // Uso: g++ -O2 -std=c++17 -o gen_sine gen_sine.cpp && ./gen_sine src/sine_table_data.hpp
 //      (sin argumento escribe por stdout)
 #include <cmath>

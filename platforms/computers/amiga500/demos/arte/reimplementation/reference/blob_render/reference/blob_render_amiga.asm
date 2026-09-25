@@ -1,7 +1,7 @@
 ; ============================================================================
 ; blob_render/reference/blob_render_amiga.asm
 ;
-; RUTINA ASM CANONICA (optimizada) del motor de blobs/sprites de «Arte».
+; RUTINA ASM CANONICA (optimizada) del motor de blobs/sprites de Â«ArteÂ».
 ; Desensamblado del bloque 0x0B0C2C (out/modules_all/). NO es codigo fuente
 ; del autor: es el desensamblado del binario, conservado como referencia.
 ; sha1 del bloque: b37f140c327309db4e8f2894ad100b9018144302

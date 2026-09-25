@@ -1,5 +1,5 @@
 // reimpl/sine_wobble/src/sine_wobble.cpp
-// Implementación de referencia del efecto de distorsión SINE de «Arte».
+// ImplementaciÃ³n de referencia del efecto de distorsiÃ³n SINE de Â«ArteÂ».
 // La tabla de seno Q15 (256 entradas) es la que el demo precalcula con SINE.soslibrary.
 #include "sine_wobble.hpp"
 

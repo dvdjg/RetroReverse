@@ -1,7 +1,7 @@
 ; ============================================================================
 ; palette_fade/reference/palette_fade_amiga.asm
 ;
-; RUTINA ASM del fade de paleta por nibbles de «Arte» (bloque 0x0B0C2C).
+; RUTINA ASM del fade de paleta por nibbles de Â«ArteÂ» (bloque 0x0B0C2C).
 ; sha1 del bloque: b37f140c327309db4e8f2894ad100b9018144302
 ;
 ; 0x031C-0x03E2: por cada color, acerca nibble a nibble R/G/B hacia el objetivo

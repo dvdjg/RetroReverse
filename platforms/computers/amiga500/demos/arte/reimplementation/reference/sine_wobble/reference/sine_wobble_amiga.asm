@@ -1,7 +1,7 @@
 ; ============================================================================
 ; sine_wobble/reference/sine_wobble_amiga.asm
 ;
-; RUTINA ASM CANONICA del efecto de distorsion SINE de «Arte» (bloque 0x096A28).
+; RUTINA ASM CANONICA del efecto de distorsion SINE de Â«ArteÂ» (bloque 0x096A28).
 ; Desensamblado del binario (no es fuente del autor).
 ; sha1 del bloque: 79cdb836cd66e522ae7d034c5ea9add92604a0d5
 ;

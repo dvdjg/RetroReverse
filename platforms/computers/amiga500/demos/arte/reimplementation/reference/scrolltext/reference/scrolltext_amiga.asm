@@ -1,7 +1,7 @@
 ; ============================================================================
 ; scrolltext/reference/scrolltext_amiga.asm
 ;
-; RUTINA ASM del scrolltext de «Arte» (bloque 0x02162C). Desensamblado del binario.
+; RUTINA ASM del scrolltext de Â«ArteÂ» (bloque 0x02162C). Desensamblado del binario.
 ; sha1 del bloque: 198b23f547b7d3bef3c47999aad8177394d78a88
 ;
 ; 0x196E-0x1A70: render del scrolltext (mapa de chars en $1a80, glifos en
