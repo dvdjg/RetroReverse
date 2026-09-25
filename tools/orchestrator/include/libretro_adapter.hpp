@@ -43,6 +43,16 @@ public:
     unsigned frame_width() const;
     unsigned frame_height() const;
 
+    // Hash FNV-1a (64 bits) del último framebuffer RGBA8888. 0 si aún no hay frame.
+    std::uint64_t frame_hash() const;
+    // Copia del último framebuffer (RGBA8888). Vacío si aún no hay frame.
+    std::vector<std::uint8_t> frame_rgba() const;
+
+    // Tamaño de la RAM del sistema expuesta por el core (0 si no expone).
+    std::size_t system_ram_size() const;
+    // Localiza una región de memoria libretro (RETRO_MEMORY_*); devuelve sus bytes o vacío.
+    std::vector<std::uint8_t> read_memory(unsigned id, std::uint32_t addr, std::size_t len);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

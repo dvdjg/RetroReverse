@@ -54,6 +54,7 @@ struct LibretroAdapter::Impl {
     void (*retro_run)() = nullptr;
     bool (*retro_load_game)(const retro_game_info*) = nullptr;
     void (*retro_unload_game)() = nullptr;
+    void (*retro_set_controller_port_device)(unsigned, unsigned) = nullptr;
     void* (*retro_get_memory_data)(unsigned) = nullptr;
     std::size_t (*retro_get_memory_size)(unsigned) = nullptr;
     std::size_t (*retro_serialize_size)() = nullptr;
@@ -99,6 +100,9 @@ struct LibretroAdapter::Impl {
         retro_run = reinterpret_cast<void (*)()>(R("retro_run"));
         retro_load_game = reinterpret_cast<bool (*)(const retro_game_info*)>(R("retro_load_game"));
         retro_unload_game = reinterpret_cast<void (*)()>(R("retro_unload_game"));
+        // Opcional: no todos los cores lo exportan.
+        retro_set_controller_port_device =
+            reinterpret_cast<void (*)(unsigned, unsigned)>(sym(handle, "retro_set_controller_port_device"));
         retro_get_memory_data = reinterpret_cast<void* (*)(unsigned)>(R("retro_get_memory_data"));
         retro_get_memory_size = reinterpret_cast<std::size_t (*)(unsigned)>(R("retro_get_memory_size"));
         retro_serialize_size = reinterpret_cast<std::size_t (*)()>(R("retro_serialize_size"));
@@ -109,7 +113,8 @@ struct LibretroAdapter::Impl {
     // --- callbacks ---
     static bool env(unsigned cmd, void* data) {
         Impl* self = reinterpret_cast<Impl*>(g_active ? g_active->impl_.get() : nullptr);
-        switch (cmd) {
+        const unsigned base = cmd & 0xFFFF;  // descarta el flag EXPERIMENTAL
+        switch (base) {
             case RETRO_ENVIRONMENT_GET_CAN_DUPE:
                 if (data) *reinterpret_cast<bool*>(data) = true;
                 return true;
@@ -117,6 +122,7 @@ struct LibretroAdapter::Impl {
                 if (self && data) self->pixel_format = *reinterpret_cast<retro_pixel_format*>(data);
                 return true;
             case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
+            case RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIRECTORY:
                 if (data) *reinterpret_cast<const char**>(data) = self->sys_dir.c_str();
                 return true;
             case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
@@ -125,13 +131,53 @@ struct LibretroAdapter::Impl {
             case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
                 if (data) reinterpret_cast<retro_log_callback*>(data)->log = log_stub;
                 return true;
+            case RETRO_ENVIRONMENT_GET_OVERSCAN:
+                if (data) *reinterpret_cast<bool*>(data) = false;
+                return true;
+            case RETRO_ENVIRONMENT_GET_VARIABLE:
+                // Sin variables definidas: el contrato exige devolver false y no tocar value.
+                if (data) reinterpret_cast<retro_variable*>(data)->value = nullptr;
+                return false;
+            case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
+                if (data) *reinterpret_cast<bool*>(data) = false;
+                return true;
+            case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
+                // 0 = interfaz legacy; el frontend no expone opciones (core usa defaults).
+                if (data) *reinterpret_cast<unsigned*>(data) = 0;
+                return true;
+            case RETRO_ENVIRONMENT_GET_LANGUAGE:
+                if (data) *reinterpret_cast<unsigned*>(data) = 0;  // English
+                return true;
+            case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES:
+                if (data) *reinterpret_cast<std::uint64_t*>(data) = (1ULL << RETRO_DEVICE_JOYPAD);
+                return true;
+            case RETRO_ENVIRONMENT_GET_MESSAGE_INTERFACE_VERSION:
+                if (data) *reinterpret_cast<unsigned*>(data) = 0;
+                return true;
+            case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
+            case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
+            case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION:
+            case RETRO_ENVIRONMENT_GET_VFS_INTERFACE:
+                return false;  // no soportado (el core usa stdio por defecto)
+            // Información que el core publica y el frontend puede aceptar e ignorar.
             case RETRO_ENVIRONMENT_SET_VARIABLES:
+            case RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
+            case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL:
+            case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2:
+            case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL:
+            case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
+            case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK:
             case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
             case RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL:
             case RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS:
-                return true;
-            case RETRO_ENVIRONMENT_GET_VARIABLE:
-                if (data) reinterpret_cast<retro_variable*>(data)->value = nullptr;
+            case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
+            case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
+            case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
+            case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
+            case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO:
+            case RETRO_ENVIRONMENT_SET_GEOMETRY:
+            case RETRO_ENVIRONMENT_SET_MESSAGE_EXT:
+            case RETRO_ENVIRONMENT_SET_ROTATION:
                 return true;
             default:
                 return false;
@@ -202,13 +248,16 @@ LibretroAdapter::LibretroAdapter(const std::string& core_path) : impl_(std::make
         throw std::runtime_error("versión de API del core no soportada");
 
     g_active = this;
+    // Orden canónico del frontend: environment -> init -> resto de callbacks.
+    // Algunos cores (p. ej. mesen) asumen que retro_init ya se ha ejecutado cuando
+    // reciben retro_set_video_refresh/audio/input.
     impl_->retro_set_environment(&Impl::env);
+    impl_->retro_init();
     impl_->retro_set_video_refresh(&Impl::video);
     impl_->retro_set_audio_sample(&Impl::audio);
     impl_->retro_set_audio_sample_batch(&Impl::audio_batch);
     impl_->retro_set_input_poll(&Impl::input_poll);
     impl_->retro_set_input_state(&Impl::input_state);
-    impl_->retro_init();
 
     retro_system_info si{};
     impl_->retro_get_system_info(&si);
@@ -236,6 +285,8 @@ void LibretroAdapter::load_rom(const std::string& path) {
     gi.meta = nullptr;
     if (!impl_->retro_load_game(&gi)) throw std::runtime_error("retro_load_game falló: " + path);
     impl_->loaded = true;
+    if (impl_->retro_set_controller_port_device)
+        impl_->retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 }
 
 void LibretroAdapter::reset() { if (impl_->retro_reset) impl_->retro_reset(); }
@@ -292,5 +343,32 @@ void LibretroAdapter::clear_trace() { impl_->trace = TraceConfig{}; }
 const std::string& LibretroAdapter::core_name() const { return impl_->core_name; }
 unsigned LibretroAdapter::frame_width() const { return impl_->fw; }
 unsigned LibretroAdapter::frame_height() const { return impl_->fh; }
+
+std::uint64_t LibretroAdapter::frame_hash() const {
+    // FNV-1a 64 bits sobre el framebuffer RGBA8888.
+    std::uint64_t h = 1469598103934665603ULL;
+    for (std::uint8_t b : impl_->frame) {
+        h ^= b;
+        h *= 1099511628211ULL;
+    }
+    return impl_->frame.empty() ? 0 : h;
+}
+
+std::vector<std::uint8_t> LibretroAdapter::frame_rgba() const { return impl_->frame; }
+
+std::size_t LibretroAdapter::system_ram_size() const {
+    if (!impl_->retro_get_memory_size) return 0;
+    return impl_->retro_get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+}
+
+std::vector<std::uint8_t> LibretroAdapter::read_memory(unsigned id, std::uint32_t addr, std::size_t len) {
+    std::vector<std::uint8_t> out;
+    if (!impl_->retro_get_memory_data || !impl_->retro_get_memory_size) return out;
+    void* base = impl_->retro_get_memory_data(id);
+    std::size_t size = impl_->retro_get_memory_size(id);
+    if (!base || addr + len > size) return out;
+    out.assign(static_cast<std::uint8_t*>(base) + addr, static_cast<std::uint8_t*>(base) + addr + len);
+    return out;
+}
 
 }  // namespace rr

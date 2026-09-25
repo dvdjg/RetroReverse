@@ -27,6 +27,10 @@ int main(int argc, char** argv) {
     try {
         LibretroAdapter emu(core);
         std::printf("core: %s\n", emu.core_name().c_str());
+        std::fflush(stdout);
+
+        // Sin ROM: modo "probe" (valida que el core carga). Útil para check-cores.sh.
+        if (rom.empty()) return 0;
 
         emu.load_rom(rom);
         emu.step_frames(5);
