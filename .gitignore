@@ -34,6 +34,13 @@ platforms/**/extraction/logs/
 platforms/**/extraction/ghidra/
 platforms/**/extraction/pp20/
 
+# --- Emulación libretro: trazas/savestates/capturas (regenerables) ---
+platforms/**/extraction/traces/
+platforms/**/extraction/savestates/
+platforms/**/extraction/screenshots/
+platforms/**/extraction/memory_dumps/
+platforms/**/extraction/dumps/
+
 # --- Salidas generadas de reimpl (tests) ---
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/anim/
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/anim_arte/
@@ -53,10 +60,31 @@ frontend/*/
 
 # --- orchestrator (build) ---
 tools/orchestrator/host_test
+tools/orchestrator/vertical_slice
 tools/orchestrator/test_core.so
 tools/orchestrator/test_core.dll
 tools/orchestrator/*.ppm
 
+# --- NES reimplementation (build) ---
+platforms/consoles/nes/reimplementation/nestest_runner
+platforms/consoles/nes/reimplementation/build_trace.txt
+
+# --- ROMs propias: recepción central (contenido NUNCA versionado; se conserva la estructura) ---
+roms/*
+!roms/README.md
+!roms/*/
+roms/*/*
+!roms/*/.gitkeep
+!roms/*/README.md
+
 # --- Auxiliares y traspaso (locales, NO versionar) ---
 external/
 CONTEXT.md
+
+# --- Artefactos de runtime de emuladores (configs generadas) ---
+cfg/
+tools/orchestrator/cfg/
+
+# --- Proyectos del emulador de reversing (libRetroReversing; regenerables) ---
+RE_projects/
+**/RE_projects/
