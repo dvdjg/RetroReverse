@@ -25,7 +25,7 @@ PROJ="$(find "$OUT/RE_projects" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | he
 [[ -n "$PROJ" ]] || { echo "no se generó proyecto RE en $OUT"; exit 4; }
 
 python3 "$ROOT/tools/python/re_functions_to_ranges.py" "$PROJ" "$OUT/coverage.functions.ranges.txt" || true
-python3 "$ROOT/tools/python/re_trace_to_ranges.py" "$PROJ" "$OUT/coverage.trace.ranges.txt" || true
+python3 "$ROOT/tools/python/re_trace_to_ranges.py" "$PROJ" "$OUT/coverage.trace.ranges.txt" --rom "$ROM" || true
 
 echo "evidencia RE en $OUT"
 echo "cobertura -> $OUT/coverage.functions.ranges.txt, $OUT/coverage.trace.ranges.txt"
