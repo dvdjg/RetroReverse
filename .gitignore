@@ -23,16 +23,16 @@ desktop.ini
 *.tmp
 *.log
 
-# --- Nodo Arte: evidencias pesadas (regenerables) frente a curaduría ---
-platforms/computers/amiga500/demos/arte/rom/raw/
-platforms/computers/amiga500/demos/arte/extraction/ram/
-platforms/computers/amiga500/demos/arte/extraction/modules/
-platforms/computers/amiga500/demos/arte/extraction/modules_all/
-platforms/computers/amiga500/demos/arte/extraction/display/
-platforms/computers/amiga500/demos/arte/extraction/screens/
-platforms/computers/amiga500/demos/arte/extraction/logs/
-platforms/computers/amiga500/demos/arte/extraction/ghidra/
-platforms/computers/amiga500/demos/arte/extraction/pp20/
+# --- Evidencias pesadas por juego (regenerables) frente a curaduría (extraction/) ---
+platforms/**/rom/raw/
+platforms/**/extraction/ram/
+platforms/**/extraction/modules/
+platforms/**/extraction/modules_all/
+platforms/**/extraction/display/
+platforms/**/extraction/screens/
+platforms/**/extraction/logs/
+platforms/**/extraction/ghidra/
+platforms/**/extraction/pp20/
 
 # --- Salidas generadas de reimpl (tests) ---
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/anim/
@@ -44,4 +44,8 @@ platforms/computers/amiga500/demos/arte/reimplementation/reference/**/*_test
 # --- Volcados binarios auxiliares de herramientas (regenerables, no son fuente) ---
 tools/node/*.bin
 tools/out/
+
+# --- Emuladores/frontend clonados (pesados; no se versionan) ---
+emulators/*/
+frontend/*/
 

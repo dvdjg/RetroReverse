@@ -3,67 +3,96 @@
 Aplicación de la **Regla 0** ([`../../../../../../docs/RESEARCH_FIRST.md`](../../../../../../docs/RESEARCH_FIRST.md)):
 recopilar el **ground truth** de la comunidad **antes** de instrumentar o desensamblar.
 
-> **Estado**: borrador. Los datos marcados como «verificar» deben confirmarse contra las fuentes
-> citadas (no se han reproducido aquí tablas numéricas completas para no introducir errores).
-
-## Objetivo del vertical slice (P0)
-
-Validar el pipeline completo con un juego **muy documentado**: si la IA/automatización **reproduce**
-lo que la comunidad ya describió (y el motor diferencial no distingue), el pipeline funciona.
+> Estado: **cerrado** en lo esencial (mecánicas/timings de alto nivel). Quedan lagunas concretas
+> (marcadas al final) que se cerrarán con el driver y con evidencia propia.
 
 ## Fuentes (ground truth)
 
 | Tipo | Fuente | Uso |
 |---|---|---|
-| Mecánicas/IA (referencia) | **The Pac-Man Dossier** — Jamey Pittman | Modos de fantasmas, tablas de velocidad, timings, split-screen del nivel 256 |
-| Desensamblado comentado | **Scott Lawrence / BleuLlama** (umlautllama.com; GitHub *GameDocs*) | Ms. Pac-Man: mapa de memoria, sonido, bugs |
-| Guía | **Chris Lomont** — *Pac-Man Emulation Guide* | Hardware + notas de desensamblado |
-| Bugs/comportamiento | Artículos de **Don Hodges** | *ghost bug*, split-screen |
-| Hardware/mapa | **MAME** `src/mame/pacman/pacman.cpp` (BSD-3-Clause) | Mapa de memoria, I/O, bugs (base del `rom/layout.json`) |
-| Historia Ms. Pac-Man | Comentarios del driver MAME (Steve Golson, GCC) | Origen (*Crazy Otto*), protección |
+| Mecánicas/IA/timings | **The Pac-Man Dossier** — Jamey Pittman (gamedeveloper.com, 2009) | Scatter/Chase/Frightened, velocidades, dots/frutas, reversión, cornering |
+| Desensamblado comentado | **Scott Lawrence / BleuLlama** (umlautllama.com; GitHub *GameDocs*) | Ms. Pac-Man (mapa de memoria, sonido, bugs) |
+| Guía | **Chris Lomont** — *Pac-Man Emulation Guide* | Hardware + desensamblado |
+| Bugs | **Don Hodges** | *ghost bug*, split-screen |
+| Hardware/mapa | **MAME** `src/mame/pacman/pacman.cpp` | Mapa de memoria e I/O (base de [`../rom/layout.json`](../rom/layout.json)) |
 
-## Ground truth — hardware (confianza alta)
+## Hardware (confianza alta)
 
-- **CPU** Z80 @ **3.072 MHz**; **sonido** Namco WSG (3 voces); **vídeo** 224×288 @ **60.606 Hz**.
-- **Memoria** (ver [`../rom/layout.json`](../rom/layout.json), extraído del driver MAME):
-  ROM `0x0000-0x3fff` (mirror `0x8000`), VRAM `0x4000-0x43ff`, Color RAM `0x4400-0x47ff`,
-  work RAM `0x4c00-0x4fef`, sprite RAM `0x4ff0-0x4fff`, `spriteram2` `0x5060-0x506f`.
-- **I/O**: IN0 `0x5000`, IN1 `0x5040`, DSW1 `0x5080`, DSW2 `0x50c0`; latch `0x5000-0x5007`
-  (interrupt/sound enable, flip, start lamps, coin); watchdog `0x50c0`.
-- **Interrupción**: VBlank (IRQ), vector fijado por el puerto I/O `$0`.
-- **Laberinto**: rejilla **28×36 tiles** (8×8 px).
+CPU **Z80** @ 3.072 MHz · sonido **Namco WSG** (3 voces) · vídeo **224×288** @ **60.606 Hz**.
+Mapa de memoria e I/O: [`../rom/layout.json`](../rom/layout.json).
 
-## Ground truth — mecánicas (confianza alta, verificar números en el Dossier)
+## Mecánicas y puntuación (Dossier; confianza alta)
 
-- **Objetos**: Pac-Man; 4 fantasmas — **Blinky** (rojo, persigue directo), **Pinky** (rosa, apunta
-  4 tiles por delante), **Inky** (cyan, vector desde Blinky), **Clyde** (naranja, persigue si está
-  lejos y huye a su esquina si está cerca).
-- **Modos**: **Scatter** ↔ **Chase** alternan con **tiempos por nivel**; tras un power pellet,
-  **Frightened** (los fantasmas huyen y son comestibles). Esquinas de Scatter: Blinky arriba-dcha,
-  Pinky arriba-izq, Inky abajo-dcha, Clyde abajo-izq.
-- **Velocidades**: por nivel (base ~80 % Pac-Man / 75 % fantasmas); el **túnel** ralentiza a los
-  fantasmas; **Cruise Elroy** (Blinky se acelera al bajar el nº de dots).
-- **Puntuación**: dot 10, power pellet 50, fantasmas 200/400/800/1600, frutas por nivel.
-- **Progresión**: fruta a los 70 y 170 dots (aprox.); reglas de salida de la casa de fantasmas por
-  contadores (global y por nivel).
-- **Bugs a reproducir** (si son visibles): animación hacia arriba 1 px abajo; RAM fuera de rango en
-  el túnel derecho; **split-screen** del nivel 256.
+- **244 dots**: 240 pequeños (10 pts) + 4 **energizers** (50 pts) → **2.600 pts/tablero**.
+- **Frutas**: aparecen bajo la casa a los **70** y **170** dots; valor **100–5.000** según nivel;
+  duran ~9–10 s. (Tabla de frutas del Dossier; pendiente transcribirla.)
+- **Comer un dot** detiene a Pac-Man **1 frame**; un **energizer**, **3 frames**.
+- **Fantasmas comidos** en un mismo energizer: **200/400/800/1600**. A partir del **nivel 19** ya
+  no se ponen azules (pero sí invierten).
 
-## Lagunas (a cerrar con las fuentes / con evidencia propia)
+## Modos y temporización (segundos)
 
-- Tablas numéricas exactas (velocidades y tiempos de modo por nivel) → **verificar en el Dossier**.
-- Reglas finas de salida de la casa de fantasmas (contadores).
-- Algoritmo exacto del RNG (`0x2a23`) y su uso en Frightened.
-- Layout/decodificación exacta de los ROMs de gráficos y PROMs de color del romset concreto.
+```
+Scatter  L1:7  L2-4:7  L5+:5
+Chase          20      20       20
+Scatter         7       7        5
+Chase          20      20       20
+Scatter         5       5        5
+Chase    L1:20  L2-4:1033  L5+:1037
+Scatter  L1:5   L2+:1/60
+Chase    indefinido
+```
 
-## Cómo se usará
+- 4 fases de Scatter por nivel; luego **Chase indefinido**.
+- El temporizador **se pausa** durante Frightened y se reinicia al perder vida o completar nivel.
+- **Reversión forzada** al cambiar de modo: `chase→scatter`, `chase→frightened`,
+  `scatter→chase`, `scatter→frightened`. **No** revierten `frightened→chase/scatter`.
+  La inversión ocurre cuando el fantasma entra en el siguiente tile.
 
-1. **Validación del pipeline**: la HIGS inferida debe **coincidir** con el Dossier (mecánicas/tiempos).
-2. **Validación diferencial**: el `reimplementation/` SDL3 no debe distinguirse del emulador.
-3. **Ground truth de bugs**: los visibles se modelan en la HIGS (no se copian del asm).
+## Velocidades (por nivel)
 
-## Próximos pasos
+| Nivel | Pac normal | Pac con dots | Pac frightened | Pac fright+dot | Fantasma normal | Fantasma frightened | Fantasma túnel |
+|---|---|---|---|---|---|---|---|
+| 1 | 80% | 71% | 90% | 79% | 75% | 50% | 40% |
+| 2–4 | 90% | 79% | 95% | 83% | 85% | 55% | 45% |
+| 5–20 | 100% | 87% | 100% | 87% | 95% | 60% | 50% |
+| 21+ | 90% | 79% | — | — | 95% | — | 50% |
 
-1. Leer Dossier + desensamblado + driver y **anotar** aquí las tablas (sustituyendo «verificar»).
-2. Preparar el **core instrumentado** (MAME year-stamped) y el `layout.json` verificado.
-3. Extraer assets (tiles/sprites/paletas) y crear `spec/` (HIGS).
+- En el **túnel lateral** la velocidad del fantasma cae ~a la mitad.
+- **Cruise Elroy** (Blinky se acelera cuando quedan pocos dots): regla específica por nivel.
+
+## Comportamiento Frightened
+
+- Los fantasmas eligen dirección pseudoaleatoria con un **PRNG**; orden de intento si hay muro:
+  dirección elegida → **up, left, down, right**.
+- El **PRNG se reinicia** con la misma semilla al empezar **nivel** y **vida** → resultados
+  **reproducibles** (clave para la validación determinista).
+- La duración azul se acorta por nivel; el nº de parpadeos está en la Tabla A.1 del Dossier
+  (pendiente transcribir).
+
+## IA de persecución (resumen; detalles por verificar)
+
+- **Blinky**: persigue directo a Pac-Man ("Shadow").
+- **Pinky**: apunta **4 tiles** por delante de Pac-Man ("Speedy").
+- **Inky**: vector desde Blinky → **2 tiles** por delante de Pac-Man ("Bashful").
+- **Clyde**: persigue si está **lejos**; si está **cerca** (<8 tiles), huye a su esquina ("Pokey").
+- **Esquinas de Scatter**: Blinky arriba-dcha, Pinky arriba-izq, Inky abajo-dcha, Clyde abajo-izq.
+
+## Correcciones y bugs a reproducir
+
+- Animación de Pac-Man **hacia arriba 1 px abajo**.
+- Uso de RAM fuera de rango (`0x4800-0x4bff`) al traducir la posición en el **túnel derecho**.
+- **Split-screen** del **nivel 256**.
+
+## Lagunas (cerrar con el driver / evidencia propia)
+
+1. Tabla A.1 completa (frightened s + flashes, valores de fruta y nº de nivel de cada fruta).
+2. Reglas finas de salida de la casa (contadores de dots global/por-fantasma).
+3. Algoritmo exacto del RNG (`0x2a23`) y su uso.
+4. Detalles del split-screen y del "ghost bug".
+
+## Uso
+
+1. **Validación del pipeline**: la HIGS inferida debe **coincidir** con el Dossier.
+2. **Validación diferencial**: la reimplantación SDL3 no debe distinguirse del emulador.
+3. Los bugs visibles se **modelan** en la HIGS (no se copian del asm).
