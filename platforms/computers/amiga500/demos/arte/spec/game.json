@@ -1,0 +1,75 @@
+{
+  "schema_version": "0.1",
+  "game_id": "arte",
+  "title": "Arte (Sanity, 1993)",
+  "platform_origin": "computers/amiga500",
+  "fps": 50,
+  "tick_hz": 50,
+  "resolution": { "width": 320, "height": 256 },
+
+  "mechanics": {
+    "summary": "Demo modular: efectos secuenciados, sincronizados al retrazo vertical (50 Hz).",
+    "rules": [
+      { "id": "vblank_sync", "description": "El bucle de frame espera el retrazo vertical; cada efecto avanza 1 tick por frame.", "confidence": "media", "evidence": ["hallazgos"] },
+      { "id": "q15_math", "description": "Transformaciones 3D en coma fija Q15 (producto = (a*b)>>15), sin punto flotante.", "confidence": "alta", "evidence": ["tecnicas"] },
+      { "id": "video_zones", "description": "El sistema de video cambia el numero de planos activos por zonas de pantalla para recortar/partir la imagen.", "confidence": "alta", "evidence": ["tecnicas"] },
+      { "id": "palette_fade", "description": "Fade de paleta por nibbles (componentes por separado) hacia un objetivo.", "confidence": "alta", "evidence": ["tecnicas"] },
+      { "id": "double_buffer", "description": "Doble buffer de planos con intercambio en el retrazo vertical (o al terminar la copia por hardware).", "confidence": "media", "evidence": ["tecnicas"] }
+    ]
+  },
+
+  "entities": [
+    {
+      "id": "effect.stars3d",
+      "kind": "other",
+      "initial_state": "running",
+      "states": [
+        { "id": "running", "motion": { "rule": "transform_q15" }, "transitions": [] }
+      ],
+      "confidence": "alta",
+      "evidence": ["tecnicas", "ghidra_eval"]
+    },
+    {
+      "id": "effect.zoom",
+      "kind": "other",
+      "initial_state": "growing",
+      "states": [
+        { "id": "growing", "motion": { "rule": "scale_table_q16", "speed_tiles_per_tick": { "index_step": 6 } },
+          "transitions": [ { "when": "index>=0xb4", "to": "shrinking" } ] },
+        { "id": "shrinking", "motion": { "rule": "scale_table_q16" },
+          "transitions": [ { "when": "frame==0x5cd", "to": "growing" } ] }
+      ],
+      "confidence": "media",
+      "evidence": ["zoom"]
+    }
+  ],
+
+  "timing_sequences": [
+    {
+      "id": "frame_loop",
+      "events": [
+        { "at_tick": 0, "action": "wait_vblank" },
+        { "at_tick": 0, "action": "effect_step" },
+        { "at_tick": 0, "action": "blit_and_swap" }
+      ]
+    }
+  ],
+
+  "assets": [
+    { "id": "copper_title", "path": "assets/copper/arte-title-copper.txt", "kind": "other", "meta": { "note": "Lista de registros del titulo (candidata, no verificada)" } },
+    { "id": "copper_mod003", "path": "assets/copper/mod_003_26614_6108.copper.txt", "kind": "other" },
+    { "id": "gfx_mod7_block0", "path": "assets/graphics/mod7_block0_320x200.png", "kind": "tileset" },
+    { "id": "gfx_mod7_block1", "path": "assets/graphics/mod7_block1_320x200.png", "kind": "tileset" },
+    { "id": "palette_title", "path": "assets/palettes/arte-title-palette.json", "kind": "palette" },
+    { "id": "palette_tunnel", "path": "assets/palettes/tunnel-palette.json", "kind": "palette" },
+    { "id": "scrolltext", "path": "assets/text/scrolltext.txt", "kind": "font", "meta": { "note": "Scrolltext; fuente de 3 planos" } }
+  ],
+
+  "evidence": [
+    { "id": "tecnicas", "refs": [ { "kind": "doc", "path": "docs/TECNICAS.md" } ], "confidence": "alta" },
+    { "id": "hallazgos", "refs": [ { "kind": "doc", "path": "docs/HALLAZGOS.md" } ], "confidence": "alta" },
+    { "id": "modules", "refs": [ { "kind": "doc", "path": "extraction/maps/modules.md" } ], "confidence": "alta" },
+    { "id": "ghidra_eval", "refs": [ { "kind": "doc", "path": "docs/GHIDRA_AMIGA_EVAL.md" } ], "confidence": "alta" },
+    { "id": "zoom", "refs": [ { "kind": "doc", "path": "docs/GHIDRA_DECOMP_VS_REIMPL.md" } ], "confidence": "media" }
+  ]
+}
