@@ -9,55 +9,54 @@ del expediente «Arte» como la plataforma **Amiga 500** del marco (ver
 - `sanity-arte/` → `platforms/computers/amiga500/demos/arte/`
 - `toolkit/` → `tools/` (marco)
 - `_template/` → `docs/templates/expediente/`
-- Metodología (`STRUCTURE.md`, `LECCIONES_APRENDIDAS.md`, `PORTING.md`, `AGENTS.md`) permanece en la
-  **raíz** como documentación del marco.
+- Metodología (`STRUCTURE.md`, `LECCIONES_APRENDIDAS.md`, `PORTING.md`, `AGENTS.md`) en la **raíz**
+  como documentación del marco.
 - Esqueleto creado: `platforms/{arcade,consoles,computers}/...`, `emulators/`, `frontend/`.
-- **Enlaces markdown reescritos y verificados** (0 rotos) y `.gitignore` con rutas nuevas.
+- Enlaces markdown reescritos y verificados (0 rotos) y `.gitignore` con rutas nuevas.
 
-## Fase 2 — Reorganización interna del nodo — PENDIENTE
+## Fase 2 — Reorganización interna del nodo — HECHO
 
-El expediente conserva aún su layout propio (`docs/ specs/ tools/ out/ recovered/ reimpl/`). Falta
-llevarlo al **leaf node** del marco:
+El nodo «Arte» usa ya el **leaf node** del marco:
 
-| Dentro del nodo (`demos/arte/`) | Destino (leaf node) | Notas |
-|---|---|---|
-| `rom/raw/*.adf`, `bootblock.bin` | `rom/raw/` + `rom/layout.json` | «ROM» = imagen de disco; mapa en `layout.json` |
-| `out/{ram,modules,modules_all,display,screens,logs,ghidra}` | `extraction/` | Evidencia pesada, regenerable |
-| `extraction/disassembly/` | `extraction/disassembly/` | `.asm` + `notes.md` + `SOURCE` |
-| `extraction/maps/` | `extraction/` + `hardware_spec/` | Mapa del juego vs del sistema |
-| `recovered/media/{gfx,palettes,audio}` | `assets/` | Assets decodificados (no originales crudos) |
-| `extraction/screenshots/*.png` | `extraction/screenshots/` | Capturas (evidencia visual) |
-| `assets/text/` | `assets/text/` (o fuera de git) | Texto original (©); decidir |
-| `rom/reference/sanity-os-v26/` | `rom/reference/` (o fuera de git) | Material de terceros (SOS); © autores |
-| `reimpl/*` | `reimplementation/reference/` | **C/C++ de referencia + ASM canónico** |
-| `specs/*.json` | `extraction/specs/` | Specs de enganche (extracción) |
-| `docs/*.md` (recetas) | `docs/` + `spec/` (HIGS) | Parte se traduce a HIGS |
-| **Nuevo** | `spec/` | HIGS de «Arte» (efectos/timings, agnóstico de hardware) |
-| **Nuevo** | `reimplementation/` | SDL3, solo consume `spec/` + `assets/` |
+```
+platforms/computers/amiga500/demos/arte/
+  rom/                  raw/ (ADF, bootblock) · reference/ (SOS, © autores) · sanity.uae
+  extraction/           disassembly/ · maps/ · screenshots/ · specs/
+                        ram/ · modules/ · modules_all/ · display/ · screens/ · logs/ · ghidra/ · pp20/
+  assets/               graphics/ · palettes/ · copper/ · text/ · audio/
+  spec/                 HIGS (game.json + README)          <- nuevo
+  reimplementation/     reference/ (C/C++ + ASM canónico) · SDL3 (esqueleto)  <- nuevo
+  docs/                 ROADMAP · HALLAZGOS · TECNICAS · GHIDRA_* · PENDIENTES · RECOVERED · PORT_*
+  tools/ · README.md
+```
 
-Además (fase 2):
-
-- Extraer a `platforms/computers/amiga500/tools/` las herramientas **específicas de Amiga**
-  (`winuae-session`, `dump-ram`, `hook-trampoline`, `probe-*`, `launch/side/stop`, `dms_unpack`,
-  `copper_decode`, `planar_decode`, `capture-live`, `AMIGA_BITMAPS.md`).
-- Rellenar `platforms/computers/amiga500/hardware_spec/` (Agnus/Denise/Paula/68000, mapa de
-  memoria, I/O).
-- Crear `spec/` (HIGS) a partir de `docs/TECNICAS.md` y la `reimplementation/` SDL3.
+- Herramientas **específicas de Amiga** movidas a
+  [`../platforms/computers/amiga500/tools/`](../platforms/computers/amiga500/tools/README.md);
+  `tools/` (marco) queda genérico (`bin_scan`, `ollama_vision`, `ghidra/`).
+- `hardware_spec` de Amiga creado (`../platforms/computers/amiga500/hardware_spec/`).
+- HIGS de «Arte» creada (`demos/arte/spec/`) y **esqueleto SDL3** que solo lee `spec/` + `assets/`.
 
 ## Reglas
 
-- **Un solo repositorio**, reorganización interna con `git mv` (conserva historia). **No** subtree ni
+- **Un solo repositorio**; reorganización interna con `git mv` (conserva historia). **No** subtree ni
   submódulo.
 - **Higiene**: excluir de git binarios de terceros y `extraction/` pesado; conservar `docs/`,
   `spec/`, `assets/` decodificados y `reimplementation/`.
 - **No redistribuir** código/assets originales ([`LEGAL.md`](LEGAL.md)).
 
-## Criterio de cierre (fase 2)
+## Criterio de cierre
 
 1. `demos/arte/{rom,extraction,assets,spec,reimplementation,docs}` con contenido reubicado y
-   **enlaces válidos**.
-2. `demos/arte/README.md` reproduce los artefactos con comandos documentados.
-3. Existe `spec/` (HIGS) y una `reimplementation/` SDL3 que **solo** lee `spec/` + `assets/`.
-4. El pipeline es el **mismo** que en las demás plataformas.
+   **enlaces válidos** — **HECHO**.
+2. `demos/arte/README.md` reproduce los artefactos con comandos documentados — **HECHO**.
+3. `spec/` (HIGS) + `reimplementation/` que **solo** lee `spec/` + `assets/` — **HECHO** (esqueleto;
+   render real y validación **pendientes**).
+4. El pipeline es el **mismo** que en las demás plataformas — **EN CURSO**.
+
+## Pendiente (P2.3)
+
+- **Render SDL3** real en `reimplementation/` (usando la HIGS).
+- **Validación diferencial** vs emulador.
+- Cargar la HIGS con una librería JSON (sustituir el lector naive).
 
 Ver también [`ROADMAP.md`](ROADMAP.md) fase **P2**.

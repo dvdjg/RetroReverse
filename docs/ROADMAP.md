@@ -9,9 +9,11 @@ Regla transversal: **documentación primero** ([`RESEARCH_FIRST.md`](RESEARCH_FI
 
 Objetivo: que **un** juego recorra el pipeline completo antes de generalizar.
 
-- P0.1 Estructura del monorepo + docs + ADRs (`docs/`). **HECHO** (diseño).
-- P0.2 Destripar Pac-Man: Dossier + desensamblado + driver MAME → `RESEARCH.md`. **PENDIENTE**.
-- P0.3 MAME (versión ligera) instrumentado headless: input, savestates, trazas, captura. **PENDIENTE**.
+- P0.1 Estructura del monorepo + docs + ADRs (`docs/`). **HECHO**.
+- P0.2 Destripar Pac-Man: Dossier + driver MAME → `RESEARCH.md`. **HECHO**
+  (`platforms/arcade/dedicated/namco_pacman/pacman/docs/RESEARCH.md`).
+- P0.3 Emulación instrumentada: contrato (`docs/INSTRUMENTATION.md`), plan MAME del nodo y
+  orquestador (`tools/orchestrator/`). **EN CURSO** — falta compilar el core y el adaptador libretro.
 - P0.4 Análisis estático (Capstone + Ghidra) + anotación por trazas. **PENDIENTE**.
 - P0.5 Bucle IA: inferir FSM de fantasmas, velocidades por nivel, mapas, túnel. **PENDIENTE**.
 - P0.6 HIGS de Pac-Man + assets (tiles/sprites/paletas/sonido). **PENDIENTE**.
@@ -22,8 +24,9 @@ HIGS **reproduce** lo que el Dossier describe.
 
 ## P1 — Generalización del pipeline
 
-- P1.1 Orquestador C++23/Python (carga ROM → instrumenta → traza → Ghidra → HIGS → valida).
-- P1.2 Esquema HIGS + JSON Schema + `HIGS lint` — **HECHO** (`docs/higs/`); pendiente integrarlo en CI.
+- P1.1 Orquestador (carga ROM → instrumenta → traza → Ghidra → HIGS → valida). **EN CURSO**:
+  interfaz `EmulatorControl` + [`INSTRUMENTATION.md`](INSTRUMENTATION.md); adaptadores pendientes.
+- P1.2 Esquema HIGS + JSON Schema + `HIGS lint` + CI — **HECHO** (`docs/higs/`, `.github/workflows/`).
 - P1.3 Extractores de assets por plataforma (tiles/sprites/paletas/audio).
 - P1.4 Validación diferencial reusable (framebuffer + audio + estado).
 - P1.5 Segundo juego (preferible no arcade: NES o Amiga) para probar la generalidad.
@@ -32,11 +35,13 @@ HIGS **reproduce** lo que el Dossier describe.
 
 ## P2 — Amiga 500 (retrofit de `Amiga-Reverse`)
 
-- P2.1 Migrar `Amiga-Reverse` al layout (`platforms/computers/amiga500/...`).
-  Ver [`MIGRATION_AMIGA_REVERSE.md`](MIGRATION_AMIGA_REVERSE.md).
-- P2.2 `hardware_spec` Amiga (Agnus/Denise/Paula/68000) + instrumentación WinUAE-DBG/GDB.
-- P2.3 Portar el expediente «Arte» a HIGS + reimpl SDL3 + validación.
-- P2.4 Un **juego** Amiga (no solo demo) de un disco AmigaDOS, end-to-end.
+- P2.1 Migrar al layout (`platforms/computers/amiga500/...`). **HECHO** (fases 1+2;
+  ver [`MIGRATION_AMIGA_REVERSE.md`](MIGRATION_AMIGA_REVERSE.md)).
+- P2.2 `hardware_spec` Amiga (Agnus/Denise/Paula/68000) **HECHO**; adaptador WinUAE→`EmulatorControl`
+  **PENDIENTE**.
+- P2.3 «Arte» a HIGS + reimpl SDL3 + validación. **EN CURSO**: HIGS
+  (`demos/arte/spec/`) + esqueleto SDL3 (`reimplementation/`); render y validación **PENDIENTES**.
+- P2.4 Un **juego** Amiga (no solo demo) de un disco AmigaDOS, end-to-end. **PENDIENTE**.
 
 **Cierre**: la plataforma Amiga se comporta como cualquier otra del marco.
 
@@ -58,7 +63,7 @@ HIGS **reproduce** lo que el Dossier describe.
 | M3 · FSM inferida | HIGS `state_machines/*.json` validada contra el juego |
 | M4 · Reimpl validada | diff de framebuffer ≈ 0 en escenarios cubiertos |
 | M5 · Generalización | segundo juego sin tocar el núcleo |
-| M6 · Amiga integrado | «Arte» migrado y validado |
+| M6 · Amiga integrado | «Arte» migrado (HECHO) y validado (pendiente) |
 
 ## Riesgos
 
@@ -73,6 +78,7 @@ HIGS **reproduce** lo que el Dossier describe.
 
 ## Relación con `Amiga-Reverse`
 
-`Amiga-Reverse` ya cubre para Amiga buena parte de P0–P2 (emulación instrumentada, hook de
-decrunchers, Ghidra, reimpl C++ con tests, documentación con confianza/evidencia). El marco
-**generaliza** ese método y lo integra como plataforma.
+`Amiga-Reverse` está **integrado** en este repo como plataforma Amiga
+(`platforms/computers/amiga500/`): aporta el método (emulación WinUAE/GDB, hook de decrunchers,
+Ghidra, reimpl C++ con ASM canónico, documentación con confianza/evidencia) y el demo «Arte» como
+primer expediente. El marco **generaliza** ese método al resto de plataformas.
