@@ -4,15 +4,13 @@
 /// Runtime mínimo del nodo NES→Amiga 500: memoria de consola (`NESMemory`) y CPU
 /// 6502 (`CPU`) que ejecutan el código generado por el transpilador.
 ///
-/// ## Contrato de inclusión
-/// Este header **no es autónomo**: debe incluirse desde el fichero generado
-/// **después** de definir la PRG-ROM de la ROM concreta, porque `NESMemory::read`
-/// la consulta:
+/// ## Uso
+/// El header es autónomo. El cargador —el `game_main()` del fichero generado o el
+/// arnés de tests— enlaza la PRG-ROM asignando `NESMemory::prg` y `prg_size`:
 /// \code
-/// #include <eng/core/types/types.hpp>
-/// static constexpr eng::usize kPrgSize = <N>;
-/// static constexpr eng::u8 PRG_ROM[kPrgSize] = { ... };
-/// #include "nes_runtime.hpp"      // usa kPrgSize y PRG_ROM
+/// #include "nes_runtime.hpp"
+/// mem.prg = rom_prg;        // bytes de la PRG ($8000-$FFFF)
+/// mem.prg_size = rom_len;
 /// \endcode
 ///
 /// ## Estado y alcance (F1)
@@ -29,6 +27,25 @@
 
 #include <eng/core/types/types.hpp>
 
+/// Declara una **suposición** que el compilador puede usar para optimizar:
+/// equivale a afirmar que `x` es siempre cierta en ese punto. Si no lo fuera, el
+/// comportamiento es indefinido (como `[[assume]]` de C++23).
+///
+/// Lo emite el transpilador a partir de hechos de valores (fichero `--facts`):
+/// p. ej. "esta dirección de RAM solo toma el valor 2" permite a g++ plegar
+/// ramas y aritmética. En compiladores sin soporte queda como no-op.
+#if defined(_MSC_VER)
+#define N2A_ASSUME(x) __assume(x)
+#elif defined(__has_builtin)
+#if __has_builtin(__builtin_assume)
+#define N2A_ASSUME(x) __builtin_assume(x)
+#else
+#define N2A_ASSUME(x) ((void)0)
+#endif
+#else
+#define N2A_ASSUME(x) ((void)0)
+#endif
+
 namespace n2a {
 
 /// Memoria de consola para un programa NROM: RAM interna de 2 KB y lectura de la
@@ -39,14 +56,26 @@ namespace n2a {
 struct NESMemory {
 	/// RAM interna de la consola: 2 KB en `$0000-$07FF`, espejada hasta `$1FFF`.
 	eng::u8 ram[0x800] {};
+	/// Registros de la PPU (`$2000-$2007`, espejados hasta `$3FFF`). En F1 solo se
+	/// almacenan; la PPU real es F3.
+	eng::u8 ppu_regs[8] {};
+	/// Registros de APU y E/S (`$4000-$401F`).
+	eng::u8 io[0x20] {};
+	/// RAM del cartucho (`$6000-$7FFF`); NROM no la usa, pero se conserva.
+	eng::u8 prg_ram[0x2000] {};
+	/// Puntero a la PRG-ROM mapeada en `$8000-$FFFF` (observador, no propietario).
+	const eng::u8* prg = nullptr;
+	/// Tamaño de la PRG-ROM en bytes: 16 KB se espeja, 32 KB no.
+	eng::u32 prg_size = 0;
 
-	/// Lee el byte de la dirección `addr` del espacio de 64 KB de la CPU.
-	///
-	/// - `$0000-$1FFF`: RAM interna, con espejo de 2 KB (`addr & 0x7FF`).
-	/// - `$8000-$FFFF`: PRG-ROM; si `kPrgSize == 16384` se aplica el espejo de
-	///   16 KB (NROM de 16 KB) y se devuelve el byte correspondiente.
-	/// - cualquier otra dirección ($2000-$7FFF): 0, porque PPU/APU/mapper aún no
-	///   están modelados (ver estado y alcance).
+	/// Lee el byte de la dirección `addr` del espacio de 64 KB, imitando el bus de
+	/// la NES:
+	/// - `$0000-$1FFF`: RAM interna (espejo de 2 KB);
+	/// - `$2000-$3FFF`: registros de PPU (espejo de 8);
+	/// - `$4015` y `$4000-$401F`: APU y E/S;
+	/// - `$6000-$7FFF`: RAM del cartucho;
+	/// - `$8000-$FFFF`: PRG-ROM (espejo de 16 KB si `prg_size == 0x4000`);
+	/// - cualquier otra: 0.
 	///
 	/// \param addr Dirección de 16 bits.
 	/// \return El byte leído. No tiene efectos secundarios.
@@ -54,28 +83,50 @@ struct NESMemory {
 		if (addr < 0x2000u) {
 			return ram[addr & 0x7FFu];
 		}
-		if (addr >= 0x8000u) {
-			eng::usize off = static_cast<eng::usize>(addr - 0x8000u);
-			if (kPrgSize == 16384u) {
-				off &= 0x3FFFu;
+		if (addr < 0x4000u) {
+			return ppu_regs[addr & 0x07u];
+		}
+		if (addr == 0x4015u) {
+			return io[0x15u];
+		}
+		if (addr < 0x4020u) {
+			return io[addr - 0x4000u];
+		}
+		if (addr >= 0x8000u && prg != nullptr && prg_size != 0u) {
+			eng::usize idx = static_cast<eng::usize>(addr - 0x8000u);
+			if (prg_size == 0x4000u) {
+				idx &= 0x3FFFu;
 			}
-			if (off < kPrgSize) {
-				return PRG_ROM[off];
-			}
+			return prg[idx % prg_size];
+		}
+		if (addr >= 0x6000u && addr < 0x8000u) {
+			return prg_ram[addr - 0x6000u];
 		}
 		return 0u;
 	}
 
-	/// Escribe el byte `value` en la dirección `addr`.
+	/// Escribe el byte `value` en `addr` con el mismo reparto que `read`: RAM,
+	/// registros de PPU y APU/E/S, y RAM de cartucho. La PRG-ROM es de solo
+	/// lectura y se ignora.
 	///
-	/// Solo persiste en la RAM interna (`$0000-$1FFF`, con espejo); el resto de
-	/// direcciones se ignoran porque PPU/APU/mapper no están modelados todavía.
-	///
-	/// \param addr   Dirección destino de 16 bits.
-	/// \param value  Byte a escribir.
+	/// \param addr  Dirección destino de 16 bits.
+	/// \param value Byte a escribir.
 	void write(eng::u16 addr, eng::u8 value) {
 		if (addr < 0x2000u) {
 			ram[addr & 0x7FFu] = value;
+			return;
+		}
+		if (addr < 0x4000u) {
+			ppu_regs[addr & 0x07u] = value;
+			return;
+		}
+		if (addr < 0x4020u) {
+			io[addr - 0x4000u] = value;
+			return;
+		}
+		if (addr >= 0x6000u && addr < 0x8000u) {
+			prg_ram[addr - 0x6000u] = value;
+			return;
 		}
 	}
 
@@ -343,7 +394,7 @@ struct CPU {
 	/// Desapila el acumulador; actualiza `N`/`Z`.
 	void PLA() { A = pull(); set_nz(A); }
 	/// Apila el registro de flags (con el bit B y el bit 5 a 1).
-	void PHP() { push(static_cast<eng::u8>(0x20u | (N ? 0x80u : 0u) | (V ? 0x40u : 0u) | (D ? 0x08u : 0u) | (I ? 0x04u : 0u) | (Z ? 0x02u : 0u) | (C ? 0x01u : 0u))); }
+	void PHP() { push(static_cast<eng::u8>(0x30u | (N ? 0x80u : 0u) | (V ? 0x40u : 0u) | (D ? 0x08u : 0u) | (I ? 0x04u : 0u) | (Z ? 0x02u : 0u) | (C ? 0x01u : 0u))); }
 	/// Desapila el registro de flags y restaura `N`/`V`/`D`/`I`/`Z`/`C`.
 	void PLP() { const eng::u8 p = pull(); N = (p & 0x80u) != 0u; V = (p & 0x40u) != 0u; D = (p & 0x08u) != 0u; I = (p & 0x04u) != 0u; Z = (p & 0x02u) != 0u; C = (p & 0x01u) != 0u; }
 
@@ -364,8 +415,14 @@ struct CPU {
 
 	/// Salto absoluto: fija `PC` a `t`. El despachador ejecutará el bloque de `t`.
 	void JMP_abs(eng::u16 t) { PC = t; }
-	/// Salto indirecto: lee la dirección destino en `a` (little-endian) y la pone en `PC`.
-	void JMP_ind(eng::u16 a) { PC = mem->read16(a); }
+	/// Salto indirecto `JMP ($xxyy)`. Reproduce el *bug* del 6502: el byte alto se
+	/// lee en `(a & 0xFF00) | ((a + 1) & 0x00FF)`, es decir, el puntero **no cruza**
+	/// la página (lo verifica `nestest`).
+	void JMP_ind(eng::u16 a) {
+		const eng::u16 lo = mem->read(a);
+		const eng::u16 hi = mem->read(static_cast<eng::u16>((a & 0xFF00u) | ((a + 1u) & 0x00FFu)));
+		PC = static_cast<eng::u16>((hi << 8u) | lo);
+	}
 	/// Llamada a subrutina: apila la dirección de regreso `ret` y salta a `t`.
 	void JSR_abs(eng::u16 t, eng::u16 ret) { push16(ret); PC = t; }
 	/// Retorno de subrutina: recupera `PC` de la pila.

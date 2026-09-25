@@ -3,19 +3,23 @@
 Runtime que ejecuta el código transpilado y traduce el estado de la NES a operaciones nativas del
 Amiga. Es la base de las fases F1/F3/F4 del [`ROADMAP`](../docs/ROADMAP.md).
 
-## Núcleo compartido (host y 68000)
+## Núcleo del runtime
 
 | Fichero | Contenido | Estado |
 |---|---|---|
-| [`include/nes_runtime.hpp`](include/nes_runtime.hpp) | `NESMemory` (RAM + lectura de PRG) y `CPU` 6502 (registros, flags, pila, modos y familias de opcodes) | **F1 (base)**: lo incluye el `.cpp` generado |
+| [`include/nes_runtime.hpp`](include/nes_runtime.hpp) | `NESMemory` (RAM, PPU/APU/E/S, PRG-ROM) y `CPU` 6502 de métodos (registros, flags, pila, modos y familias de opcodes) + macro `N2A_ASSUME` | **F1 (base)** |
+| [`include/nes_interpreter.hpp`](include/nes_interpreter.hpp) | Intérprete 6502 (oficiales + ilegales) sobre `CPU`/`NESMemory` | **F1**: validado con `nestest` |
+| [`fallback/nes_ppu.hpp`](fallback/nes_ppu.hpp) | PPU software: registros, VRAM, OAM, paleta, scroll, VBlank/NMI y render del fondo | **F3** (en curso) |
+| [`fallback/nes_apu.hpp`](fallback/nes_apu.hpp) | APU software: registros `$4000-$4017`, frame counter y síntesis pulse/triangle/noise | **F7** (en curso) |
 
-`nes_runtime.hpp` **no es autónomo**: el fichero generado define antes `kPrgSize` y `PRG_ROM`, y
-luego lo incluye (contrato documentado en el propio header). Está escrito sobre `eng/core`, sin STL,
-y compila igual en host y en `m68k`.
+Todo es **header-only** sobre `eng/core`, sin STL, y compila igual en host y en `m68k`. El `.cpp`
+generado incluye `nes_runtime.hpp` y enlaza la PRG con `NESMemory::prg`/`prg_size`.
 
-Pendiente de F1: sustituir la semántica aproximada por la CPU validada con `nestest`
-([`../../../platforms/consoles/nes/reimplementation/`](../../../platforms/consoles/nes/reimplementation/))
-y añadir conteo de ciclos. Después llegan PPU/APU/mappers (F3/F7/F9).
+### Tests
+
+`bash test/run.sh` (WSL/Linux o MinGW): valida la CPU con `nestest` ($02=$03=0) y ejecuta los tests
+de PPU (fondo + registros) y APU. Pendiente de F1: conteo **exacto** de ciclos. Pendiente de F3:
+sprites, sprite-0 hit, scroll por línea y **validación diferencial contra `mesen`**.
 
 ## Capas de destino (a partir de F3)
 

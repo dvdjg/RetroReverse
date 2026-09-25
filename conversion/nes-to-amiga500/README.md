@@ -64,13 +64,13 @@ nes-to-amiga500/
 | Fase | Descripción | Estado |
 |---|---|---|
 | F0 | Fundaciones: estructura, docs, ADR, toolchains de build | **EN CURSO** (este scaffolding) |
-| F1 | CPU 6502 runtime fiel (host) validada con `nestest` | en curso: módulo [`runtime/include/nes_runtime.hpp`](runtime/include/nes_runtime.hpp); falta validación `nestest` |
+| F1 | CPU 6502 runtime fiel (host) validada con `nestest` | **HECHO (base)**: `nestest` `$02=$03=0`; falta conteo exacto de ciclos |
 | F2 | Transpilador estático 6502 → C++23 (NROM) | **prototipo funcional** (`tools/transpiler/`) |
-| F3 | Fallback PPU+APU software (host) + validación vs `mesen` | pendiente |
+| F3 | Fallback PPU+APU software (host) + validación vs `mesen` | en curso: PPU fondo+registros en [`runtime/fallback/`](runtime/fallback/README.md); falta sprites/sprite0/mesen |
 | F4 | Runtime Amiga mínimo (arranca y pinta con fallback) | pendiente |
 | F5 | Motor de tiles + scroll HW + atributos | pendiente |
 | F6 | Sprites (HW + multiplex + bobs) | pendiente |
-| F7 | Audio → Paula | pendiente |
+| F7 | Audio → Paula | en curso: APU simplificada en [`runtime/fallback/`](runtime/fallback/README.md); falta DMC y Paula |
 | F8 | Capa HLE (reconocimiento de intenciones) | pendiente |
 | F9 | Mappers 2/3/1/4 | pendiente |
 | F10 | Compatibilidad y optimización (catálogo de juegos) | pendiente |

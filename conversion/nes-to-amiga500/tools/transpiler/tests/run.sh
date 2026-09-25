@@ -16,6 +16,19 @@ BIN="$ROOT/build/nes_transpiler"
 GEN="$ROOT/generated"
 TMP="$ROOT/build/tests"
 
+compile_generated() {  # $1 = nombre del caso (mini/branch/misc)
+	local name="$1"
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$GEN/$name.cpp" -o "$TMP/${name}_standalone"
+	"$TMP/${name}_standalone"
+	cat > "$TMP/${name}_check.cpp" <<EOF
+#define N2A_NO_HOST_MAIN
+#include "$GEN/$name.cpp"
+$2
+EOF
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$TMP/${name}_check.cpp" -o "$TMP/${name}_check"
+	"$TMP/${name}_check"
+}
+
 mkdir -p "$ROOT/build" "$GEN" "$TMP"
 
 if [ ! -f "$ENG_INC/eng/core/types/types.hpp" ]; then
@@ -27,43 +40,40 @@ if [ ! -f "$RUNTIME_INC/nes_runtime.hpp" ]; then
 	exit 1
 fi
 
-echo "[1/3] compilando el transpilador"
+echo "[1/4] compilando el transpilador"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/src" "$ROOT/src/main.cpp" -o "$BIN"
 
-# --- Caso 1: ROM mínima (LDA/STA/INX/BRK) -----------------------------------
-echo "[2/3] caso mini"
+echo "[2/4] caso mini (LDA/STA/INX/BRK)"
 "$BIN" --emit-mini-rom "$GEN/mini.nes"
 "$BIN" "$GEN/mini.nes" -o "$GEN/mini.cpp"
-"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$GEN/mini.cpp" -o "$TMP/mini_standalone"
-"$TMP/mini_standalone"
-cat > "$TMP/mini_check.cpp" <<EOF
-#define N2A_NO_HOST_MAIN
-#include "$GEN/mini.cpp"
-int main() {
+compile_generated mini 'int main() {
 	game_main();
 	return (g_state.cpu.X == 1u && g_state.cpu.A == 0x23u && g_state.mem.ram[0] == 0x23u) ? 0 : 1;
-}
-EOF
-"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$TMP/mini_check.cpp" -o "$TMP/mini_check"
-"$TMP/mini_check"
+}'
 
-# --- Caso 2: bucle + ADC + rama + JSR/RTS -----------------------------------
-echo "[3/3] caso branch/jsr (bucle 5 iteraciones)"
+echo "[3/4] caso branch/jsr (bucle 5 con ADC/BNE/JSR/RTS)"
 "$BIN" --emit-branch-rom "$GEN/branch.nes"
 "$BIN" "$GEN/branch.nes" -o "$GEN/branch.cpp"
-"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$GEN/branch.cpp" -o "$TMP/branch_standalone"
-"$TMP/branch_standalone"
-cat > "$TMP/branch_check.cpp" <<EOF
-#define N2A_NO_HOST_MAIN
-#include "$GEN/branch.cpp"
-int main() {
+compile_generated branch 'int main() {
 	game_main();
 	const bool ok = (g_state.cpu.A == 5u) && (g_state.cpu.X == 5u) &&
 			(g_state.mem.ram[0x10] == 5u) && (g_state.mem.ram[0] == 0u);
 	return ok ? 0 : 1;
-}
-EOF
-"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$TMP/branch_check.cpp" -o "$TMP/branch_check"
-"$TMP/branch_check"
+}'
+
+echo "[4/4] caso misc (PHA/PLA, shifts, INC/DEC memoria, JMP indirecto)"
+"$BIN" --emit-misc-rom "$GEN/misc.nes"
+"$BIN" "$GEN/misc.nes" --facts "$ROOT/tests/facts/misc.txt" -o "$GEN/misc.cpp"
+if ! grep -q "N2A_ASSUME" "$GEN/misc.cpp"; then
+	echo "ERROR: el codegen no emitió N2A_ASSUME a partir de --facts" >&2
+	exit 1
+fi
+compile_generated misc 'int main() {
+	game_main();
+	const bool ok = (g_state.cpu.A == 0x55u) && (g_state.cpu.X == 0u) &&
+			(g_state.mem.ram[0x10] == 0x40u) && (g_state.mem.ram[0x20] == 0x06u) &&
+			(g_state.mem.ram[0x40] == 0x55u);
+	return ok ? 0 : 1;
+}'
 
 echo "TEST OK"

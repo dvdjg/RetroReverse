@@ -43,6 +43,24 @@ inline constexpr eng::u8 kHasOperand = 0x01u;
 /// El campo `flags` de `Instruction` marca que `target` es válido.
 inline constexpr eng::u8 kHasTarget = 0x02u;
 
+/// Clase de hecho de valores sobre una dirección (aportado por análisis o
+/// telemetría; ver [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
+enum class FactKind : eng::u8 {
+	Eq,     ///< Siempre vale `values[0]`.
+	Range,  ///< Está en `[0, values[1]]` (`values[0]` = mínimo, informativo).
+	Set,    ///< Pertenece al conjunto `values[0..count-1]`.
+	Power2, ///< Es una potencia de dos (o cero).
+};
+
+/// Hecho sobre el valor de una dirección de memoria que el codegen traduce a
+/// `N2A_ASSUME` en los bloques que lean esa dirección.
+struct Fact {
+	FactKind kind = FactKind::Eq; ///< Interpretación de `values`.
+	eng::u16 addr = 0;            ///< Dirección observada.
+	eng::u8 values[4] {};         ///< Valores según `kind`.
+	eng::u8 count = 0;            ///< Nº de valores usados (para `Set`).
+};
+
 /// Transpilador de una ROM NES (NROM) a C++23.
 ///
 /// Ciclo de vida (llamar en este orden):
@@ -329,13 +347,18 @@ public:
 	/// \param out Búfer de texto donde se acumula la salida (no se vacía).
 	void generate(Dyn& out) const {
 		emit_header(out);
-		emit_rom(out);
 		out.append("#include \"nes_runtime.hpp\"\n");
 		out.append("using n2a::CPU;\n");
 		out.append("using n2a::NESMemory;\n\n");
+		emit_rom(out);
 		emit_blocks(out);
 		emit_dispatch(out);
 	}
+
+	/// Registra un hecho de valores que el codegen emitirá como `N2A_ASSUME` en
+	/// los bloques que lean esa dirección. Llamar antes de `generate()`.
+	/// \param f Hecho a añadir (se copia).
+	void add_fact(const Fact& f) { (void)facts_.push_back(f); }
 
 	/// Número de mapper iNES de la ROM cargada (siempre 0 en esta versión).
 	[[nodiscard]] int mapper() const noexcept { return mapper_; }
@@ -377,6 +400,7 @@ private:
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> fallin_ {};        ///< Continuación del bloque previo.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> visited_ {};       ///< Direcciones ya desensambladas.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> worklist_ {};     ///< Pila de puntos de entrada.
+	eng::util::Vector<Fact, eng::util::HeapAlloc> facts_ {};            ///< Hechos de valores (ver `add_fact`).
 
 	eng::usize count_ = 0;       ///< Instrucciones decodificadas.
 	eng::usize unknown_ = 0;     ///< Opcodes desconocidos encontrados.
@@ -615,7 +639,7 @@ private:
 		out.append("// RECURSOS\n");
 		out.append("//   - Sin memoria dinámica; PRG_ROM es constexpr.\n");
 		out.append("//   - dispatch_table: 0x10000 punteros a función.\n");
-		out.append("//   - Requiere el header del runtime: nes_runtime.hpp (se incluye tras PRG_ROM).\n");
+		out.append("//   - Requiere el header del runtime: nes_runtime.hpp.\n");
 		out.append("//\n");
 		out.append("// VECTORES  Reset=$");
 		out.append_hex(reset_, 4u, true);
@@ -866,6 +890,76 @@ private:
 	/// ficha (`emit_block_doc`). Dentro del bloque, cada instrucción se traduce con
 	/// `emit_one_instruction`; al final se emite la caída al bloque siguiente
 	/// (`goto` si es el mismo bloque, o `cpu.PC`/`return` si es otro).
+	/// \return `true` si el bloque que empieza en `start` lee la dirección `addr`
+	/// como operando de memoria (modos zp/abs y sus indexados).
+	[[nodiscard]] bool block_reads(eng::u16 start, eng::u16 addr) const {
+		eng::u16 pc = start;
+		for (;;) {
+			if (has_instr_[pc] == 0u || (pc != start && leaders_[pc] != 0u)) {
+				break;
+			}
+			const Instruction& in = instr_[pc];
+			const OpcodeInfo& info = kOpcodeTable[in.opcode];
+			const bool mem_mode = info.mode == AddrMode::Zp || info.mode == AddrMode::ZpX ||
+					      info.mode == AddrMode::ZpY || info.mode == AddrMode::Abs ||
+					      info.mode == AddrMode::AbsX || info.mode == AddrMode::AbsY;
+			if (mem_mode && has_operand(in) && in.operand == addr) {
+				return true;
+			}
+			pc = static_cast<eng::u16>(pc + info.size);
+			if (info.mode == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
+			    sv_equal(info.mnemonic, "JSR") || sv_equal(info.mnemonic, "RTS") ||
+			    sv_equal(info.mnemonic, "RTI") || sv_equal(info.mnemonic, "BRK")) {
+				break;
+			}
+		}
+		return false;
+	}
+
+	/// Emite las suposiciones `N2A_ASSUME(...)` de los hechos (`facts_`) que
+	/// afectan al bloque `start`, al principio del cuerpo de la función. Son
+	/// pistas para g++: si un hecho no se cumpliera en ejecución, el resultado es
+	/// indefinido, así que los hechos deben venir validados por análisis/telemetría.
+	void emit_assumptions(Dyn& out, eng::u16 start) const {
+		for (eng::usize i = 0; i < facts_.size(); ++i) {
+			const Fact& f = facts_[i];
+			if (!block_reads(start, f.addr)) {
+				continue;
+			}
+			out.append("    N2A_ASSUME(cpu.mem->read(0x");
+			out.append_hex(f.addr, 4u, true);
+			out.append(')');
+			switch (f.kind) {
+			case FactKind::Eq:
+				out.append(" == 0x");
+				out.append_hex(f.values[0], 2u, true);
+				break;
+			case FactKind::Range:
+				out.append(" <= 0x");
+				out.append_hex(f.values[1], 2u, true);
+				break;
+			case FactKind::Set:
+				out.append(" == 0x");
+				out.append_hex(f.values[0], 2u, true);
+				for (eng::u8 k = 1u; k < f.count; ++k) {
+					out.append(" || cpu.mem->read(0x");
+					out.append_hex(f.addr, 4u, true);
+					out.append(") == 0x");
+					out.append_hex(f.values[k], 2u, true);
+				}
+				break;
+			case FactKind::Power2:
+				out.append(" != 0u && (cpu.mem->read(0x");
+				out.append_hex(f.addr, 4u, true);
+				out.append(") & (cpu.mem->read(0x");
+				out.append_hex(f.addr, 4u, true);
+				out.append(") - 1u)) == 0u");
+				break;
+			}
+			out.append(");\n");
+		}
+	}
+
 	void emit_blocks(Dyn& out) const {
 		out.append("// ---- Basic blocks ----\n\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -890,6 +984,7 @@ private:
 				append_label_ref(out, start, "L_");
 				out.append(":\n");
 			}
+			emit_assumptions(out, start);
 
 			eng::u16 pc = start;
 			eng::u16 last_addr = start;
@@ -971,6 +1066,8 @@ private:
 		out.append("void game_main() {\n");
 		out.append("    CPU& cpu = g_state.cpu;\n");
 		out.append("    cpu.mem = &g_state.mem;\n");
+		out.append("    g_state.mem.prg = PRG_ROM;\n");
+		out.append("    g_state.mem.prg_size = static_cast<eng::u32>(kPrgSize);\n");
 		out.append("    init_dispatch_table();\n");
 		out.append("    cpu.PC = 0x");
 		out.append_hex(reset_, 4u, true);

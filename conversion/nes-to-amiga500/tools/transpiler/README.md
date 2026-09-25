@@ -62,12 +62,30 @@ g++ -std=gnu++23 -O2 -Wall -Wextra -Werror=narrowing \
 
 ```bash
 nes_transpiler juego.nes -o ../../generated/game.cpp
+nes_transpiler juego.nes --facts hechos.txt -o ../../generated/game.cpp
 nes_transpiler --emit-mini-rom   ../../generated/mini.nes
 nes_transpiler --emit-branch-rom ../../generated/branch.nes
+nes_transpiler --emit-misc-rom   ../../generated/misc.nes
 ```
 
-`--emit-mini-rom` y `--emit-branch-rom` generan ROMs iNES **propias** (homebrew mínimo) para probar
-el pipeline sin ROMs de terceros.
+`--emit-*-rom` generan ROMs iNES **propias** (homebrew mínimo) para probar el pipeline sin ROMs de
+terceros.
+
+### Hechos de valores (`--facts`)
+
+El transpilador puede leer un fichero de **hechos** sobre el valor de direcciones de memoria y
+emitirlos como `N2A_ASSUME(...)` al principio de los bloques que lean esas direcciones, para que g++
+optimice con esa información (ver [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)):
+
+```
+eq     <addr> <valor>
+range  <addr> <min> <max>
+set    <addr> <v1> [v2] [v3] [v4]
+power2 <addr>
+```
+
+Los hechos deben venir **validados** por análisis o telemetría: si no se cumplen en ejecución, el
+comportamiento es indefinido (como `[[assume]]`).
 
 ## Forma del código generado
 
@@ -83,6 +101,7 @@ el pipeline sin ROMs de terceros.
   `#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)`.
 - Cada bloque lleva una **ficha** (rango 6502, qué hace, quién lo llama, recursos), según la regla
   de código autodocumentado de [`../../../../AGENTS.md`](../../../../AGENTS.md).
+- `N2A_ASSUME(...)` al inicio del bloque para los hechos leídos (`--facts`).
 
 ## Test
 
@@ -90,9 +109,15 @@ el pipeline sin ROMs de terceros.
 bash tests/run.sh          # o: make test
 ```
 
-Compila la herramienta, genera dos ROMs propias, las transpila, compila el C++ generado **con el
-runtime** (`-I ../../runtime/include`) y comprueba el estado final (mini: `X=1, A=$23, ram[0]=$23`;
-branch: bucle de 5 con `ADC`/`BNE`/`JSR`/`RTS` → `A=X=5, ram[$10]=5`).
+Compila la herramienta, genera **tres** ROMs propias, las transpila, compila el C++ generado **con el
+runtime** (`-I ../../runtime/include`) y comprueba el estado final:
+
+- **mini**: `X=1, A=$23, ram[0]=$23`;
+- **branch**: bucle de 5 con `ADC`/`BNE`/`JSR`/`RTS` → `A=X=5, ram[$10]=5`;
+- **misc**: pila, desplazamientos (A y memoria), `INC`/`DEC` de memoria y `JMP (ind)`; además
+  transpila con `--facts` y comprueba que el generado contiene `N2A_ASSUME`.
+
+La CPU del runtime se valida aparte con `nestest` en [`../../runtime/test/run.sh`](../../runtime/test/run.sh).
 
 ## Codificación
 

@@ -205,6 +205,16 @@ visibles** del original se reproducen, no se "arreglan".
 - **F8 (HLE)**: los mismos hechos alimentan los *handlers* y el reconocimiento de algoritmos.
 - **F10**: catálogo de hechos por juego (`facts.json`), PGO y superoptimización de secuencias 68000.
 
+## Estado de implementación
+
+- **`N2A_ASSUME`** (macro portable) en
+  [`../runtime/include/nes_runtime.hpp`](../runtime/include/nes_runtime.hpp).
+- **Transpilador**: opción `--facts <fichero>` que emite `N2A_ASSUME` al inicio de los bloques que
+  leen direcciones con hechos (`eq`/`range`/`set`/`power2`). Los hechos los aporta el análisis o la
+  telemetría (ver [`../tools/transpiler/README.md`](../tools/transpiler/README.md)).
+- **Pendiente**: extracción automática de hechos (interpretación abstracta de valores sobre el IR y
+  telemetría por ejecución), clonado con guarda y PGO cruzado.
+
 ## Referencias
 
 - C++23 `[[assume]]` (P1774) · GCC `__attribute__((assume))` · Clang `__builtin_assume` · MSVC `__assume`.

@@ -1,0 +1,6 @@
+# Hechos de valores del caso `misc` (validados a mano para el test).
+# Formato: <clase> <direccion> [valores]  (hex, con o sin 0x; `#` comenta).
+#
+# En el programa misc, zp[$20] toma valores 3..6 (STA/INC/DEC/ASL), así que
+# se declara un rango 0..15: el codegen lo emitirá como N2A_ASSUME(... <= 0x0F).
+range 0020 00 0F

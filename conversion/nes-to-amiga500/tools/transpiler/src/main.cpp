@@ -20,6 +20,125 @@ namespace {
 
 using n2a::ByteBuffer;
 using n2a::Dyn;
+using eng::util::StringView;
+
+/// Convierte un texto hexadecimal (con o sin `0x`) a 16 bits.
+/// \return `false` si el texto no es hexadecimal válido.
+bool parse_hex(StringView s, eng::u16& out) {
+	if (s.size() >= 2u && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+		s.remove_prefix(2u);
+	}
+	if (s.empty()) {
+		return false;
+	}
+	eng::u32 v = 0;
+	for (eng::usize i = 0; i < s.size(); ++i) {
+		const char c = s[i];
+		eng::u32 d;
+		if (c >= '0' && c <= '9') {
+			d = static_cast<eng::u32>(c - '0');
+		} else if (c >= 'a' && c <= 'f') {
+			d = static_cast<eng::u32>(c - 'a' + 10);
+		} else if (c >= 'A' && c <= 'F') {
+			d = static_cast<eng::u32>(c - 'A' + 10);
+		} else {
+			return false;
+		}
+		v = v * 16u + d;
+	}
+	out = static_cast<eng::u16>(v);
+	return true;
+}
+
+/// Consume los espacios iniciales de `s`.
+void skip_ws(StringView& s) {
+	while (!s.empty() && (s[0] == ' ' || s[0] == '\t' || s[0] == '\r')) {
+		s.remove_prefix(1u);
+	}
+}
+
+/// Extrae el siguiente token (hasta espacio, tabulador o fin) y avanza `s`.
+StringView next_token(StringView& s) {
+	skip_ws(s);
+	eng::usize end = s.size();
+	for (eng::usize i = 0; i < s.size(); ++i) {
+		const char c = s[i];
+		if (c == ' ' || c == '\t' || c == '\r') {
+			end = i;
+			break;
+		}
+	}
+	const StringView tok = s.substr(0u, end);
+	s = s.substr(end);
+	return tok;
+}
+
+/// Carga un fichero de hechos de valores (`--facts`) y los registra en `tp`.
+///
+/// Formato, una regla por línea (hexadecimal con o sin `0x`; `#` comenta):
+/// ```
+/// eq     <addr> <valor>
+/// range  <addr> <min> <max>
+/// set    <addr> <v1> [v2] [v3] [v4]
+/// power2 <addr>
+/// ```
+/// \return `true` si el fichero se leyó (las líneas inválidas se ignoran).
+bool load_facts(const char* path, n2a::Transpiler& tp) {
+	ByteBuffer buf;
+	if (!n2a::read_whole_file(path, buf)) {
+		return false;
+	}
+	StringView text(reinterpret_cast<const char*>(buf.data()), buf.size());
+	while (!text.empty()) {
+		const eng::usize nl = text.find('\n');
+		StringView line = (nl == StringView::npos) ? text : text.substr(0u, nl);
+		text = (nl == StringView::npos) ? StringView {} : text.substr(nl + 1u);
+		skip_ws(line);
+		if (line.empty() || line[0] == '#') {
+			continue;
+		}
+		const StringView kind = next_token(line);
+		eng::u16 addr = 0;
+		if (!parse_hex(next_token(line), addr)) {
+			continue;
+		}
+		n2a::Fact f;
+		f.addr = addr;
+		if (kind == "eq") {
+			f.kind = n2a::FactKind::Eq;
+			if (!parse_hex(next_token(line), addr)) {
+				continue;
+			}
+			f.values[0] = static_cast<eng::u8>(addr);
+		} else if (kind == "range") {
+			f.kind = n2a::FactKind::Range;
+			eng::u16 lo = 0;
+			if (!parse_hex(next_token(line), lo) || !parse_hex(next_token(line), addr)) {
+				continue;
+			}
+			f.values[0] = static_cast<eng::u8>(lo);
+			f.values[1] = static_cast<eng::u8>(addr);
+		} else if (kind == "set") {
+			f.kind = n2a::FactKind::Set;
+			while (f.count < 4u) {
+				eng::u16 v = 0;
+				if (!parse_hex(next_token(line), v)) {
+					break;
+				}
+				f.values[f.count++] = static_cast<eng::u8>(v);
+			}
+			if (f.count == 0u) {
+				continue;
+			}
+		} else if (kind == "power2") {
+			f.kind = n2a::FactKind::Power2;
+		} else {
+			continue;
+		}
+		tp.add_fact(f);
+	}
+	return true;
+}
 
 /// Envuelve `prog` en una ROM iNES NROM (16 KB de PRG) con los tres vectores
 /// apuntando a `$8000`. El contenido es **propio** (homebrew mínimo), sin
@@ -80,14 +199,35 @@ constexpr eng::u8 kBranchProg[] = {
 	0xD0u, 0xF9u, 0x20u, 0x10u, 0x80u, 0x00u, 0x85u, 0x10u, 0x60u,
 };
 
+// Pila, desplazamientos (A y memoria), INC/DEC de memoria y JMP indirecto:
+//   $8000: LDA #$81 ; PHA ; LDA #$00 ; PLA        (A = $81)
+//   $8006: ASL A ; ROR A ; LSR A                  (A = $40, C = 1)
+//   $8009: STA $10                                (ram[$10] = $40)
+//   $800B: LDA #$03 ; STA $20 ; INC $20 ; DEC $20 ; ASL $20   (zp[$20] = $06)
+//   $8015: LDA #$22 ; STA $30 ; LDA #$80 ; STA $31            (puntero = $8022)
+//   $801D: BEQ $8022        (no se toma: Z = 0 tras LDA #$80)
+//   $801F: JMP ($0030)      (salto indirecto a $8022)
+//   $8022: LDX #$07 ; DEX ; BNE $8024             (X = 0)
+//   $8027: LDA #$55 ; STA $40 ; BRK               (ram[$40] = $55)
+// El BEQ no tomado existe para que el transpilador decodifique $8022 (destino
+// del salto indirecto, que no se puede resolver estáticamente) como bloque.
+constexpr eng::u8 kMiscProg[] = {
+	0xA9u, 0x81u, 0x48u, 0xA9u, 0x00u, 0x68u, 0x0Au, 0x6Au, 0x4Au, 0x85u,
+	0x10u, 0xA9u, 0x03u, 0x85u, 0x20u, 0xE6u, 0x20u, 0xC6u, 0x20u, 0x06u,
+	0x20u, 0xA9u, 0x22u, 0x85u, 0x30u, 0xA9u, 0x80u, 0x85u, 0x31u, 0xF0u,
+	0x03u, 0x6Cu, 0x30u, 0x00u, 0xA2u, 0x07u, 0xCAu, 0xD0u, 0xFDu, 0xA9u,
+	0x55u, 0x85u, 0x40u, 0x00u,
+};
+
 /// Imprime la ayuda de línea de comandos.
 /// \param argv0 Nombre del programa (no se usa; se mantiene por uniformidad).
 void print_usage(const char* argv0) {
 	(void)argv0;
 	n2a::out_line("nes_transpiler (fase 1) — NES (iNES/NROM) → C++23 (eng/core)");
-	n2a::out_line("Uso: nes_transpiler <entrada.nes> [-o <salida.cpp>]");
+	n2a::out_line("Uso: nes_transpiler <entrada.nes> [-o <salida.cpp>] [--facts <hechos.txt>]");
 	n2a::out_line("     --emit-mini-rom   <salida.nes>");
 	n2a::out_line("     --emit-branch-rom <salida.nes>");
+	n2a::out_line("     --emit-misc-rom   <salida.nes>");
 }
 
 } // namespace
@@ -106,7 +246,8 @@ int main(int argc, char** argv) {
 
 	eng::util::StringView input;
 	eng::util::StringView output("generated_game.cpp");
-	int emit = 0; // 0 = transpilar, 1 = mini, 2 = branch
+	eng::util::StringView facts_path;
+	int emit = 0; // 0 = transpilar, 1 = mini, 2 = branch, 3 = misc
 
 	for (int i = 1; i < argc; ++i) {
 		const eng::util::StringView arg(argv[i]);
@@ -114,8 +255,9 @@ int main(int argc, char** argv) {
 			print_usage(argv[0]);
 			return 0;
 		}
-		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom") && i + 1 < argc) {
-			emit = (arg == "--emit-mini-rom") ? 1 : 2;
+		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom") &&
+		    i + 1 < argc) {
+			emit = (arg == "--emit-mini-rom") ? 1 : (arg == "--emit-branch-rom") ? 2 : 3;
 			input = eng::util::StringView(argv[++i]);
 			continue;
 		}
@@ -123,12 +265,17 @@ int main(int argc, char** argv) {
 			output = eng::util::StringView(argv[++i]);
 			continue;
 		}
+		if (arg == "--facts" && i + 1 < argc) {
+			facts_path = eng::util::StringView(argv[++i]);
+			continue;
+		}
 		input = arg;
 	}
 
 	if (emit != 0) {
-		const bool ok = (emit == 1) ? write_ines_rom(input.data(), kMiniProg, sizeof(kMiniProg))
-					    : write_ines_rom(input.data(), kBranchProg, sizeof(kBranchProg));
+		const bool ok = (emit == 1)   ? write_ines_rom(input.data(), kMiniProg, sizeof(kMiniProg))
+				: (emit == 2) ? write_ines_rom(input.data(), kBranchProg, sizeof(kBranchProg))
+					      : write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg));
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");
 			return 1;
@@ -155,6 +302,11 @@ int main(int argc, char** argv) {
 	}
 	tp.disassemble();
 	tp.build_basic_blocks();
+
+	if (!facts_path.empty() && !load_facts(facts_path.data(), tp)) {
+		n2a::err_line("error: no se pudo leer el fichero de hechos (--facts)");
+		return 1;
+	}
 
 	Dyn generated;
 	tp.generate(generated);
