@@ -4,7 +4,7 @@ Layout monorepo por **plataforma → arquitectura/placa → [variante] → juego
 compartidas del marco (`emulators/`, `frontend/`, `tools/`, `scripts/`, `docs/`).
 
 > **Estado**: el árbol de abajo es el **destino**. La **fase 1** de la reestructuración ya está
-> hecha: un solo repositorio (hoy `Amiga-Reverse`, renombrable a `RetroReverse`), con el marco en
+> hecha: un solo repositorio (`dvdjg/RetroReverse`), con el marco en
 > `docs/`, `tools/`, `docs/templates/expediente/` y el expediente Amiga ya en
 > `platforms/computers/amiga500/demos/arte/`. La **fase 2** (reorganización interna del nodo a
 > `rom/ extraction/ assets/ spec/ reimplementation/`) está pendiente: ver

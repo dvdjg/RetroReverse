@@ -1,6 +1,6 @@
 # Instrucciones de trabajo para este repositorio
 
-Directrices persistentes para el agente que trabaja en `Amiga-Reverse`. Se aplican a **todos**
+Directrices persistentes para el agente que trabaja en `RetroReverse`. Se aplican a **todos**
 los expedientes de desensamblado, no solo a `sanity-arte`.
 
 ## Objetivo principal (confirmado por el usuario)

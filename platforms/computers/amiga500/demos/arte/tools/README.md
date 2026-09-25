@@ -66,7 +66,7 @@ Toolkit: `tools\ghidra\` (ver su README). Proyecto Ghidra en `extraction/ghidra/
 La extensión `ghidra-amiga` resuelve los Hunks y los `.uss` y nombra las llamadas NDK.
 
 ```powershell
-$g  = "C:\Users\dvdjg\Documents\programa\AI\Amiga\ghidra_12.0.1_PUBLIC"
+$g  = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\external\ghidra_12.0.1_PUBLIC"
 $sd = "tools\ghidra"; $out = "platforms\computers\amiga500\demos\arte\out\ghidra"; $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 
 # (a) Hunk real (p. ej. el runtime SOS del propio demo)
@@ -92,7 +92,7 @@ Resultados en `extraction/ghidra/` (`.info.txt`, `.decomp.c`, `.bogo.bin`, …).
 Rizin (triaje rápido de xrefs/CFG, sin decompilador):
 
 ```powershell
-$rz = "C:\Users\dvdjg\Documents\programa\AI\Amiga\rizin-win-installer-vs2019_static-64\bin\rizin.exe"
+$rz = "C:\Users\dvdjg\Documents\programa\AI\Amiga\RetroReverse\external\rizin-win-installer-vs2019_static-64\bin\rizin.exe"
 & $rz -a m68k -b 32 -E big -m 0x0 -q -e scr.color=0 -c "aaa" -c "pdf @ 0xcba" platforms\computers\amiga500\demos\arte\out\modules_all\blk_0B0C2C_l1_63064.bin
 ```
 
@@ -117,9 +117,9 @@ Genera `extraction/ghidra/<mod>.decomp.c` + `<mod>.info.txt` por módulo (53 en 
 
 ```bash
 # una vez: bash tools/ghidra/wsl/build-rzghidra.sh
-bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/tools/ghidra/wsl/pdg-dump.sh \
-  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/platforms/computers/amiga500/demos/arte/extraction/modules_all/blk_0B0C2C_l1_63064.bin \
-  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/Amiga-Reverse/platforms/computers/amiga500/demos/arte/extraction/ghidra/blk_0B0C2C.rzghidra.pdg.c \
+bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/tools/ghidra/wsl/pdg-dump.sh \
+  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/platforms/computers/amiga500/demos/arte/extraction/modules_all/blk_0B0C2C_l1_63064.bin \
+  /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/platforms/computers/amiga500/demos/arte/extraction/ghidra/blk_0B0C2C.rzghidra.pdg.c \
   0xc16 0xcba 0xe1e
 ```
 

@@ -10,7 +10,7 @@ Se prefiere **un único proyecto** donde los commits se acumulen juntos (no dos 
 
 ## Decisión
 
-**Un solo repositorio** (el actual, hoy `Amiga-Reverse` en GitHub; renombrable a `RetroReverse`)
+**Un solo repositorio** (el actual, `dvdjg/RetroReverse` en GitHub)
 que contiene **marco + subproyecto Amiga**:
 
 ```
@@ -30,7 +30,7 @@ No se usa **subtree ni submódulo**: la reorganización hacia el layout de plata
 
 - ✅ Un solo historial y un solo remote; los commits se acumulan juntos.
 - ✅ La migración es `git mv` + reescritura de enlaces (sin fusionar historiales de repos distintos).
-- ⚠️ El nombre del repo (`Amiga-Reverse`) ya no describe el conjunto → **renombrar a `RetroReverse`**
+- ⚠️ El repo se **renombró a `RetroReverse`** (`dvdjg/RetroReverse`).
   (opcional, vía GitHub) para coherencia.
 
 ## Alternativas consideradas
