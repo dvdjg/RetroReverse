@@ -352,7 +352,8 @@ Además del toolkit Amiga, `tools/` incluye utilidades agnósticas para el resto
 | `python/pacman_assets.py` | Romset Pascal/MAME Pac-Man → tiles 8×8 + PROMs de color + programa Z80 |
 | `python/capstone_disasm.py` | Desensamblado Capstone (`m6502`, `m68k`) → `.asm` + `.ranges.json`/`.ranges.txt` |
 | `python/ppm_diff.py` | Diff de framebuffers PPM (validación diferencial) |
-| `ghidra/ApplyRanges.java` | Puente trazas/desensamblado → Ghidra: crea funciones en los rangos |
+| `python/re_functions_to_ranges.py` | Salida de libRetroReversing (`functions.json`) → rangos para `ApplyRanges` |
+| `ghidra/ApplyRanges.java` | Puente trazas/cobertura → Ghidra: crea funciones en los rangos |
 
 `Z80` **no** está en Capstone 5 (llegó en la rama `next`); para Z80 usar **Rizin**. Atajo reproducible:
 `scripts/extract-assets.sh` (salidas en `tools/out/assets/`, ignorado por git).
