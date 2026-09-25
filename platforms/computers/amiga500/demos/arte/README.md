@@ -67,10 +67,10 @@ Los scripts viven en el **toolkit compartido** [`../tools/`](../../../../../tool
 
 ```powershell
 cd Amiga-Reverse\sanity-arte
-python ..\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms out\disk\sanity-arte.adf --verbose
-node   ..\tools\node\dump-ram.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
-node   ..\tools\node\hook-trampoline.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --spec specs\imp-dump.json --out out --boot 5
-node   ..\tools\node\dump-display.mjs --config out\sanity.uae --adf out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
+python ..\tools\python\dms_unpack.py C:\Users\dvdjg\Downloads\Sanity-Arte.dms platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --verbose
+node   ..\tools\node\dump-ram.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 20 --prefix sanity --screenshot
+node   ..\tools\node\hook-trampoline.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --spec specs\imp-dump.json --out out --boot 5
+node   ..\tools\node\dump-display.mjs --config platforms\computers\amiga500\demos\arte\out\sanity.uae --adf platforms\computers\amiga500\demos\arte\out\disk\sanity-arte.adf --boot 21 --out out --prefix arte-title
 ```
 
 Comandos exactos y notas en [`tools/README.md`](tools/README.md).
