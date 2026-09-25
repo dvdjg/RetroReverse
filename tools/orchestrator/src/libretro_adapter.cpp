@@ -77,6 +77,49 @@ struct LibretroAdapter::Impl {
     std::string sys_dir = ".";
     std::string save_dir = ".";
 
+    // Regiones publicadas por el core + estado de trazas.
+    std::vector<retro_memory_descriptor> memory_map;
+    std::vector<TraceWrite> writes;
+    std::vector<std::uint8_t> trace_prev;
+    bool tracing = false;
+    unsigned frame_no = 0;
+
+    // Lee una dirección a través del mapa de memoria del core (o SYSTEM_RAM como reserva).
+    std::uint8_t map_read(std::uint32_t addr) {
+        for (const auto& d : memory_map) {
+            if (d.ptr && d.len && addr >= d.start && addr < d.start + d.len)
+                return static_cast<std::uint8_t*>(d.ptr)[addr - d.start];
+        }
+        if (retro_get_memory_data && retro_get_memory_size) {
+            void* base = retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+            std::size_t size = retro_get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+            if (base && addr < size) return static_cast<std::uint8_t*>(base)[addr];
+        }
+        return 0;
+    }
+
+    void snapshot_trace() {
+        writes.clear();
+        trace_prev.clear();
+        if (!tracing || trace.kind != TraceKind::MemoryWrite || trace.addr_end <= trace.addr_start)
+            return;
+        const std::uint32_t start = trace.addr_start, end = trace.addr_end;
+        trace_prev.resize(end - start);
+        for (std::uint32_t a = start; a < end; ++a) trace_prev[a - start] = map_read(a);
+    }
+
+    void capture_trace_frame() {
+        if (!tracing || trace.kind != TraceKind::MemoryWrite || trace_prev.empty()) return;
+        const std::uint32_t start = trace.addr_start;
+        for (std::size_t o = 0; o < trace_prev.size(); ++o) {
+            const std::uint8_t v = map_read(start + static_cast<std::uint32_t>(o));
+            if (v != trace_prev[o]) {
+                writes.push_back({frame_no, start + static_cast<std::uint32_t>(o), trace_prev[o], v});
+                trace_prev[o] = v;
+            }
+        }
+    }
+
     void resolve() {
         handle = open_lib(core_path);
         if (!handle) throw std::runtime_error("no se pudo cargar el core: " + core_path);
@@ -157,8 +200,20 @@ struct LibretroAdapter::Impl {
             case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
             case RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER:
             case RETRO_ENVIRONMENT_GET_DISK_CONTROL_INTERFACE_VERSION:
-            case RETRO_ENVIRONMENT_GET_VFS_INTERFACE:
                 return false;  // no soportado (el core usa stdio por defecto)
+            case (RETRO_ENVIRONMENT_GET_VFS_INTERFACE & 0xFFFF):
+                return false;  // sin VFS: el core usa stdio; el frontend no lee zip
+            case (RETRO_ENVIRONMENT_SET_MEMORY_MAPS & 0xFFFF): {
+                // El core solo garantiza validez durante la llamada: copiamos los descriptores.
+                if (self && data) {
+                    const retro_memory_map* m = static_cast<const retro_memory_map*>(data);
+                    if (m && m->descriptors && m->num_descriptors)
+                        self->memory_map.assign(m->descriptors, m->descriptors + m->num_descriptors);
+                    else
+                        self->memory_map.clear();
+                }
+                return true;
+            }
             // Información que el core publica y el frontend puede aceptar e ignorar.
             case RETRO_ENVIRONMENT_SET_VARIABLES:
             case RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
@@ -173,7 +228,6 @@ struct LibretroAdapter::Impl {
             case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
             case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
             case RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO:
-            case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
             case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO:
             case RETRO_ENVIRONMENT_SET_GEOMETRY:
             case RETRO_ENVIRONMENT_SET_MESSAGE_EXT:
@@ -236,6 +290,8 @@ struct LibretroAdapter::Impl {
             case RETRO_DEVICE_ID_JOYPAD_B: return in.fire;
             case RETRO_DEVICE_ID_JOYPAD_START: return in.start;
             case RETRO_DEVICE_ID_JOYPAD_SELECT: return in.coin;
+            case RETRO_DEVICE_ID_JOYPAD_L2: return in.l2;
+            case RETRO_DEVICE_ID_JOYPAD_R2: return in.r2;
             default: return 0;
         }
     }
@@ -292,7 +348,11 @@ void LibretroAdapter::load_rom(const std::string& path) {
 void LibretroAdapter::reset() { if (impl_->retro_reset) impl_->retro_reset(); }
 
 void LibretroAdapter::step_frames(int n) {
-    for (int i = 0; i < n; ++i) impl_->retro_run();
+    for (int i = 0; i < n; ++i) {
+        impl_->retro_run();
+        ++impl_->frame_no;
+        impl_->capture_trace_frame();
+    }
 }
 
 std::vector<std::uint8_t> LibretroAdapter::save_state() {
@@ -333,12 +393,39 @@ void LibretroAdapter::screenshot(const std::string& path) {
 }
 
 void LibretroAdapter::set_trace(const TraceConfig& cfg) {
-    // libretro no expone trazas de CPU de forma genérica. Los cores con API de debug
-    // (p. ej. mesen) requieren soporte específico; se guarda la config para ese caso.
+    // libretro no expone trazas de PC de forma genérica. Sí podemos trazar ESCRITURAS a
+    // memoria muestreando por frame las regiones publicadas (SET_MEMORY_MAPS / SYSTEM_RAM);
+    // las trazas de PC requieren API de debug del core (p. ej. mesen en su build standalone).
     impl_->trace = cfg;
+    impl_->tracing = true;
+    impl_->frame_no = 0;
+    impl_->snapshot_trace();
 }
 
-void LibretroAdapter::clear_trace() { impl_->trace = TraceConfig{}; }
+void LibretroAdapter::clear_trace() {
+    impl_->trace = TraceConfig{};
+    impl_->tracing = false;
+    impl_->writes.clear();
+    impl_->trace_prev.clear();
+}
+
+std::size_t LibretroAdapter::memory_map_count() const { return impl_->memory_map.size(); }
+
+std::vector<std::uint8_t> LibretroAdapter::read_map(std::uint32_t addr, std::size_t len) {
+    std::vector<std::uint8_t> out;
+    for (const auto& d : impl_->memory_map) {
+        if (d.ptr && d.len && addr >= d.start && addr + len <= d.start + d.len) {
+            const std::uint8_t* p = static_cast<const std::uint8_t*>(d.ptr) + (addr - d.start);
+            out.assign(p, p + len);
+            return out;
+        }
+    }
+    return read_mem(addr, len);  // reserva: SYSTEM_RAM
+}
+
+const std::vector<LibretroAdapter::TraceWrite>& LibretroAdapter::trace_writes() const {
+    return impl_->writes;
+}
 
 const std::string& LibretroAdapter::core_name() const { return impl_->core_name; }
 unsigned LibretroAdapter::frame_width() const { return impl_->fw; }

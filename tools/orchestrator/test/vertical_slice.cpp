@@ -97,6 +97,7 @@ int main(int argc, char** argv) {
     std::string scenario = "idle";
     std::vector<Range> ranges;
     bool have_ranges = false;
+    std::string trace_writes;
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -110,13 +111,14 @@ int main(int argc, char** argv) {
         else if (a == "--det") det = static_cast<unsigned>(std::stoul(next()));
         else if (a == "--scenario") scenario = next();
         else if (a == "--dump-ram") { ranges = parse_ranges(next()); have_ranges = true; }
+        else if (a == "--trace-writes") trace_writes = next();
         else { std::fprintf(stderr, "opción desconocida: %s\n", a.c_str()); return 2; }
     }
     if (core.empty() || rom.empty() || out.empty()) {
         std::fprintf(stderr,
             "uso: vertical_slice --core <core> --rom <rom> --out <dir> "
             "[--frames N] [--warmup N] [--interval N] [--dump-ram A:L,...] "
-            "[--scenario idle|start] [--det K]\n");
+            "[--trace-writes A:L] [--scenario idle|start] [--det K]\n");
         return 2;
     }
 
@@ -191,6 +193,17 @@ int main(int argc, char** argv) {
         if (det_first_diff) det_msg += "; 1\xc2\xaa divergencia en frame " + std::to_string(det_first_diff);
         std::printf("determinismo: %s (%u frames)\n", det_msg.c_str(), det_checked);
 
+        // --- Traza de escrituras a memoria (TraceConfig kind=MemoryWrite) ---
+        std::size_t write_count = 0;
+        if (!trace_writes.empty()) {
+            TraceConfig cfg;
+            cfg.kind = TraceKind::MemoryWrite;
+            cfg.addr_start = static_cast<std::uint32_t>(std::stoul(trace_writes.substr(0, trace_writes.find(':')), nullptr, 0));
+            cfg.addr_end = cfg.addr_start + static_cast<std::uint32_t>(
+                                                std::stoul(trace_writes.substr(trace_writes.find(':') + 1), nullptr, 0));
+            emu.set_trace(cfg);
+        }
+
         // --- Recorrido principal con muestreo ---
         std::ofstream csv(root / "traces" / "frames.csv");
         csv << "frame,width,height,frame_hash\n";
@@ -220,6 +233,20 @@ int main(int argc, char** argv) {
             }
         }
 
+        // --- Trazas de escritura ---
+        if (!trace_writes.empty()) {
+            const auto& ws = emu.trace_writes();
+            write_count = ws.size();
+            std::ofstream wcsv(root / "traces" / "writes.csv");
+            wcsv << "frame,addr,old,new\n";
+            for (const auto& w : ws) {
+                char buf[64];
+                std::snprintf(buf, sizeof(buf), "%u,0x%08x,0x%02x,0x%02x", w.frame, w.addr, w.old_value, w.value);
+                wcsv << buf << '\n';
+            }
+            std::printf("escrituras trazadas: %zu\n", write_count);
+        }
+
         // --- Manifiesto ---
         std::ofstream man(root / "traces" / "manifest.json");
         man << "{\n"
@@ -236,6 +263,7 @@ int main(int argc, char** argv) {
             << "  \"system_ram_size\": " << ram << ",\n"
             << "  \"determinism\": {\"checked_frames\": " << det_checked
             << ", \"ok\": " << (det_ok ? "true" : "false") << "},\n"
+            << "  \"trace_writes\": " << write_count << ",\n"
             << "  \"final_frame_hash\": \"" << hex64(emu.frame_hash()) << "\"\n"
             << "}\n";
 

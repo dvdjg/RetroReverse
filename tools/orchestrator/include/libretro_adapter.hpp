@@ -53,6 +53,20 @@ public:
     // Localiza una región de memoria libretro (RETRO_MEMORY_*); devuelve sus bytes o vacío.
     std::vector<std::uint8_t> read_memory(unsigned id, std::uint32_t addr, std::size_t len);
 
+    // Regiones publicadas por el core vía SET_MEMORY_MAPS (p. ej. RAM interna de mesen).
+    std::size_t memory_map_count() const;
+    // Lee [addr, addr+len) a través del mapa de memoria del core (vacío si no está mapeada).
+    std::vector<std::uint8_t> read_map(std::uint32_t addr, std::size_t len);
+
+    // Trazas de escritura (TraceConfig kind=MemoryWrite), capturadas por frame en step_frames.
+    struct TraceWrite {
+        unsigned frame;
+        std::uint32_t addr;
+        std::uint8_t old_value;
+        std::uint8_t value;
+    };
+    const std::vector<TraceWrite>& trace_writes() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

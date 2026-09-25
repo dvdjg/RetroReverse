@@ -24,6 +24,8 @@ extern "C" {
 #define RETRO_DEVICE_ID_JOYPAD_X 9
 #define RETRO_DEVICE_ID_JOYPAD_L 10
 #define RETRO_DEVICE_ID_JOYPAD_R 11
+#define RETRO_DEVICE_ID_JOYPAD_L2 12
+#define RETRO_DEVICE_ID_JOYPAD_R2 13
 
 #define RETRO_MEMORY_SAVE_RAM 0
 #define RETRO_MEMORY_SYSTEM_RAM 2
@@ -112,6 +114,24 @@ struct retro_system_av_info {
 struct retro_variable {
     const char* key;
     const char* value;
+};
+
+// Mapa de memoria publicado por el core (RETRO_ENVIRONMENT_SET_MEMORY_MAPS).
+// El core solo garantiza validez durante la llamada: el frontend debe copiarlo.
+struct retro_memory_descriptor {
+    std::uint64_t flags;
+    void* ptr;
+    std::size_t offset;
+    std::size_t start;
+    std::size_t select;
+    std::size_t disconnect;
+    std::size_t len;
+    const char* addrspace;
+};
+
+struct retro_memory_map {
+    const retro_memory_descriptor* descriptors;
+    unsigned num_descriptors;
 };
 
 struct retro_log_callback {

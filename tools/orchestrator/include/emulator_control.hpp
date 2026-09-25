@@ -20,6 +20,9 @@ struct InputState {
     bool fire = false;
     bool start = false;
     bool coin = false;
+    // Botones extra (libretro L2/R2); usados por hotkeys del emulador de reversing.
+    bool l2 = false;
+    bool r2 = false;
 };
 
 enum class TraceKind {
