@@ -4,9 +4,10 @@ Plataforma de consola del marco `RetroReverse`. Objetivo: análisis y **reimplem
 juegos NES, apoyándonos en un **emulador NES propio** (cycle-approx/cycle-accurate) que sirva de
 base de instrumentación y comparación.
 
-> Estado: **abierta**. Documentación de hardware, plan de emulador y arnés de pruebas listos.
-> Núcleo **CPU 6502 (oficiales + ilegales) validado con `nestest`** (8991/8991 líneas del log
-> idénticas, `$02=$03=0`). PPU/APU/mappers pendientes.
+> **APARCADO** (decisión del usuario, 2026): **no** se sigue con el emulador NES clásico hasta
+> nuevo aviso; se retomará más adelante como emulador no clásico. Lo hecho (spec de hardware,
+> CPU 6502 validada con `nestest`, cobertura de ejecución, docs) queda como referencia congelada.
+> No continuar H3/H4/H5 por ahora.
 
 ## Documentación
 
