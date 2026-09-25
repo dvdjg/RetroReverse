@@ -85,6 +85,9 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout en
 - **Amiga 500**: migrado e integrado; `hardware_spec` y herramientas; demo **«Arte»** con **HIGS** y
   **esqueleto SDL3** + C/C++ de referencia (tests OK). Pendiente: render y validación diferencial.
 - **Arcade — Pac-Man**: `docs/RESEARCH.md` cerrado (Dossier) + plan de instrumentación + `rom/layout.json`.
+- **Conversión — NES → Amiga 500**: pilar `conversion/` abierto con estructura, diseño y roadmap
+  (transpilador 6502→C++23, HLE + fallback, PPU/Copper/sprites/audio en A500). Implementación
+  pendiente (`docs/ROADMAP.md` §P4).
 - Roadmaps: [`docs/ROADMAP.md`](docs/ROADMAP.md) ·
   [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md) ·
   [`arte/docs/ROADMAP.md`](platforms/computers/amiga500/demos/arte/docs/ROADMAP.md) ·
@@ -101,6 +104,17 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout en
 
 Cada título sigue la **estructura canónica** de [`STRUCTURE.md`](STRUCTURE.md); para uno nuevo se
 copia [`docs/templates/expediente/`](docs/templates/expediente/).
+
+## Conversión a plataformas destino (`conversion/`)
+
+Tercer pilar ([ADR 0005](docs/adr/0005-pilar-conversion-plataformas.md)): **automatizar la
+conversión de un juego a otra plataforma** (no a PC). Primer nodo: **NES → Amiga 500**
+(transpilador 6502→C++23 en host + runtime HLE/fallback para A500).
+
+- Visión y nodos: [`conversion/README.md`](conversion/README.md).
+- Nodo NES→Amiga 500: [`conversion/nes-to-amiga500/`](conversion/nes-to-amiga500/README.md)
+  (roadmap, arquitectura, transpilador, HLE, PPU/Copper/sprites/audio en Amiga, mappers, riesgos).
+- Fase del marco: [`docs/ROADMAP.md`](docs/ROADMAP.md) §P4.
 
 ---
 

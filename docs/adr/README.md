@@ -9,5 +9,6 @@ Registro de decisiones de arquitectura del marco. Formato corto:
 | [0002](0002-instrumentacion-via-libretro.md) | Instrumentación vía libretro (cores + forks) | aceptado |
 | [0003](0003-higs-unica-entrada-reimpl.md) | La HIGS es la única entrada de la reimplementación | aceptado |
 | [0004](0004-migracion-amiga-reverse.md) | Repositorio único (marco + subproyecto Amiga) | aceptado |
+| [0005](0005-pilar-conversion-plataformas.md) | Tercer pilar: conversión a plataformas destino | aceptado |
 
 Para añadir una ADR: copiar la plantilla de 0001, numerar correlativo y añadir a la tabla.

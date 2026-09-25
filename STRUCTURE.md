@@ -12,6 +12,8 @@ en programas nuevos, dejando trazabilidad de dónde salió cada cosa.
   tools/                                 utilidades reutilizables (antes `toolkit/`)
     node/  python/  ghidra/              biblioteca + CLIs + pipeline Ghidra
   scripts/                               validación (HIGS) y utilidades de repo
+  conversion/                            conversión a plataformas destino (ADR 0005)
+    <origen>-to-<destino>/               nodo (docs/, tools/, runtime/, examples/, generated/)
   platforms/                             plataformas → placa → [variante] → juego
     computers/amiga500/
       hardware_spec/                     custom chips (Agnus/Denise/Paula), 68000

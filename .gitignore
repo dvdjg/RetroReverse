@@ -71,6 +71,13 @@ tools/orchestrator/*.ppm
 platforms/consoles/nes/reimplementation/nestest_runner
 platforms/consoles/nes/reimplementation/build_trace.txt
 
+# --- Conversión a plataformas destino: salidas y builds (regenerables) ---
+conversion/**/generated/*
+!conversion/**/generated/README.md
+conversion/**/build/
+conversion/**/*.nes
+conversion/**/*.bin
+
 # --- ROMs propias: recepción central (contenido NUNCA versionado; se conserva la estructura) ---
 roms/*
 !roms/README.md

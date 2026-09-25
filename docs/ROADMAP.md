@@ -57,6 +57,25 @@ HIGS **reproduce** lo que el Dossier describe.
 
 **Cierre**: varios juegos de varias plataformas con pipeline reproducible y validado.
 
+## P4 — Conversión a plataformas destino (NES → Amiga 500)
+
+Tercer pilar ([ADR 0005](adr/0005-pilar-conversion-plataformas.md)): automatizar la **conversión de
+un juego a otra plataforma**, empezando por **NES → Amiga 500** con un enfoque **HLE + fallback**.
+
+- P4.1 Fundaciones del pilar `conversion/` y del nodo `nes-to-amiga500` (docs + roadmap + ADR).
+  **HECHO**.
+- P4.2 CPU 6502 runtime fiel (host) validada con `nestest`. **PENDIENTE**.
+- P4.3 Transpilador estático 6502 → C++23 (NROM). **PENDIENTE**.
+- P4.4 Fallback PPU+APU software en host + validación diferencial vs `mesen`. **PENDIENTE**.
+- P4.5 Runtime Amiga mínimo (arranca en WinUAE A500 con el fallback). **PENDIENTE**.
+- P4.6 Motores Amiga: tiles+scroll, sprites, audio. **PENDIENTE**.
+- P4.7 Capa HLE (reconocimiento de intenciones) y mappers 0/2/3/1/4. **PENDIENTE**.
+- P4.8 Matriz de compatibilidad con ROMs propias. **PENDIENTE**.
+
+**Cierre**: un juego NROM y un UxROM arrancan y son jugables en A500 stock (frameskip permitido),
+con validación diferencial y compatibilidad documentada. Roadmap detallado:
+[`conversion/nes-to-amiga500/docs/ROADMAP.md`](../conversion/nes-to-amiga500/docs/ROADMAP.md).
+
 ## Hitos buscables
 
 | Hito | Evidencia |

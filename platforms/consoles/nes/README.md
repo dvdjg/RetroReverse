@@ -4,10 +4,13 @@ Plataforma de consola del marco `RetroReverse`. Objetivo: análisis y **reimplem
 juegos NES, apoyándonos en un **emulador NES propio** (cycle-approx/cycle-accurate) que sirva de
 base de instrumentación y comparación.
 
-> **APARCADO** (decisión del usuario, 2026): **no** se sigue con el emulador NES clásico hasta
-> nuevo aviso; se retomará más adelante como emulador no clásico. Lo hecho (spec de hardware,
-> CPU 6502 validada con `nestest`, cobertura de ejecución, docs) queda como referencia congelada.
-> No continuar H3/H4/H5 por ahora.
+> **APARCADO** como emulador NES clásico (decisión del usuario, 2026). Lo hecho (spec de hardware,
+> CPU 6502 validada con `nestest`, cobertura de ejecución, docs) queda como **base congelada**.
+>
+> **Retomado como emulador no clásico**: el nodo
+> [`conversion/nes-to-amiga500/`](../../../conversion/nes-to-amiga500/README.md) reutiliza esta base
+> para **transpilar 6502 → C++23** y ejecutarlo en un **Amiga 500** (HLE + fallback). No continuar
+> H3/H4/H5 del emulador clásico salvo lo que necesite la conversión.
 
 ## Documentación
 
