@@ -79,8 +79,9 @@ Detalle en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); layout en
 ## Estado y roadmaps
 
 - **Marco**: documentación hecha; **HIGS** (JSON Schema + lint + CI) hecha; **orquestador** con
-  interfaz `EmulatorControl` y **adaptador libretro** validado con core de prueba. Pendiente:
-  compilar **cores reales** y el vertical slice.
+  interfaz `EmulatorControl`, **adaptador libretro** y **cores reales compilados**
+  (`mame2003-plus`, `mesen`, `genesis-plus-gx`, `libretro-uae`) + **RetroArch**. Vertical slice
+  Pac-Man listo (`scripts/pacman-slice.sh`); pendiente la ROM propia.
 - **Amiga 500**: migrado e integrado; `hardware_spec` y herramientas; demo **«Arte»** con **HIGS** y
   **esqueleto SDL3** + C/C++ de referencia (tests OK). Pendiente: render y validación diferencial.
 - **Arcade — Pac-Man**: `docs/RESEARCH.md` cerrado (Dossier) + plan de instrumentación + `rom/layout.json`.
@@ -179,6 +180,8 @@ Método completo en [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md); contra
 | [`docs/INSTRUMENTATION.md`](docs/INSTRUMENTATION.md) | Contrato de emulación observable (API, trazas, determinismo) |
 | [`docs/RESEARCH_FIRST.md`](docs/RESEARCH_FIRST.md) | Regla 0: documentación primero |
 | [`docs/EMULATORS.md`](docs/EMULATORS.md) | Cores/emuladores por plataforma e instrumentación |
+| [`docs/REFERENCES.md`](docs/REFERENCES.md) | Índice de desensamblados/análisis de referencia (Pac-Man, NES, MD, Amiga) |
+| [`docs/ROM_SELECTION.md`](docs/ROM_SELECTION.md) | Selección de ROMs propias y trazabilidad |
 | [`docs/REPO_LAYOUT.md`](docs/REPO_LAYOUT.md) | Estructura por plataforma + nodo de juego |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Fases, hitos y riesgos del marco |
 | [`docs/MIGRATION_AMIGA_REVERSE.md`](docs/MIGRATION_AMIGA_REVERSE.md) | Migración/integración Amiga (hecha) |
@@ -244,7 +247,10 @@ Método completo en [`LECCIONES_APRENDIDAS.md`](LECCIONES_APRENDIDAS.md); contra
   `rz-ghidra`.
 - **Emulación**: RetroArch, libretro-super, libretro-common, libretro-database, libRetroReversing.
 - **Cores**: arcade (`mame`, `mame2003-plus`), NES (`mesen`, `nestopia`, `fceumm`), Megadrive
-  (`genesis-plus-gx`), Amiga (**`libretro-uae`** base WinUAE, `puae`).
+  (`genesis-plus-gx`), Amiga (**`libretro-uae`** base WinUAE, `puae`), **Atari 2600** (`stella`),
+  **Game Boy/Color** (`gambatte`), **Master System/Game Gear** (`smsplus-gx`).
+- **Referencias** (desensamblados/análisis): [`external/references/`](external/references/) —
+  ver [`docs/REFERENCES.md`](docs/REFERENCES.md).
 - Detalle: [`tools/orchestrator/README.md`](tools/orchestrator/README.md).
 
 ## Cómo reproducir / validar
@@ -256,6 +262,14 @@ wsl -d Ubuntu -- bash -lc "bash /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/R
 wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/platforms/computers/amiga500/demos/arte/reimplementation/reference && make test-all"
 # Adaptador libretro (core de prueba)
 wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/tools/orchestrator && make test"
+# Cores reales (compilar + comprobar carga)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo && bash scripts/build-cores.sh && bash scripts/check-cores.sh"
+# Referencias (clona desensamblados/PDFs a external/references/)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo && bash scripts/fetch-references.sh"
+# ROMs propias: selección desde la colección externa -> roms/ (ignorado por git)
+python scripts/select-roms.py
+# Vertical slice Pac-Man (requiere rom/raw/pacman.zip)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo && bash scripts/pacman-slice.sh"
 ```
 
 **CI**: [`.github/workflows/validate.yml`](.github/workflows/validate.yml) valida las HIGS en cada push/PR.

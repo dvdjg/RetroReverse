@@ -10,7 +10,7 @@ documentado que sirva de **test de calidad** del sistema.
 | Fase | Estado |
 |---|---|
 | P0.2 Documentación primero (`docs/RESEARCH.md`) | **en curso** (borrador) |
-| P0.3 MAME instrumentado headless | pendiente |
+| P0.3 MAME instrumentado headless | **HECHO**: core `mame2003-plus` compilado, adaptador libretro + `vertical_slice`; slice ejecutado (600 frames, determinismo OK) → `extraction/` |
 | P0.4 Análisis estático (Capstone + Ghidra) | pendiente |
 | P0.5 Bucle IA (FSMs, mazos, timings) | pendiente |
 | P0.6 HIGS + assets | pendiente |
@@ -38,6 +38,20 @@ pacman/
 - Marco: [`docs/ROADMAP.md`](../../../../../docs/ROADMAP.md) (fase P0),
   [`docs/PIPELINE.md`](../../../../../docs/PIPELINE.md),
   [`docs/HIGS.md`](../../../../../docs/HIGS.md).
+
+## Cómo ejecutar (P0.3)
+
+```powershell
+# 1) Compilar el core (una vez)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo && bash scripts/build-libretro-core.sh libretro-mame2003-plus"
+# 2) Colocar el romset propio
+#    platforms/arcade/dedicated/namco_pacman/pacman/rom/raw/pacman.zip
+# 3) Ejecutar el vertical slice (determinismo + trazas/savestates en extraction/)
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo && bash scripts/pacman-slice.sh"
+```
+
+Salidas en `extraction/`: `traces/manifest.json`, `traces/frames.csv`, `savestates/`,
+`screenshots/` y `memory_dumps/` (ignoradas por git).
 
 ## Reglas
 

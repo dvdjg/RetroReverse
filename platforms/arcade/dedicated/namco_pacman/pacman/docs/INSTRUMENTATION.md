@@ -5,8 +5,9 @@ Plan para instrumentar el emulador del nodo Pac-Man y cumplir el contrato
 
 ## Core
 
-- **Opción recomendada**: **libretro `mame2003-plus`** (o `mame2010`) — MAME *year-stamped* ligero,
-  con API libretro (`retro_run`, savestates, `retro_serialize`). **Fijar versión** por juego.
+- **Core**: **libretro `mame2003-plus`**, compilado en `external/libretro-mame2003-plus/`
+  (`mame2003_plus_libretro.so`) con `scripts/build-libretro-core.sh` y cargado por el adaptador
+  libretro del orquestador (`tools/orchestrator`). Versión fijada por el propio checkout.
 - Alternativa: MAME standalone + su API de debug, o un fork propio con hooks.
 - **No se versiona** el core (ver `emulators/README.md`).
 
@@ -52,12 +53,19 @@ extraction/
 
 ## Pasos
 
-1. Clonar/compilar el core (con libRetroReversing) — ver `emulators/README.md`.
-2. Implementar el adaptador `EmulatorControl` para el frontend libretro.
-3. Grabar los escenarios y volcar trazas/savestates.
+1. ~~Clonar/compilar el core~~ **HECHO**: `scripts/build-libretro-core.sh libretro-mame2003-plus`
+   (o `scripts/build-cores.sh` para todos).
+2. ~~Implementar el adaptador `EmulatorControl` para el frontend libretro~~ **HECHO**
+   (`tools/orchestrator`, adaptador libretro + CLI `vertical_slice`).
+3. ~~Colocar `pacman.zip` y ejecutar el slice~~ **HECHO** (`scripts/pacman-slice.sh`): 600 frames,
+   escenario `start`, determinismo OK; salida en [`../extraction/`](../extraction/).
 4. Alimentar el bucle de inferencia y **contrastar con [`RESEARCH.md`](RESEARCH.md)**.
 
 ## Pendiente
 
-- **Compilar el core y el frontend headless** (requiere toolchain + red; no versionado).
-- Verificar que el **savestate en memoria** es determinista en el core elegido.
+- ~~**Memoria de MAME**: `mame2003-plus` no expone `RETRO_MEMORY_SYSTEM_RAM`~~ **HECHO**: parche en
+  `mame2003.c` que vuelca el espacio Z80 (64 KB) cada frame vía `cpu_readmem16`; `memory_dumps/`
+  ya contiene VRAM (`0x4000`), colorram y workram.
+- **Orientación**: el core emite `288x224` (horizontal); Pac-Man es vertical y RetroArch aplica
+  `SET_ROTATION`. El adaptador aún no rota; las capturas actuales van sin rotar.
+- **Regenerar la extracción** tras el parche de memoria: `bash scripts/pacman-slice.sh`.

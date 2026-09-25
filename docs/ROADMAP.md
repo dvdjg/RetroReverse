@@ -13,7 +13,10 @@ Objetivo: que **un** juego recorra el pipeline completo antes de generalizar.
 - P0.2 Destripar Pac-Man: Dossier + driver MAME → `RESEARCH.md`. **HECHO**
   (`platforms/arcade/dedicated/namco_pacman/pacman/docs/RESEARCH.md`).
 - P0.3 Emulación instrumentada: contrato (`docs/INSTRUMENTATION.md`), plan MAME del nodo y
-  orquestador (`tools/orchestrator/`). **EN CURSO** — falta compilar el core y el adaptador libretro.
+  orquestador (`tools/orchestrator/`). **HECHO (base)**: cores reales compilados y validados
+  (`mame2003-plus`, `mesen`, `genesis-plus-gx`, `libretro-uae`, `stella`, `gambatte`, `smsplus-gx`)
+  y vertical slice de Pac-Man ejecutado (determinismo OK → `extraction/`). Pendiente fino:
+  memoria de MAME (no expone `SYSTEM_RAM`) y rotación de pantalla.
 - P0.4 Análisis estático (Capstone + Ghidra) + anotación por trazas. **PENDIENTE**.
 - P0.5 Bucle IA: inferir FSM de fantasmas, velocidades por nivel, mapas, túnel. **PENDIENTE**.
 - P0.6 HIGS de Pac-Man + assets (tiles/sprites/paletas/sonido). **PENDIENTE**.
