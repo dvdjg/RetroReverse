@@ -3,9 +3,9 @@
 Especificación **agnóstica de hardware** del demo, construida desde
 [`../docs/TECNICAS.md`](../docs/TECNICAS.md) y [`../docs/HALLAZGOS.md`](../docs/HALLAZGOS.md).
 Es la entrada prevista de la reimplementación (ver
-[`../../../../../docs/HIGS.md`](../../../../../docs/HIGS.md) y ADR 0003).
+[`../../../../../../docs/HIGS.md`](../../../../../../docs/HIGS.md) y ADR 0003).
 
-- Fichero: `game.json` (valida contra [`game.schema.json`](../../../../../docs/higs/game.schema.json)).
+- Fichero: `game.json` (valida contra [`game.schema.json`](../../../../../../docs/higs/game.schema.json)).
 - Lint: `python docs/higs/higs_lint.py platforms/computers/amiga500/demos/arte/spec/game.json`.
 
 ## Contenido
@@ -23,5 +23,5 @@ Es la entrada prevista de la reimplementación (ver
 - Sustituir descripciones genéricas por **tablas exactas** (factores de zoom, tiempos por efecto)
   con evidencia (savestate + frame).
 - Separar `state_machines/*.json` si crece.
-- La **validación diferencial** (fase 7 de [`PIPELINE.md`](../../../../../docs/PIPELINE.md)) es la
+- La **validación diferencial** (fase 7 de [`PIPELINE.md`](../../../../../../docs/PIPELINE.md)) es la
   prueba de que la spec es suficiente.
