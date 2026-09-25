@@ -50,9 +50,10 @@ subproyecto de un marco mayor de conversión de juegos clásicos a PC).
 | E2 | Consolidar `TECNICAS.md` con la **receta de port** por técnica (C++ + ASM + contrato) | alto |
 | E3 | Documentar el **formato SOS** (loader, dispatch, assets) como spec del expediente | alto |
 
-## F. Integración con el marco mayor (`RetroReverse`, repo hermano)
+## F. Integración con el marco RetroReverse (mismo repo)
 
-Ver `../../../RetroReverse/docs/MIGRATION_AMIGA_REVERSE.md` y `../../../RetroReverse/docs/ROADMAP.md` (fase P2).
+Ver [`../../docs/MIGRATION_AMIGA_REVERSE.md`](../../docs/MIGRATION_AMIGA_REVERSE.md) y
+[`../../docs/ROADMAP.md`](../../docs/ROADMAP.md) (fase P2).
 
 | # | Pendiente | Valor |
 |---|---|---|
@@ -71,4 +72,4 @@ Ver `../../../RetroReverse/docs/MIGRATION_AMIGA_REVERSE.md` y `../../../RetroRev
 6. **F1–F4** (integración en el marco mayor).
 
 > Nota: los pendientes **A/B/C** son del expediente actual; **F** depende de la reestructuración
-> (documentación del marco en `../../../RetroReverse/`).
+> (documentación del marco en [`../../docs/`](../../docs/)).
