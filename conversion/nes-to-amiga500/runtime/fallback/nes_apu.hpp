@@ -15,8 +15,33 @@
 
 #include <eng/core/types/span.hpp>
 #include <eng/core/types/types.hpp>
+#include <eng/core/util/array.hpp>
 
 namespace n2a {
+
+namespace apu_detail {
+
+/// Tabla de mezcla no lineal de los dos canales pulse (NESdev):
+/// `95.88 / (8128/n + 100)`, `n = pulse1 + pulse2` (0..30).
+[[nodiscard]] consteval eng::util::Array<float, 31> make_pulse_table() {
+	eng::util::Array<float, 31> t {};
+	for (int n = 1; n < 31; ++n) {
+		t[static_cast<eng::usize>(n)] = 95.88f / (8128.0f / static_cast<float>(n) + 100.0f);
+	}
+	return t;
+}
+
+/// Tabla de mezcla no lineal de triangle+noise+DMC (NESdev):
+/// `163.67 / (24329/n + 100)`, `n = 3*triangle + 2*noise + DMC` (0..202).
+[[nodiscard]] consteval eng::util::Array<float, 203> make_tnd_table() {
+	eng::util::Array<float, 203> t {};
+	for (int n = 1; n < 203; ++n) {
+		t[static_cast<eng::usize>(n)] = 163.67f / (24329.0f / static_cast<float>(n) + 100.0f);
+	}
+	return t;
+}
+
+} // namespace apu_detail
 
 /// APU 2A03 mínima con los cinco registros de canal relevantes.
 struct Apu {
@@ -38,6 +63,13 @@ struct Apu {
 		12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30};
 	static constexpr eng::u16 kNoisePeriod[16] = {
 		4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068};
+	static constexpr eng::u16 kDmcRate[16] = {
+		428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54};
+
+	/// Tabla de mezcla no lineal de pulse (construida por `apu_detail`).
+	static constexpr eng::util::Array<float, 31> kPulseTable = apu_detail::make_pulse_table();
+	/// Tabla de mezcla no lineal de triangle+noise+DMC.
+	static constexpr eng::util::Array<float, 203> kTndTable = apu_detail::make_tnd_table();
 
 	/// Canal de onda cuadrada (pulse 1 o 2).
 	struct Pulse {
@@ -106,10 +138,42 @@ struct Apu {
 		}
 	};
 
+	/// Canal DMC (modulación delta). Lee bytes de memoria mediante `reader`
+	/// (que fija `set_reader`).
+	struct Dmc {
+		eng::u16 rate = 0;            ///< Periodo del timer (tabla).
+		eng::u16 timer = 0;           ///< Contador del timer.
+		eng::u8 output = 0;           ///< Nivel de salida (0..127).
+		eng::u16 sample_address = 0;  ///< Dirección inicial del sample.
+		eng::u16 sample_length = 0;   ///< Longitud en bytes.
+		eng::u16 current_address = 0; ///< Dirección de lectura actual.
+		eng::u16 bytes_remaining = 0; ///< Bytes que quedan por leer.
+		eng::u8 shift_register = 0;   ///< Registro de desplazamiento (8 bits).
+		eng::u8 bits_remaining = 8;   ///< Bits que quedan del registro.
+		eng::u8 sample_buffer = 0;    ///< Byte precargado.
+		bool silence = true;          ///< Sin bits activos.
+		bool buffer_empty = true;     ///< ¿Buffer de sample vacío?
+		bool irq_enable = false;      ///< IRQ al terminar el sample.
+		bool loop = false;            ///< Repetir el sample.
+	};
+
+	/// Callback de lectura de memoria para el DMC.
+	using Reader = eng::u8 (*)(void* user, eng::u16 addr);
+
 	Pulse pulse1;   ///< Canal pulse 1 ($4000-$4003).
 	Pulse pulse2;   ///< Canal pulse 2 ($4004-$4007).
 	Triangle triangle; ///< Canal triangle ($4008-$400B).
 	Noise noise;    ///< Canal noise ($400C-$400F).
+	Dmc dmc;        ///< Canal DMC ($4010-$4013).
+	bool dmc_irq = false; ///< IRQ pendiente del DMC.
+
+	/// Enlaza el lector de memoria del DMC.
+	/// \param r Función que devuelve el byte en `addr` (o `nullptr`).
+	/// \param user Cookie que se pasa a `r`.
+	void set_reader(Reader r, void* user = nullptr) {
+		reader = r;
+		reader_user = user;
+	}
 
 	eng::u32 sample_rate = 22050u; ///< Frecuencia de muestreo de salida.
 	eng::u32 acc = 0;              ///< Acumulador de ciclos para el remuestreo.
@@ -146,6 +210,19 @@ struct Apu {
 			noise.period = kNoisePeriod[value & 0x0Fu];
 		} else if (addr == 0x400Fu) {
 			noise.length = kLength[value >> 3];
+		} else if (addr == 0x4010u) {
+			dmc.irq_enable = (value & 0x80u) != 0u;
+			dmc.loop = (value & 0x40u) != 0u;
+			dmc.rate = kDmcRate[value & 0x0Fu];
+			if (!dmc.irq_enable) {
+				dmc_irq = false;
+			}
+		} else if (addr == 0x4011u) {
+			dmc.output = static_cast<eng::u8>(value & 0x7Fu);
+		} else if (addr == 0x4012u) {
+			dmc.sample_address = static_cast<eng::u16>(0xC000u | (static_cast<eng::u16>(value) << 6u));
+		} else if (addr == 0x4013u) {
+			dmc.sample_length = static_cast<eng::u16>((static_cast<eng::u16>(value) << 4u) + 1u);
 		} else if (addr == 0x4015u) {
 			pulse1.enabled = (value & 0x01u) != 0u;
 			pulse2.enabled = (value & 0x02u) != 0u;
@@ -154,6 +231,12 @@ struct Apu {
 			if ((value & 0x01u) == 0u) pulse1.length = 0u;
 			if ((value & 0x02u) == 0u) pulse2.length = 0u;
 			if ((value & 0x08u) == 0u) noise.length = 0u;
+			if ((value & 0x10u) == 0u) {
+				dmc.bytes_remaining = 0u;
+			} else if (dmc.bytes_remaining == 0u) {
+				start_dmc();
+			}
+			dmc_irq = false;
 			frame_irq = false;
 		} else if (addr == 0x4017u) {
 			frame_step = 0u;
@@ -172,7 +255,9 @@ struct Apu {
 		if (pulse2.length != 0u) r = static_cast<eng::u8>(r | 0x02u);
 		if (triangle.length != 0u) r = static_cast<eng::u8>(r | 0x04u);
 		if (noise.length != 0u) r = static_cast<eng::u8>(r | 0x08u);
+		if (dmc.bytes_remaining != 0u) r = static_cast<eng::u8>(r | 0x10u);
 		if (frame_irq) r = static_cast<eng::u8>(r | 0x40u);
+		if (dmc_irq) r = static_cast<eng::u8>(r | 0x80u);
 		frame_irq = false;
 		return r;
 	}
@@ -191,6 +276,9 @@ struct Apu {
 	}
 
 private:
+	Reader reader = nullptr;     ///< Lector de memoria del DMC (o `nullptr`).
+	void* reader_user = nullptr; ///< Cookie pasada a `reader`.
+
 	/// Escribe uno de los 4 registros de un pulse (`n` = 0..3).
 	static void write_pulse(Pulse& p, eng::u8 n, eng::u8 value) {
 		switch (n) {
@@ -226,11 +314,62 @@ private:
 		}
 		odd = !odd;
 
+		clock_dmc();
+
 		if (++frame_div >= 7458u) {
 			frame_div = 0u;
 			clock_frame();
 		}
 		++cycles;
+	}
+
+	/// Inicia el sample del DMC: apunta al inicio y recarga el contador de bytes.
+	void start_dmc() {
+		dmc.current_address = dmc.sample_address;
+		dmc.bytes_remaining = dmc.sample_length;
+		dmc.bits_remaining = 8u;
+	}
+
+	/// Avanza el canal DMC un ciclo: modula el nivel de salida según los bits del
+	/// sample y pide bytes nuevos por `reader`.
+	void clock_dmc() {
+		if (dmc.timer == 0u) {
+			dmc.timer = dmc.rate;
+			if (!dmc.silence) {
+				if ((dmc.shift_register & 1u) != 0u) {
+					if (dmc.output <= 125u) dmc.output = static_cast<eng::u8>(dmc.output + 2u);
+				} else {
+					if (dmc.output >= 2u) dmc.output = static_cast<eng::u8>(dmc.output - 2u);
+				}
+				dmc.shift_register = static_cast<eng::u8>(dmc.shift_register >> 1u);
+			}
+			if (--dmc.bits_remaining == 0u) {
+				dmc.bits_remaining = 8u;
+				if (!dmc.buffer_empty) {
+					dmc.silence = false;
+					dmc.shift_register = dmc.sample_buffer;
+					dmc.buffer_empty = true;
+				} else {
+					dmc.silence = true;
+				}
+				// Recarga el buffer con el siguiente byte si hace falta.
+				if (dmc.buffer_empty && dmc.bytes_remaining > 0u && reader != nullptr) {
+					dmc.sample_buffer = reader(reader_user, dmc.current_address);
+					dmc.buffer_empty = false;
+					dmc.current_address =
+						static_cast<eng::u16>((dmc.current_address + 1u) | 0x8000u);
+					if (--dmc.bytes_remaining == 0u) {
+						if (dmc.loop) {
+							start_dmc();
+						} else if (dmc.irq_enable) {
+							dmc_irq = true;
+						}
+					}
+				}
+			}
+		} else {
+			--dmc.timer;
+		}
 	}
 
 	static void clock_pulse(Pulse& p) {
@@ -280,13 +419,13 @@ private:
 		frame_step = static_cast<eng::u8>((frame_step + 1u) & 3u);
 	}
 
-	/// Mezcla lineal de los canales a una muestra de 16 bits.
+	/// Mezcla **no lineal** de los canales (tablas NESdev) a una muestra de 16 bits.
 	[[nodiscard]] eng::s16 mix() const {
-		const int p1 = pulse1.output();
-		const int p2 = pulse2.output();
-		const int tri = triangle.output();
-		const int noi = noise.output();
-		int v = (p1 + p2) * 160 + tri * 200 + noi * 120;
+		const int n = pulse1.output() + pulse2.output();
+		const int t = 3 * triangle.output() + 2 * noise.output() + dmc.output;
+		// `n` ∈ [0,30] y `t` ∈ [0,202]: índices dentro de las tablas.
+		const float s = (kPulseTable[n] + kTndTable[t]) * 30000.0f;
+		int v = static_cast<int>(s);
 		if (v > 32767) v = 32767;
 		if (v < -32768) v = -32768;
 		return static_cast<eng::s16>(v);

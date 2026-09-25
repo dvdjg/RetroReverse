@@ -47,12 +47,12 @@ Dependencias duras: `F1→F2→F3→F4` (cadena crítica) y `F5,F6,F7→F8` (HLE
 **Objetivo**: una clase `CPU` 6502 (oficiales **e ilegales**) y un `NESMemory`/bus correctos, en
 C++23, que sirvan de sustrato al transpilador y al fallback.
 
-**Estado: HECHO (base).** El runtime incluye
+**Estado: HECHO.** El runtime incluye
 [`../runtime/include/nes_runtime.hpp`](../runtime/include/nes_runtime.hpp) (memoria + CPU de métodos)
 y [`../runtime/include/nes_interpreter.hpp`](../runtime/include/nes_interpreter.hpp) (intérprete 6502,
-oficiales + ilegales). Validado con `nestest`: `$02=0` y `$03=0`
-([`../runtime/test/run.sh`](../runtime/test/run.sh)). Pendiente: conteo **exacto** de ciclos por
-instrucción (lo necesitan el PPU/APU precisos de F3/F7).
+oficiales + ilegales). Validado con `nestest`: `$02=0` y `$03=0`, y con **conteo de ciclos por
+instrucción** (tabla base + penalizaciones de página/rama, `runtime/test/cycles_test.cpp`) — todo en
+[`../runtime/test/run.sh`](../runtime/test/run.sh).
 
 - Reutilizar la base ya validada en
   [`../../../platforms/consoles/nes/reimplementation/`](../../../platforms/consoles/nes/reimplementation/)
@@ -99,9 +99,10 @@ idéntico a un intérprete de referencia (traza de PC + estado final).
 Es el "cero" del HLE: todo lo que no se acelere caerá aquí.
 
 **Estado: EN CURSO.** [`../runtime/fallback/nes_ppu.hpp`](../runtime/fallback/nes_ppu.hpp) implementa
-registros, VRAM, OAM, paleta, scroll, VBlank/NMI y el **render del fondo** a un framebuffer de
-índices NES (`runtime/fallback/test/ppu_test.cpp`). Pendiente: sprites, sprite-0 hit, scroll por
-línea y **validación diferencial contra `mesen`**.
+registros, VRAM, OAM, paleta, scroll, VBlank/NMI, el **render del fondo** y los **sprites**
+(8×8/8×16, flips, 4 paletas, prioridad tras el fondo, límite de 8 por línea y **sprite-0 hit**) a un
+framebuffer de índices NES (`runtime/fallback/test/ppu_test.cpp`). Pendiente: scroll por línea
+(mid-frame) y **validación diferencial contra `mesen`**.
 
 - PPU software: render 256×240 (tiles, attributes, sprites, scroll, sprite-0 hit), VBlank/NMI,
   `$2000-$2007`, OAM, DMA `$4014`.
@@ -165,9 +166,9 @@ línea descartado como en hardware real.
 **Objetivo**: alimentar Paula con el APU emulado. Detalle en [`AUDIO_AMIGA.md`](AUDIO_AMIGA.md).
 
 **Estado: EN CURSO.** [`../runtime/fallback/nes_apu.hpp`](../runtime/fallback/nes_apu.hpp) modela los
-registros `$4000-$4017`, el frame counter y sintetiza pulse/triangle/noise a muestras
-(`runtime/fallback/test/apu_test.cpp`). Pendiente: DMC, mezcla no lineal exacta y volcado real a
-Paula.
+registros `$4000-$4017`, el frame counter y sintetiza pulse/triangle/noise/**DMC** con **mezcla no
+lineal** (tablas NESdev) a muestras de 16 bits (`runtime/fallback/test/apu_test.cpp`). Pendiente:
+volcado real a Paula (bloques/DMA) y pulido de envolventes/sweep.
 
 - Generación por bloques (128–256 muestras) a 11/22 kHz; integrar con el mixer de audio del engine
   Amiga (repo `Amiga-Cpp`) en uno o varios canales.

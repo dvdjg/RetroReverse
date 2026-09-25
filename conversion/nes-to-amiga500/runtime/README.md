@@ -8,7 +8,8 @@ Amiga. Es la base de las fases F1/F3/F4 del [`ROADMAP`](../docs/ROADMAP.md).
 | Fichero | Contenido | Estado |
 |---|---|---|
 | [`include/nes_runtime.hpp`](include/nes_runtime.hpp) | `NESMemory` (RAM, PPU/APU/E/S, PRG-ROM) y `CPU` 6502 de métodos (registros, flags, pila, modos y familias de opcodes) + macro `N2A_ASSUME` | **F1 (base)** |
-| [`include/nes_interpreter.hpp`](include/nes_interpreter.hpp) | Intérprete 6502 (oficiales + ilegales) sobre `CPU`/`NESMemory` | **F1**: validado con `nestest` |
+| [`include/nes_interpreter.hpp`](include/nes_interpreter.hpp) | Intérprete 6502 (oficiales + ilegales) con **conteo de ciclos** | **F1**: validado con `nestest` |
+| [`tools/facts_from_run.cpp`](tools/facts_from_run.cpp) | Extractor de **hechos de valores** por telemetría (`--facts`) | herramienta host |
 | [`fallback/nes_ppu.hpp`](fallback/nes_ppu.hpp) | PPU software: registros, VRAM, OAM, paleta, scroll, VBlank/NMI y render del fondo | **F3** (en curso) |
 | [`fallback/nes_apu.hpp`](fallback/nes_apu.hpp) | APU software: registros `$4000-$4017`, frame counter y síntesis pulse/triangle/noise | **F7** (en curso) |
 
@@ -17,9 +18,10 @@ generado incluye `nes_runtime.hpp` y enlaza la PRG con `NESMemory::prg`/`prg_siz
 
 ### Tests
 
-`bash test/run.sh` (WSL/Linux o MinGW): valida la CPU con `nestest` ($02=$03=0) y ejecuta los tests
-de PPU (fondo + registros) y APU. Pendiente de F1: conteo **exacto** de ciclos. Pendiente de F3:
-sprites, sprite-0 hit, scroll por línea y **validación diferencial contra `mesen`**.
+`bash test/run.sh` (WSL/Linux o MinGW): valida la CPU con `nestest` ($02=$03=0), el **conteo de
+ciclos** (`cycles_test`), la PPU (fondo + **sprites** + sprite-0 hit + registros), la APU
+(pulse/triangle/noise/**DMC** + mezcla no lineal) y la **telemetría** de valores. Pendiente de F3:
+scroll por línea y **validación diferencial contra `mesen`**; de F7: volcado a Paula.
 
 ## Capas de destino (a partir de F3)
 

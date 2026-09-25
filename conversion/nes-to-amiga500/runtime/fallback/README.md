@@ -8,10 +8,10 @@ sprite-0 hit, VBlank/NMI, `$2000-$2007`, OAM, DMA) y del APU (5 canales + frame 
 
 | Fichero | Contenido | Estado |
 |---|---|---|
-| [`nes_ppu.hpp`](nes_ppu.hpp) | PPU 2C02: registros `$2000-$2007`, VRAM (2 KB), OAM (256 B), paleta (32 B), scroll, VBlank/NMI y **render del fondo** a un framebuffer de índices NES (256×240) | F3 (en curso) |
-| [`test/ppu_test.cpp`](test/ppu_test.cpp) | Test sintético: monta una escena, la renderiza y comprueba píxeles, VBlank/NMI y `$2006`/`$2007` | OK |
-| [`nes_apu.hpp`](nes_apu.hpp) | APU 2A03: registros `$4000-$4017`, frame counter y síntesis pulse/triangle/noise a muestras mono (16 bits) | F7 (en curso) |
-| [`test/apu_test.cpp`](test/apu_test.cpp) | Test de humo: activa pulse/ruido, genera muestras y comprueba `$4015` y señal no nula | OK |
+| [`nes_ppu.hpp`](nes_ppu.hpp) | PPU 2C02: registros `$2000-$2007`, VRAM (2 KB), OAM (256 B), paleta (32 B), scroll, VBlank/NMI, **fondo** y **sprites** (flips, prioridad, 8/línea, sprite-0 hit) a un framebuffer de índices NES (256×240) | F3 (en curso) |
+| [`test/ppu_test.cpp`](test/ppu_test.cpp) | Test sintético: fondo, sprite delante/detrás, overflow, sprite-0 hit, VBlank/NMI y `$2006`/`$2007` | OK |
+| [`nes_apu.hpp`](nes_apu.hpp) | APU 2A03: registros `$4000-$4017`, frame counter y síntesis pulse/triangle/noise/**DMC** con **mezcla no lineal** (tablas NESdev) | F7 (en curso) |
+| [`test/apu_test.cpp`](test/apu_test.cpp) | Test de humo: activa pulse/ruido/DMC, genera muestras y comprueba `$4015`, salida no nula y rango | OK |
 
 ## Alcance y pendientes
 

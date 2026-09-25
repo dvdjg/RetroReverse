@@ -48,6 +48,9 @@ struct Ppu {
 
 	/// Framebuffer de índices de color NES (0..63), fila a fila (256×240).
 	eng::u8 fb[kPpuWidth * kPpuHeight] {};
+	/// Mapa de opacidad del fondo (1 = píxel de fondo con color != 0). Lo usa el
+	/// compositor de sprites para prioridad y sprite-0 hit.
+	eng::u8 bg_opaque[kPpuWidth * kPpuHeight] {};
 
 	/// Lee un registro de la PPU `$2000-$2007`.
 	/// \param addr Dirección en el rango de PPU (ya espejada a 8 bytes).
@@ -166,8 +169,92 @@ struct Ppu {
 					value = static_cast<eng::u8>(palette[(attr * 4 + color) & 0x1Fu] & 0x3Fu);
 				}
 				fb[py * kPpuWidth + px] = value;
+				bg_opaque[py * kPpuWidth + px] = (color != 0u) ? 1u : 0u;
 			}
 		}
+	}
+
+	/// Dibuja los **sprites** sobre el fondo ya renderizado en `fb`.
+	///
+	/// Respeta tamaño 8×8/8×16 (`ctrl` bit 5), bases de pattern table, flips H/V,
+	/// las 4 paletas de sprite, la prioridad tras el fondo (bit 5 del atributo) y
+	/// el límite de **8 sprites por línea** (bit 5 de `status` = overflow). Activa
+	/// el bit 6 de `status` (sprite-0 hit) cuando el sprite 0 opaco se solapa con
+	/// un píxel de fondo no transparente.
+	void render_sprites() {
+		const int height = (ctrl & 0x20u) ? 16 : 8;
+		for (int y = 0; y < kPpuHeight; ++y) {
+			int selected[8];
+			int n = 0;
+			bool overflow = false;
+			for (int i = 0; i < 64; ++i) {
+				const int top = static_cast<int>(oam[i * 4 + 0]) + 1;
+				const int row = y - top;
+				if (row < 0 || row >= height) {
+					continue;
+				}
+				if (n < 8) {
+					selected[n++] = i;
+				} else {
+					overflow = true;
+				}
+			}
+			if (overflow) {
+				status = static_cast<eng::u8>(status | 0x20u);
+			}
+			// De mayor a menor índice: el sprite de índice más bajo queda encima.
+			for (int s = n - 1; s >= 0; --s) {
+				const int i = selected[s];
+				const eng::u8 tile = oam[i * 4 + 1];
+				const eng::u8 attr = oam[i * 4 + 2];
+				const eng::u8 ox = oam[i * 4 + 3];
+				const int row = y - (static_cast<int>(oam[i * 4 + 0]) + 1);
+				const bool flip_v = (attr & 0x80u) != 0u;
+				const bool flip_h = (attr & 0x40u) != 0u;
+				int rr = flip_v ? (height - 1 - row) : row;
+				eng::u16 pbase;
+				eng::u8 t;
+				if (height == 16) {
+					pbase = (tile & 1u) ? 0x1000u : 0x0000u;
+					t = static_cast<eng::u8>((tile & 0xFEu) + ((rr >= 8) ? 1u : 0u));
+					rr &= 7;
+				} else {
+					pbase = (ctrl & 0x08u) ? 0x1000u : 0x0000u;
+					t = tile;
+				}
+				const eng::u16 pat = static_cast<eng::u16>(pbase + t * 16u + rr);
+				const eng::u8 p0 = chr_byte(pat);
+				const eng::u8 p1 = chr_byte(static_cast<eng::u16>(pat + 8u));
+				for (int col = 0; col < 8; ++col) {
+					const int px = static_cast<int>(ox) + col;
+					if (px < 0 || px >= kPpuWidth) {
+						continue;
+					}
+					const int bit = flip_h ? col : (7 - col);
+					const eng::u8 color =
+						static_cast<eng::u8>(((p0 >> bit) & 1u) | (((p1 >> bit) & 1u) << 1u));
+					if (color == 0u) {
+						continue;
+					}
+					const int idx = y * kPpuWidth + px;
+					if (i == 0 && bg_opaque[idx] != 0u) {
+						status = static_cast<eng::u8>(status | 0x40u);  // sprite 0 hit
+					}
+					const bool behind = (attr & 0x20u) != 0u;
+					if (behind && bg_opaque[idx] != 0u) {
+						continue;
+					}
+					const eng::u8 pal = static_cast<eng::u8>(0x10u + (attr & 3u) * 4u + color);
+					fb[idx] = static_cast<eng::u8>(palette[pal & 0x1Fu] & 0x3Fu);
+				}
+			}
+		}
+	}
+
+	/// Renderiza un frame completo: fondo y luego sprites.
+	void render_frame() {
+		render_background();
+		render_sprites();
 	}
 
 private:

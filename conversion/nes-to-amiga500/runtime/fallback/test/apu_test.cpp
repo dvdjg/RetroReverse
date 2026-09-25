@@ -8,6 +8,19 @@
 
 #include "nes_apu.hpp"
 
+namespace {
+
+/// Sample DMC de 1 byte (todos los bits a 1): sube el nivel de salida.
+eng::u8 g_sample[1] = {0xFFu};
+
+/// Lector de memoria del DMC sobre `g_sample` (dirección base $C000).
+eng::u8 dmc_reader(void* user, eng::u16 addr) {
+	const eng::u8* buf = static_cast<const eng::u8*>(user);
+	return buf[(addr - 0xC000u) & 0x0Fu];
+}
+
+} // namespace
+
 int main() {
 	n2a::Apu apu;
 	apu.sample_rate = 22050u;
@@ -40,8 +53,36 @@ int main() {
 		++fail;
 	}
 
+	// --- DMC ----------------------------------------------------------------
+	apu.set_reader(dmc_reader, g_sample);
+	apu.write_reg(0x4010u, 0x0Fu);  // rate índice 15, sin IRQ ni loop
+	apu.write_reg(0x4012u, 0x00u);  // dirección de sample = $C000
+	apu.write_reg(0x4013u, 0x00u);  // longitud = 1 byte
+	apu.write_reg(0x4015u, 0x10u);  // habilita el DMC
+	if ((apu.read_status() & 0x10u) == 0u) {
+		std::printf("  DMC no activo tras $4015\n");
+		++fail;
+	}
+	eng::s16 dbuf[512] = {};
+	apu.generate_samples(eng::Span<eng::s16> {dbuf, 512u});
+	if (apu.dmc.output == 0u) {
+		std::printf("  DMC sin salida\n");
+		++fail;
+	}
+	// Mezcla no lineal: todas las muestras en rango (siempre lo están por el clamp).
+	int nonzero2 = 0;
+	for (int i = 0; i < 512; ++i) {
+		if (dbuf[i] != 0) {
+			++nonzero2;
+		}
+	}
+	if (nonzero2 == 0) {
+		std::printf("  mezcla DMC silenciosa\n");
+		++fail;
+	}
+
 	if (fail == 0) {
-		std::printf("APU OK (%d/256 muestras no nulas)\n", nonzero);
+		std::printf("APU OK (pulse/noise %d/256; DMC+mezcla %d/512 no nulas)\n", nonzero, nonzero2);
 		return 0;
 	}
 	std::printf("APU FALLO\n");

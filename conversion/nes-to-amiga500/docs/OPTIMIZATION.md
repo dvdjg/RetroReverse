@@ -212,8 +212,11 @@ visibles** del original se reproducen, no se "arreglan".
 - **Transpilador**: opción `--facts <fichero>` que emite `N2A_ASSUME` al inicio de los bloques que
   leen direcciones con hechos (`eq`/`range`/`set`/`power2`). Los hechos los aporta el análisis o la
   telemetría (ver [`../tools/transpiler/README.md`](../tools/transpiler/README.md)).
-- **Pendiente**: extracción automática de hechos (interpretación abstracta de valores sobre el IR y
-  telemetría por ejecución), clonado con guarda y PGO cruzado.
+- **Telemetría**: [`../runtime/tools/facts_from_run.cpp`](../runtime/tools/facts_from_run.cpp)
+  ejecuta la ROM con el intérprete y escribe un fichero de hechos (`set`/`range`) consumible por
+  `--facts`.
+- **Pendiente**: interpretación abstracta de valores sobre el IR, clonado con guarda (fast path +
+  genérico), PGO cruzado y extracción dirigida por trazas de qué direcciones se leen.
 
 ## Referencias
 

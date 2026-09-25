@@ -21,14 +21,20 @@ namespace n2a {
 
 /// Ejecuta instrucciones 6502 una a una sobre `cpu` y `mem`.
 struct Interpreter {
+	/// Enlaza el intérprete con el estado y la memoria sobre los que operará.
+	/// \param c CPU (registros y flags) que se actualizan.
+	/// \param m Memoria/bus de lectura y escritura.
+	Interpreter(CPU& c, NESMemory& m) : cpu(c), mem(m) {}
+
 	CPU& cpu;             ///< Estado (registros y flags) que el intérprete actualiza.
 	NESMemory& mem;       ///< Memoria/bus sobre el que lee y escribe.
 	bool jammed = false;  ///< `true` tras un opcode KIL/JAM o desconocido.
+	eng::u32 cycles = 0;  ///< Ciclos de CPU acumulados (conteo por instrucción).
 
 	/// Decodifica y ejecuta **una** instrucción, avanzando `cpu.PC` y actualizando
 	/// registros, flags y memoria.
-	/// \return Ciclos aproximados consumidos (2 en esta versión; el conteo exacto
-	///         llegará con el PPU/APU, F3/F7).
+	/// \return Ciclos de CPU que consume la instrucción (tabla base + penalización
+	///         por cruce de página en lecturas indexadas y por ramas tomadas).
 	int step();
 
 private:
@@ -50,8 +56,22 @@ private:
 		const eng::u16 hi = fetch();
 		return static_cast<eng::u16>((hi << 8u) | lo);
 	}
-	eng::u16 addr_abx() { return static_cast<eng::u16>(addr_abs() + cpu.X); }
-	eng::u16 addr_aby() { return static_cast<eng::u16>(addr_abs() + cpu.Y); }
+	eng::u16 addr_abx() {
+		const eng::u16 base = addr_abs();
+		const eng::u16 a = static_cast<eng::u16>(base + cpu.X);
+		if ((base & 0xFF00u) != (a & 0xFF00u)) {
+			page_crossed_ = true;
+		}
+		return a;
+	}
+	eng::u16 addr_aby() {
+		const eng::u16 base = addr_abs();
+		const eng::u16 a = static_cast<eng::u16>(base + cpu.Y);
+		if ((base & 0xFF00u) != (a & 0xFF00u)) {
+			page_crossed_ = true;
+		}
+		return a;
+	}
 	eng::u16 addr_izx() {
 		const eng::u8 ptr = static_cast<eng::u8>(fetch() + cpu.X);
 		const eng::u16 lo = rd(ptr);
@@ -60,9 +80,12 @@ private:
 	}
 	eng::u16 addr_izy() {
 		const eng::u8 ptr = fetch();
-		const eng::u16 lo = rd(ptr);
-		const eng::u16 hi = rd(static_cast<eng::u8>(ptr + 1u));
-		return static_cast<eng::u16>((((hi << 8u) | lo) + cpu.Y));
+		const eng::u16 base = static_cast<eng::u16>(rd(ptr) | (static_cast<eng::u16>(rd(static_cast<eng::u8>(ptr + 1u))) << 8u));
+		const eng::u16 a = static_cast<eng::u16>(base + cpu.Y);
+		if ((base & 0xFF00u) != (a & 0xFF00u)) {
+			page_crossed_ = true;
+		}
+		return a;
 	}
 
 	/// Empaqueta los flags como el registro P del 6502, con B y U a 1 (PHP/BRK).
@@ -85,11 +108,72 @@ private:
 		cpu.Z = (p & 0x02u) != 0u;
 		cpu.C = (p & 0x01u) != 0u;
 	}
-	/// Aplica una rama relativa: siempre consume el desplazamiento; salta si `taken`.
+	/// Aplica una rama relativa: siempre consume el desplazamiento; salta si `taken`
+	/// (marcando la penalización de ciclo y el cruce de página si lo hay).
 	void branch(bool taken) {
 		const eng::s8 off = static_cast<eng::s8>(fetch());
 		if (taken) {
-			cpu.PC = static_cast<eng::u16>(cpu.PC + off);
+			const eng::u16 from = cpu.PC;
+			const eng::u16 to = static_cast<eng::u16>(cpu.PC + off);
+			if ((from & 0xFF00u) != (to & 0xFF00u)) {
+				page_crossed_ = true;
+			}
+			cpu.PC = to;
+			branch_taken_ = true;
+		}
+	}
+
+	/// Marca de cruce de página para la penalización de ciclos.
+	bool page_crossed_ = false;
+	/// Marca de rama tomada para la penalización de ciclos.
+	bool branch_taken_ = false;
+
+	/// Ciclos base de cada opcode (sin penalizaciones de página/rama). Tabla
+	/// estándar del 6502; los opcodes no oficiales usan su valor base conocido.
+	/// \param op Byte de opcode.
+	/// \return Ciclos base (2..8).
+	[[nodiscard]] static eng::u8 base_cycles(eng::u8 op) noexcept {
+		static constexpr eng::u8 t[256] = {
+			/*00*/ 7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
+			/*10*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+			/*20*/ 6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
+			/*30*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+			/*40*/ 6, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,
+			/*50*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+			/*60*/ 6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
+			/*70*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+			/*80*/ 2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+			/*90*/ 2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
+			/*A0*/ 2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+			/*B0*/ 2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
+			/*C0*/ 2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+			/*D0*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+			/*E0*/ 2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+			/*F0*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+		};
+		return t[op];
+	}
+
+	/// ¿La lectura `op` usa direccionamiento indexado que penaliza +1 al cruzar de
+	/// página? (Las escrituras y los RMW nunca penalizan.)
+	/// \param op Byte de opcode.
+	/// \return `true` si cruzar página añade un ciclo.
+	[[nodiscard]] static bool read_indexed_penalty(eng::u8 op) noexcept {
+		switch (op) {
+		// absX / absY / (ind),Y de lectura.
+		case 0x1D: case 0x19: case 0x11:
+		case 0x3D: case 0x39: case 0x31:
+		case 0x5D: case 0x59: case 0x51:
+		case 0x7D: case 0x79: case 0x71:
+		case 0xBD: case 0xB9: case 0xB1:
+		case 0xDD: case 0xD9: case 0xD1:
+		case 0xFD: case 0xF9: case 0xF1:
+		case 0xBC: case 0xBE:
+		case 0xBB: case 0xBF: case 0xB3:
+		case 0x1C: case 0x3C: case 0x5C: case 0x7C: case 0xDC: case 0xFC:
+			return true;
+		default:
+			return false;
 		}
 	}
 };
@@ -100,7 +184,10 @@ inline int Interpreter::step() {
 	if (jammed) {
 		return 1;
 	}
+	page_crossed_ = false;
+	branch_taken_ = false;
 	const eng::u8 op = fetch();
+	eng::u8 cyc = base_cycles(op);
 
 	switch (op) {
 	// --- LDA ---
@@ -419,7 +506,14 @@ inline int Interpreter::step() {
 		break;
 	}
 
-	return 2;  // ciclos aproximados (el conteo exacto llega con PPU/APU)
+	if (branch_taken_) {
+		cyc = static_cast<eng::u8>(cyc + 1u);
+	}
+	if (page_crossed_ && (branch_taken_ || read_indexed_penalty(op))) {
+		cyc = static_cast<eng::u8>(cyc + 1u);
+	}
+	cycles += cyc;
+	return cyc;
 }
 
 } // namespace n2a

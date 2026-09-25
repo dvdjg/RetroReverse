@@ -38,6 +38,56 @@ int main() {
 	if (ppu.fb[100] != 0x30u) { std::printf("  fb[100]=%02X (esperado 30)\n", ppu.fb[100]); ++fail; }
 	if (ppu.fb[255] != 0x30u) { std::printf("  fb[255]=%02X (esperado 30)\n", ppu.fb[255]); ++fail; }
 
+	// --- Sprites -----------------------------------------------------------
+	// Tile 1 (pattern base 0): fila 0 con color 1 en todos los píxeles.
+	g_chr[16] = 0xFFu;
+	ppu.palette[0x11] = 0x16u;  // paleta de sprite 0, índice 1
+
+	ppu.ctrl = 0x00u;           // sprites 8×8, pattern base 0, NMI off
+	ppu.oam[0] = 10u;           // Y
+	ppu.oam[1] = 1u;            // tile
+	ppu.oam[2] = 0x00u;         // atributo: paleta 0, delante
+	ppu.oam[3] = 5u;            // X
+	ppu.status = 0u;
+	ppu.render_background();
+	ppu.render_sprites();
+	const int sp_y = 11;        // el sprite se dibuja desde Y+1
+	if (ppu.fb[sp_y * 256 + 5] != 0x16u) {
+		std::printf("  sprite delante no dibujado (fb=%02X)\n", ppu.fb[sp_y * 256 + 5]);
+		++fail;
+	}
+	if ((ppu.status & 0x40u) == 0u) {
+		std::printf("  sprite-0 hit no activado\n");
+		++fail;
+	}
+
+	// Sprite detrás del fondo: el fondo (opaco) debe taparlo.
+	ppu.oam[2] = 0x20u;         // bit de prioridad detrás del fondo
+	ppu.status = 0u;
+	ppu.render_background();
+	ppu.render_sprites();
+	if (ppu.fb[sp_y * 256 + 5] != 0x30u) {
+		std::printf("  sprite detrás no respetó el fondo (fb=%02X)\n", ppu.fb[sp_y * 256 + 5]);
+		++fail;
+	}
+
+	// Límite de 8 sprites por línea: el noveno marca overflow.
+	for (int i = 0; i < 9; ++i) {
+		ppu.oam[i * 4 + 0] = 10u;
+		ppu.oam[i * 4 + 1] = 1u;
+		ppu.oam[i * 4 + 2] = 0x00u;
+		ppu.oam[i * 4 + 3] = static_cast<eng::u8>(20 + i * 2);
+	}
+	ppu.status = 0u;
+	ppu.render_background();
+	ppu.render_sprites();
+	if ((ppu.status & 0x20u) == 0u) {
+		std::printf("  overflow de sprites no detectado\n");
+		++fail;
+	}
+	// (deja OAM en un estado inocuo para las pruebas de registro siguientes)
+	ppu.oam[0] = 0xF0u;
+
 	// VBlank/NMI: de la scanline 240 se pasa a la 241.
 	ppu.ctrl = 0x80u;
 	ppu.scanline = 240u;
@@ -57,7 +107,7 @@ int main() {
 	}
 
 	if (fail == 0) {
-		std::printf("PPU OK (fondo + registros)\n");
+		std::printf("PPU OK (fondo + sprites + registros)\n");
 		return 0;
 	}
 	std::printf("PPU FALLO (%d)\n", fail);
