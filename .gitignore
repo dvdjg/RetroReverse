@@ -50,3 +50,9 @@ tools/out/
 emulators/*/
 frontend/*/
 
+
+# --- orchestrator (build) ---
+tools/orchestrator/host_test
+tools/orchestrator/test_core.so
+tools/orchestrator/test_core.dll
+tools/orchestrator/*.ppm
