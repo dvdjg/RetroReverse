@@ -17,6 +17,10 @@ host_test: src/libretro_adapter.cpp test/host_test.cpp include/libretro_adapter.
 vertical_slice: src/libretro_adapter.cpp test/vertical_slice.cpp include/libretro_adapter.hpp include/emulator_control.hpp include/libretro_api.hpp
 	$(CXX) $(CXXFLAGS) -o vertical_slice src/libretro_adapter.cpp test/vertical_slice.cpp $(LDLIBS)
 
+# Driver headless de libRetroReversing (canal rr_re_command, sin UI web).
+re_drive: src/libretro_adapter.cpp test/re_drive.cpp include/libretro_adapter.hpp include/emulator_control.hpp include/libretro_api.hpp
+	$(CXX) $(CXXFLAGS) -o re_drive src/libretro_adapter.cpp test/re_drive.cpp $(LDLIBS)
+
 test_core.$(LIBEXT): test/test_core.cpp include/libretro_api.hpp
 	$(CXX) $(CXXFLAGS) -shared -fPIC -o test_core.$(LIBEXT) test/test_core.cpp
 

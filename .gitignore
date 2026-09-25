@@ -61,6 +61,7 @@ frontend/*/
 # --- orchestrator (build) ---
 tools/orchestrator/host_test
 tools/orchestrator/vertical_slice
+tools/orchestrator/re_drive
 tools/orchestrator/test_core.so
 tools/orchestrator/test_core.dll
 tools/orchestrator/*.ppm

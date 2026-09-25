@@ -67,6 +67,11 @@ public:
     };
     const std::vector<TraceWrite>& trace_writes() const;
 
+    // Canal de control de libRetroReversing (si el core lo expone), sin UI web.
+    bool has_re() const;
+    // Envía un comando JSON al runtime RE (categorías: play, pause, save_state, ...).
+    std::string re_command(const std::string& json);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

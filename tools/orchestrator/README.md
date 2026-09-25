@@ -121,9 +121,9 @@ bash scripts/smoke-cores.sh      # mame, nes, megadrive, mastersystem, gamegear,
   - `TraceKind::MemoryWrite` → **trazas de escritura por frame**: muestrea `[addr_start,addr_end)`
     tras cada `retro_run` y registra `(frame, addr, old, new)`. `vertical_slice --trace-writes A:L`
     las vuelca a `traces/writes.csv` (probado con mesen: miles de escrituras en RAM).
-  - `TraceKind::Execution` (PC) → **no** es posible de forma genérica por libretro; requiere la API
-    de debug del core. Para cobertura de PC se usa el emulador NES propio (`--coverage`, ver
-    `platforms/consoles/nes/docs/TESTING.md`), que alimenta `tools/ghidra/ApplyRanges.java`.
+  - `TraceKind::Execution` (PC) → **no** es posible de forma genérica por libretro. Para PC/cobertura
+    se usa el **reversing core** (ver abajo: `trace_log.txt`/`functions.json`) y, en NES, la
+    cobertura del emulador propio (APARCADO); todo ello alimenta `tools/ghidra/ApplyRanges.java`.
 - Botones extra `l2`/`r2` en `InputState` (para cores de reversing).
 
 ### Core instrumentado (libRetroReversing)
@@ -131,11 +131,16 @@ bash scripts/smoke-cores.sh      # mame, nes, megadrive, mastersystem, gamegear,
 Se compila un **Genesis Plus GX con libRetroReversing** (`external/libretro-gpgx-reversing/`,
 fork `RetroReversing/Genesis-Plus-GX`) con `scripts/build-libretro-core.sh libretro-gpgx-reversing`.
 Al cargar una ROM de Mega Drive crea `RE_projects/<consola>/<juego>/` (playthroughs, CDL, src) en
-el **CWD** (ignorado por git). Requiere dos parches triviales en el submódulo: `#include <cstdint>`
-en `cdl/CDL_FileWriting.hpp` y quitar `-lc++` de `Makefile.retroreversing`. El runtime arranca en
-`paused` y se conduce por su **interfaz web** (mensajes de estado `libRR_settings`); **conducirlo
-headless está pendiente** — por eso la cobertura de ejecución real se obtiene del **emulador NES
-propio** (`--coverage`) y se alimenta a `tools/ghidra/ApplyRanges.java`.
+el **CWD** (ignorado por git). Preparación reproducible: [`scripts/setup-re-core.sh`](../../scripts/setup-re-core.sh)
+(clona + parches: `#include <cstdint>`, quitar `-lc++`, y añade el **shim `rr_re_command`** + `link.T`).
+
+**Conducción headless (sin web)**: la UI de civetweb solo sirve mensajes al despachador
+`libRR_parse_message_from_web(json)`. El shim lo expone como símbolo C `rr_re_command`, y el
+adaptador lo carga (`has_re()`/`re_command()`) + el CLI [`re_drive`](../../tools/orchestrator/test/re_drive.cpp):
+play → frames con input → `save_state` → `pause` (= `libRR_export_all_files()`). En una prueba con
+*Golden Axe* generó `RE_projects/…/{functions.json, called_functions.json, assembly.json,
+long_jumps.json}` y `src/{main.asm,data.asm,jumps.asm,functions/*.s,trace_log.txt}` (**CDL/disasm real**).
+Cobertura → `ApplyRanges`: `tools/python/re_functions_to_ranges.py <proyecto>` → `coverage.ranges.txt`.
 
 
 ## Cores disponibles (`external/`)

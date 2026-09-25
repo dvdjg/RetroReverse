@@ -55,6 +55,8 @@ struct LibretroAdapter::Impl {
     bool (*retro_load_game)(const retro_game_info*) = nullptr;
     void (*retro_unload_game)() = nullptr;
     void (*retro_set_controller_port_device)(unsigned, unsigned) = nullptr;
+    // Canal opcional de libRetroReversing (símbolo `rr_re_command`, ver scripts/setup-re-core.sh).
+    const char* (*rr_re_command)(const char*) = nullptr;
     void* (*retro_get_memory_data)(unsigned) = nullptr;
     std::size_t (*retro_get_memory_size)(unsigned) = nullptr;
     std::size_t (*retro_serialize_size)() = nullptr;
@@ -146,6 +148,8 @@ struct LibretroAdapter::Impl {
         // Opcional: no todos los cores lo exportan.
         retro_set_controller_port_device =
             reinterpret_cast<void (*)(unsigned, unsigned)>(sym(handle, "retro_set_controller_port_device"));
+        // Opcional: canal de control de libRetroReversing.
+        rr_re_command = reinterpret_cast<const char* (*)(const char*)>(sym(handle, "rr_re_command"));
         retro_get_memory_data = reinterpret_cast<void* (*)(unsigned)>(R("retro_get_memory_data"));
         retro_get_memory_size = reinterpret_cast<std::size_t (*)(unsigned)>(R("retro_get_memory_size"));
         retro_serialize_size = reinterpret_cast<std::size_t (*)()>(R("retro_serialize_size"));
@@ -425,6 +429,14 @@ std::vector<std::uint8_t> LibretroAdapter::read_map(std::uint32_t addr, std::siz
 
 const std::vector<LibretroAdapter::TraceWrite>& LibretroAdapter::trace_writes() const {
     return impl_->writes;
+}
+
+bool LibretroAdapter::has_re() const { return impl_->rr_re_command != nullptr; }
+
+std::string LibretroAdapter::re_command(const std::string& json) {
+    if (!impl_->rr_re_command) return {};
+    const char* r = impl_->rr_re_command(json.c_str());
+    return r ? std::string(r) : std::string();
 }
 
 const std::string& LibretroAdapter::core_name() const { return impl_->core_name; }
