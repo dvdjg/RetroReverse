@@ -145,7 +145,31 @@ Otros NROM probados con el mismo arnés (`gen_frame.sh`, 60 frames):
 Aun así, las ROMs **sensibles al timing** (Excitebike, SMB) siguen divergiendo: frame 1 es exacto y la
 deriva empieza después. La causa de fondo es la **NMI a granularidad de bloque** (la misma del residual
 de DK: 12 bytes), amplificada en juegos que dependen del instante exacto del VBlank. Se resolverá con la
-**cesión por instrucción** (contador separado), pendiente.
+**cesión por instrucción** (contador separado), pendiente (dos variantes probadas, ver más abajo).
+
+### Auditoría semántica de los métodos de `CPU`
+
+`runtime/test/cpu_methods_test.cpp` compara, instrucción a instrucción y sobre estado idéntico, el
+**intérprete** con el **método de `CPU` que emite el codegen** (wrappers de direccionamiento con/sin
+cruce de página, `STA abs,Y`, `LDA (zp),Y`/`(zp,X)`, vuelta de página cero, `ADC abs,X`, y los ilegales
+`LAX/SAX/DCP/ISB/SLO/RLA/SRE/RRA`, más `RTI`/`BRK`): compara registros, flags, `SP` y RAM. Resultado:
+**0 discrepancias** (los bugs de `RTI`/`BRK` se hallaron antes y quedan cubiertos por el test). Se
+ejecuta en `runtime/test/run.sh`.
+
+### Código en RAM / automodificación
+
+El transpilador solo decodifica `$8000-$FFFF`; si el programa salta a RAM (`$0000-$7FFF`), el runtime
+hace `dispatch_table[pc] == nullptr` y resuelve esa instrucción con el **intérprete** — así el código
+copiado a RAM o automodificado funciona **sin soporte específico** (solo pierde el codegen en esa zona).
+(El harness standalone `game_main` sí se detiene en `dispatch == nullptr`; es una limitación de ese
+arnés, no del runtime.)
+
+### Mappers (CNROM)
+
+El transpilador acepta ahora **NROM (0) y CNROM (3)** (ambos con PRG **fija**; CNROM solo conmuta CHR, que
+gestiona el mapper del runtime). `--emit-cnrom-rom` genera una CNROM sintética; validada con `gen_frame`
+(píxeles idénticos, RAM 3 B). **UxROM (2)/MMC1 (1)** conmutan bancos de PRG y no se pueden decodificar
+estáticamente todavía (pendiente).
 
 El **framebuffer es idéntico**. La diferencia residual (12 bytes de RAM, 0.05 % de ciclos) procede de
 que la NMI se inyecta a **granularidad de bloque**: un bloque que cruza la línea 241 retrasa la NMI
@@ -219,7 +243,8 @@ Se dejan anotados los caminos probados y **descartados**, para no repetirlos.
 
 | Intento | Resultado | Qué pasó / qué se hizo |
 |---|---|---|
-| **Cesión por instrucción (`cpu.deadline`)** | ❌ FALLO: framebuffer **100 %** distinto, RAM 41 B | La idea es correcta (cortar el bloque justo antes de cruzar la línea de PPU y volver al despacho). Se implementó emitiendo `if (cpu.cycles >= cpu.deadline) { cpu.PC = <addr>; return; }` antes de cada instrucción, con `gen_run` fijando `deadline = cycles + budget`. Pero el contador `cpu.cycles` era **por bloque** (se reiniciaba en `gen_run`) y el **fallback al intérprete** no lo tocaba → el estado de ciclos se desincronizaba y el juego divergía. Probado también con margen `cycles+7` (como `FastCpu`): mismo fallo. **Revertido.** |
+| **Cesión por instrucción (1ª variante: `cpu.deadline`)** | ❌ FALLO: framebuffer **100 %** distinto, RAM 41 B | La idea es correcta (cortar el bloque justo antes de cruzar la línea de PPU). Se emitió `if (cpu.cycles >= cpu.deadline) { cpu.PC=<addr>; return; }` antes de cada instrucción, con `gen_run` fijando `deadline = cycles + budget`. El contador `cpu.cycles` era **por bloque** (se reiniciaba) y el **fallback al intérprete** no lo tocaba → desincronización. Probado con margen `cycles+7`: igual. **Revertido.** |
+| **Cesión por instrucción (2ª variante: `block_start`/`budget`)** | ❌ FALLO: **0,30×** (más lento) y framebuffer 100 % | Para no resetear `cycles`, se midió el consumo por bloque como `(cpu.cycles - cpu.block_start) >= cpu.budget`. Sin cesión (budget=∞) vuelve al baseline bueno (fb idéntico, RAM 12 B); **activarla** hace que los bloques cedan muy a menudo y el motor caiga al intérprete/despacho constante, perdiendo el codegen y divergiendo. **Revertido** (el campo se eliminó). |
 | **`n2a_block_cycles` (ciclos base estáticos)** | ⚠️ Aproximado: RAM 11–12 B, ciclos 0.05 % | Sumaba ciclos base por bloque, sin penalización de página/rama ni bucles intra-bloque. Sustituido por coste **por instrucción** exacto (auditado). |
 | **`goto` interno en bloques (auto-bucle)** | ❌ Cuelga bajo el runtime | Una espera de VBlank (`LDA $2002; BPL`) quedaba como bucle **dentro** de un bloque y nunca devolvía el control para que avanzara la PPU. Se cambió a `cpu.PC = destino; return;` (las ramas ceden al despacho). |
 | **Array fijo para ordenar bloques por calor** | ❌ Desborde con ROMs grandes | Sustituido por `eng::util::Vector` sin tope. |

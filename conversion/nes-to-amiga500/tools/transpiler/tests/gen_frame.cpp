@@ -37,7 +37,7 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& /*mem*/, int budget, i
 		}
 		return 0; // sin bloque: lo resuelve el intérprete
 	}
-	(void)budget; // la cesión por plazo está pendiente; el bloque se ejecuta entero
+	(void)budget; // la cesión por instrucción está pendiente (ver FAST_EXECUTOR.md)
 	const eng::u32 before = cpu.cycles;
 	dispatch_table[pc](cpu);
 	if (n != nullptr) {

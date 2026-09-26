@@ -58,6 +58,10 @@ else
 	echo "AVISO: sin ROM en roms/nes; se omite el test de ajustes por ROM."
 fi
 
+echo "[extra] auditoria semantica: metodos de CPU vs interprete"
+"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" "$ROOT/test/cpu_methods_test.cpp" -o "$ROOT/build/cpu_methods_test"
+"$ROOT/build/cpu_methods_test"
+
 echo "[extra] motor rapido: equivalencia + FPS (interprete vs pre-decodificado)"
 if [ -n "$ROM_NES" ] && [ -f "$ROM_NES" ]; then
 	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \

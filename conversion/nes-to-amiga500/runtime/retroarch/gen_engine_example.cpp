@@ -16,7 +16,6 @@ extern "C" void n2a_codegen_init(void) { init_dispatch_table(); }
 /// `cpu.cycles`). Si la dirección no es un bloque (salto calculado), devuelve 0 y
 /// el runtime resuelve esa instrucción con el intérprete.
 extern "C" int n2a_codegen_step(n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* n) {
-	(void)budget;
 	(void)mem;
 	const eng::u16 pc = cpu.PC;
 	if (dispatch_table[pc] == nullptr) {
@@ -25,6 +24,7 @@ extern "C" int n2a_codegen_step(n2a::CPU& cpu, n2a::NESMemory& mem, int budget, 
 		}
 		return 0;
 	}
+	(void)budget; // cesión por instrucción pendiente (ver docs/FAST_EXECUTOR.md)
 	const eng::u32 before = cpu.cycles;
 	dispatch_table[pc](cpu);
 	if (n != nullptr) {

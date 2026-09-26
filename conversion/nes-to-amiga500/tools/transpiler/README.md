@@ -68,7 +68,11 @@ nes_transpiler --emit-branch-rom ../../generated/branch.nes
 nes_transpiler --emit-misc-rom   ../../generated/misc.nes
 nes_transpiler --emit-vsa-rom    ../../generated/vsa.nes
 nes_transpiler --emit-bench-rom  ../../generated/bench.nes
+nes_transpiler --emit-cnrom-rom  ../../generated/cnrom.nes
 ```
+
+Acepta **NROM (mapper 0) y CNROM (3)**, ambos con PRG fija (CNROM solo conmuta CHR, vía el mapper del
+runtime). UxROM/MMC1 (bancos de PRG) no se pueden decodificar estáticamente todavía.
 
 `--emit-*-rom` generan ROMs iNES **propias** (homebrew mínimo) para probar el pipeline sin ROMs de
 terceros.

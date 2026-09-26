@@ -491,7 +491,9 @@ private:
 	// --- Parseo de la ROM ---
 
 	/// Lee la cabecera iNES (16 bytes) y deriva tamaño de PRG, mapper y trainer.
-	/// \return `true` si es NROM con PRG no vacía (único caso soportado hoy).
+	/// \return `true` si la PRG no está vacía y el mapper tiene **PRG fija**
+	///         (NROM 0 o CNROM 3). UxROM (2) y MMC1 (1) conmutan bancos de PRG y
+	///         no se pueden decodificar estáticamente todavía.
 	bool parse_header() {
 		const eng::u8 prg_pages = rom_[4];
 		const eng::u8 chr_pages = rom_[5];
@@ -501,7 +503,8 @@ private:
 		prg_size_ = static_cast<eng::u32>(prg_pages) * 16384u;
 		mapper_ = static_cast<int>((flags6 >> 4u) | (flags7 & 0xF0u));
 		has_trainer_ = (flags6 & 0x04u) != 0u;
-		return prg_size_ != 0u && mapper_ == 0; // prototipo: solo NROM
+		const bool prg_fixed = (mapper_ == 0 || mapper_ == 3);
+		return prg_size_ != 0u && prg_fixed;
 	}
 
 	/// Copia la PRG-ROM a `prg_` y extrae los tres vectores de los últimos 6 bytes.

@@ -184,20 +184,22 @@ bool load_facts(const char* path, n2a::Transpiler& tp) {
 /// \param prog     Bytes del programa 6502 (se copian al inicio de la PRG).
 /// \param prog_len Número de bytes del programa.
 /// \return `true` si la ROM se escribió correctamente.
-bool write_ines_rom(const char* path, const eng::u8* prog, eng::usize prog_len) {
+bool write_ines_rom_mapped(const char* path, const eng::u8* prog, eng::usize prog_len,
+			   eng::u8 mapper, eng::u8 chr_pages) {
 	constexpr eng::u32 kPrg = 16384u;
+	const eng::u32 chr_bytes = static_cast<eng::u32>(chr_pages) * 8192u;
 	ByteBuffer rom;
-	if (!rom.resize(16u + kPrg, 0u)) {
+	if (!rom.resize(16u + kPrg + chr_bytes, 0u)) {
 		return false;
 	}
 	rom[0] = 'N';
 	rom[1] = 'E';
 	rom[2] = 'S';
 	rom[3] = 0x1Au;
-	rom[4] = 1u; // una página de PRG (16 KB)
-	rom[5] = 0u; // sin CHR
-	rom[6] = 0u; // mapper 0, sin trainer
-	rom[7] = 0u;
+	rom[4] = 1u;           // una página de PRG (16 KB)
+	rom[5] = chr_pages;    // páginas de CHR
+	rom[6] = static_cast<eng::u8>(mapper << 4u);        // mapper (nibble bajo)
+	rom[7] = static_cast<eng::u8>(mapper & 0xF0u);      // mapper (nibble alto)
 
 	for (eng::usize i = 0; i < prog_len; ++i) {
 		rom[16u + i] = prog[i];
@@ -213,6 +215,15 @@ bool write_ines_rom(const char* path, const eng::u8* prog, eng::usize prog_len) 
 
 	return n2a::write_whole_file(
 		path, eng::util::StringView(reinterpret_cast<const char*>(rom.data()), rom.size()));
+}
+
+/// Envuelve `prog` en una ROM iNES **NROM** (mapper 0, sin CHR).
+/// \param path Fichero `.nes` de destino.
+/// \param prog Bytes del programa 6502.
+/// \param prog_len Nº de bytes del programa.
+/// \return `true` si la ROM se escribió.
+bool write_ines_rom(const char* path, const eng::u8* prog, eng::usize prog_len) {
+	return write_ines_rom_mapped(path, prog, prog_len, 0u, 0u);
 }
 
 // Programa de la ROM mínima: A9 23 (LDA #$23) · 85 00 (STA $00) · E8 (INX) · 00 (BRK).
@@ -285,6 +296,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-misc-rom   <salida.nes>");
 	n2a::out_line("     --emit-vsa-rom    <salida.nes>");
 	n2a::out_line("     --emit-bench-rom  <salida.nes>");
+	n2a::out_line("     --emit-cnrom-rom  <salida.nes>");
 }
 
 } // namespace
@@ -313,13 +325,14 @@ int main(int argc, char** argv) {
 			return 0;
 		}
 		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom" ||
-		     arg == "--emit-vsa-rom" || arg == "--emit-bench-rom") &&
+		     arg == "--emit-vsa-rom" || arg == "--emit-bench-rom" || arg == "--emit-cnrom-rom") &&
 		    i + 1 < argc) {
 			emit = (arg == "--emit-mini-rom")     ? 1
 			       : (arg == "--emit-branch-rom") ? 2
 			       : (arg == "--emit-misc-rom")   ? 3
 			       : (arg == "--emit-vsa-rom")    ? 4
-							      : 5;
+			       : (arg == "--emit-bench-rom")  ? 5
+							      : 6;
 			input = eng::util::StringView(argv[++i]);
 			continue;
 		}
@@ -339,7 +352,9 @@ int main(int argc, char** argv) {
 				: (emit == 2) ? write_ines_rom(input.data(), kBranchProg, sizeof(kBranchProg))
 				: (emit == 3) ? write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg))
 				: (emit == 4) ? write_ines_rom(input.data(), kAssumeProg, sizeof(kAssumeProg))
-					      : write_ines_rom(input.data(), kBenchProg, sizeof(kBenchProg));
+				: (emit == 5) ? write_ines_rom(input.data(), kBenchProg, sizeof(kBenchProg))
+					      : write_ines_rom_mapped(input.data(), kBenchProg,
+								      sizeof(kBenchProg), 3u, 1u);
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");
 			return 1;
