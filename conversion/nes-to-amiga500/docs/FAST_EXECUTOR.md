@@ -108,18 +108,25 @@ un hook (`gen_run`) despacha los bloques desde `retro_run`/`run_frame`, avanzand
 runtime pueda ceder a la PPU **entre bloques**, las ramas y `JMP` generan `cpu.PC = destino; return;`
 (sin `goto` interno), de modo que un bucle de espera de VBlank no cuelga.
 
+El codegen emite, por cada instrucción, su **coste exacto en `cpu.cycles`** (base +
+penalización de página/rama, idéntica al intérprete); el runtime lee el delta por bloque. La exactitud
+se comprueba con [`../runtime/tools/cycles_audit.cpp`](../runtime/tools/cycles_audit.cpp): **0
+discrepancias** frente a los ciclos del intérprete en 40 000 pasos.
+
 Resultado sobre **Donkey Kong** (NROM, 60 frames, host):
 
-| Motor | fps (frame completo) |
-|---|---:|
-| Intérprete | ~4130 |
-| **Codegen** | ~5100 (**1.2×**) |
+| Métrica | Intérprete | Codegen |
+|---|---:|---:|
+| fps (frame completo) | ~3890 | ~4800 (**1.23×**) |
+| ciclos acumulados | 1 780 144 | 1 781 021 (99.95 %) |
+| RAM distinta | — | **12 / 2048** bytes |
+| píxeles distintos | — | **0 / 61440** |
 
-Con **framebuffer idéntico** (0/61440 píxeles distintos) y 11/2048 bytes de RAM distintos. La
-diferencia de RAM viene de que la temporalización es **aproximada** (`n2a_block_cycles` suma ciclos
-base, sin penalización de página/rama ni bucles intra-bloque). El frame completo lo domina la PPU, así
-que el 13× de CPU se diluye a ~1,2×. Hechos de calor (`--facts hot`) aplicados en la misma corrida sin
-cambiar la equivalencia.
+El **framebuffer es idéntico**. La diferencia residual (12 bytes de RAM, 0.05 % de ciclos) procede de
+que la NMI se inyecta a **granularidad de bloque**: un bloque que cruza la línea 241 retrasa la NMI
+hasta su fin, mientras el intérprete la inyecta tras la instrucción exacta. La cesión
+instrucción-a-instrucción (`cpu.deadline`) queda **pendiente** (una primera versión regresionaba al
+mezclar el fallback). El frame completo lo domina la PPU, así que el 13× de CPU se diluye a ~1,2×.
 
 ## m68k (sin el engine)
 

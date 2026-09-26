@@ -26,9 +26,10 @@ namespace {
 n2a::LoadedRom g_rom;
 
 /// Hook de bloque generado: ejecuta el `bb_*` de `cpu.PC` y devuelve los ciclos
-/// base del bloque. Si la dirección no es un bloque (salto calculado), devuelve 0
-/// y el `NesSystem` cae al intérprete para esa instrucción.
-int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& /*mem*/, int /*budget*/, int* n) {
+/// **exactos** que consumió (delta de `cpu.cycles`, que el código generado
+/// incrementa con el coste de cada instrucción). Si la dirección no es un bloque
+/// (salto calculado), devuelve 0 y el `NesSystem` cae al intérprete.
+int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& /*mem*/, int budget, int* n) {
 	const eng::u16 pc = cpu.PC;
 	if (dispatch_table[pc] == nullptr) {
 		if (n != nullptr) {
@@ -36,11 +37,14 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& /*mem*/, int /*budget*
 		}
 		return 0; // sin bloque: lo resuelve el intérprete
 	}
+	(void)budget; // la cesión por plazo está pendiente; el bloque se ejecuta entero
+	const eng::u32 before = cpu.cycles;
 	dispatch_table[pc](cpu);
 	if (n != nullptr) {
 		*n = 1;
 	}
-	return static_cast<int>(n2a_block_cycles(pc));
+	const eng::u32 delta = cpu.cycles - before;
+	return delta > 0u ? static_cast<int>(delta) : 1; // nunca 0 (evita el fallback)
 }
 
 double run_frames(n2a::NesSystem& sys, int frames) {
@@ -96,6 +100,8 @@ int main(int argc, char** argv) {
 	std::printf("frames      : %d\n", frames);
 	std::printf("interprete  : %.1f fps\n", frames / (ms_ref / 1000.0));
 	std::printf("codegen     : %.1f fps  (%.2fx)\n", frames / (ms_gen / 1000.0), ms_ref / ms_gen);
+	std::printf("ciclos      : interprete=%u codegen=%u (dif=%d)\n", ref.interp.cycles, gen.cpu.cycles,
+			static_cast<int>(static_cast<long>(ref.interp.cycles) - static_cast<long>(gen.cpu.cycles)));
 	std::printf("RAM distinta: %d / %d bytes\n", ram_diff, 0x800);
 	std::printf("pixeles disp: %d / %d (%.1f%%)\n", fb_diff, fb_total, 100.0 * fb_diff / fb_total);
 	return 0;

@@ -184,6 +184,12 @@ struct CPU {
 	bool C = false, Z = false, I = false, D = false, V = false, N = false;
 	/// Se pone a `true` tras `BRK`; `game_main()` lo usa para terminar el bucle.
 	bool halted = false;
+	/// Ciclos de CPU acumulados que el **código generado** incrementa con el coste
+	/// exacto de cada instrucción (base + penalización de página/rama). El runtime
+	/// lee su delta por bloque para avanzar la PPU con la misma temporalización que
+	/// el intérprete. El intérprete/ejecutor rápido no lo usan (calculan sus ciclos
+	/// aparte), así que en esos caminos permanece a 0.
+	eng::u32 cycles = 0;
 	/// Memoria asociada (observador, no propietario). La enlaza `game_main()`.
 	NESMemory* mem = nullptr;
 

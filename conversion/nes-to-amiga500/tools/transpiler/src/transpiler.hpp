@@ -72,6 +72,29 @@ inline constexpr eng::u8 kHasTarget = 0x02u;
 	return t[op];
 }
 
+/// ¿La lectura de `op` usa direccionamiento indexado que penaliza **+1 ciclo** al
+/// cruzar de página? (Las escrituras y los RMW no penalizan.) Debe coincidir con
+/// el intérprete del runtime para que la temporalización sea idéntica.
+/// \param op Byte de opcode.
+/// \return `true` si cruzar página añade un ciclo.
+[[nodiscard]] inline bool op_read_indexed_penalty(eng::u8 op) noexcept {
+	switch (op) {
+	case 0x1D: case 0x19: case 0x11:
+	case 0x3D: case 0x39: case 0x31:
+	case 0x5D: case 0x59: case 0x51:
+	case 0x7D: case 0x79: case 0x71:
+	case 0xBD: case 0xB9: case 0xB1:
+	case 0xDD: case 0xD9: case 0xD1:
+	case 0xFD: case 0xF9: case 0xF1:
+	case 0xBC: case 0xBE:
+	case 0xBB: case 0xBF: case 0xB3:
+	case 0x1C: case 0x3C: case 0x5C: case 0x7C: case 0xDC: case 0xFC:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /// Clase de hecho de valores sobre una dirección (aportado por análisis o
 /// telemetría; ver [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
 enum class FactKind : eng::u8 {
@@ -729,13 +752,27 @@ private:
 		// bloques y no se cuelga en un bucle de espera de VBlank. `block_start` ya
 		// no decide nada aquí (se conserva el parámetro por uniformidad).
 		(void)block_start;
+		// Coste exacto en `cpu.cycles`: base + penalización de página/rama, igual
+		// que el intérprete del runtime. El runtime lee el delta por bloque.
+		auto emit_base = [&]() {
+			out.append("    cpu.cycles += ");
+			out.append_u32(op_base_cycles(in.opcode));
+			out.append("u;\n");
+		};
+
 		if (info.mode == AddrMode::Rel) {
 			out.append("    ");
 			append_comment(out, in, info);
 			out.append('\n');
+			emit_base();
 			out.append("    if (");
 			out.append(branch_cond(m));
-			out.append(") { cpu.PC = 0x");
+			out.append(") { cpu.cycles += 1u;");
+			// Cruce de página de la rama: `pc+2` vs destino (estático).
+			if (((in.addr + 2u) & 0xFF00u) != (in.target & 0xFF00u)) {
+				out.append(" cpu.cycles += 1u;");
+			}
+			out.append(" cpu.PC = 0x");
 			out.append_hex(in.target, 4u, true);
 			out.append("; return; }\n");
 			return;
@@ -744,6 +781,7 @@ private:
 			out.append("    ");
 			append_comment(out, in, info);
 			out.append('\n');
+			emit_base();
 			out.append("    cpu.PC = 0x");
 			out.append_hex(in.target, 4u, true);
 			out.append("; return;\n");
@@ -752,7 +790,9 @@ private:
 		if (sv_equal(m, "JMP") && info.mode == AddrMode::Ind) {
 			out.append("    ");
 			append_comment(out, in, info);
-			out.append("\n    cpu.JMP_ind(0x");
+			out.append('\n');
+			emit_base();
+			out.append("    cpu.JMP_ind(0x");
 			out.append_hex(in.operand, 4u, true);
 			out.append("); return;\n");
 			return;
@@ -760,7 +800,9 @@ private:
 		if (sv_equal(m, "JSR")) {
 			out.append("    ");
 			append_comment(out, in, info);
-			out.append("\n    cpu.JSR_abs(0x");
+			out.append('\n');
+			emit_base();
+			out.append("    cpu.JSR_abs(0x");
 			out.append_hex(in.target, 4u, true);
 			out.append(", 0x");
 			out.append_hex(static_cast<eng::u16>(in.addr + 3u), 4u, true);
@@ -770,12 +812,33 @@ private:
 		if (sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK")) {
 			out.append("    ");
 			append_comment(out, in, info);
-			out.append("\n    cpu.");
+			out.append('\n');
+			emit_base();
+			out.append("    cpu.");
 			out.append(m);
 			out.append("(); return;\n");
 			return;
 		}
-		// Instrucción corriente: llamada al método de CPU con su comentario.
+		// Instrucción corriente: ciclos (+ penalización si lectura indexada) y
+		// llamada al método de CPU con su comentario.
+		emit_base();
+		if (op_read_indexed_penalty(in.opcode)) {
+			if (info.mode == AddrMode::AbsX) {
+				out.append("    if (((0x");
+				out.append_hex(static_cast<eng::u16>(in.operand & 0xFFu), 2u, true);
+				out.append("u) + cpu.X) > 0xFFu) { cpu.cycles += 1u; }\n");
+			} else if (info.mode == AddrMode::AbsY) {
+				out.append("    if (((0x");
+				out.append_hex(static_cast<eng::u16>(in.operand & 0xFFu), 2u, true);
+				out.append("u) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; }\n");
+			} else if (info.mode == AddrMode::IndY) {
+				out.append("    { const eng::u16 p = static_cast<eng::u16>(cpu.mem->read(0x");
+				out.append_hex(in.operand, 4u, true);
+				out.append(") | (static_cast<eng::u16>(cpu.mem->read(0x");
+				out.append_hex(static_cast<eng::u16>(in.operand + 1u), 4u, true);
+				out.append(")) << 8u)); if (((p & 0xFFu) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; } }\n");
+			}
+		}
 		out.append("    cpu.");
 		append_method_name(out, info);
 		out.append('(');
