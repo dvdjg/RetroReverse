@@ -238,7 +238,7 @@ static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, 
 		SDL_SetRenderDrawColor(r, 255, 120, 120, 255);
 		SDL_RenderDebugText(r, 4.0f, static_cast<float>(y), "No hay .n2x aqui (usa --emit-lib).");
 	} else {
-		for (std::size_t i = 0; i < list.size() && y < 228; ++i, y += 10) {
+		for (std::size_t i = 0; i < list.size() && y < 208; ++i, y += 10) {
 			std::string line = (static_cast<int>(i) == sel) ? "> " : "  ";
 			line += list[i].name;
 			if (!list[i].arch.empty()) {
@@ -255,9 +255,19 @@ static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, 
 			SDL_RenderDebugText(r, 4.0f, static_cast<float>(y), line.c_str());
 		}
 	}
+	// Detalle del seleccionado (plataforma + CRC de la ROM).
+	if (!list.empty()) {
+		const MenEntry& e = list[static_cast<std::size_t>(sel)];
+		std::string det = "arch=" + (e.arch.empty() ? std::string("?") : e.arch);
+		if (!e.crc.empty()) {
+			det += "  crc=" + e.crc;
+		}
+		SDL_SetRenderDrawColor(r, 160, 200, 255, 255);
+		SDL_RenderDebugText(r, 4.0f, 212.0f, det.c_str());
+	}
 	if (!msg.empty()) {
 		SDL_SetRenderDrawColor(r, 120, 255, 120, 255);
-		SDL_RenderDebugText(r, 4.0f, 232.0f, msg.c_str());
+		SDL_RenderDebugText(r, 4.0f, 224.0f, msg.c_str());
 	}
 	SDL_RenderPresent(r);
 }
