@@ -46,12 +46,16 @@ elif [[ -f "$work/Makefile.libretro" ]]; then
 	make_dir="$work"; make_file="Makefile.libretro"
 elif [[ -f "$work/src/os/libretro/Makefile" ]]; then
 	make_dir="$work/src/os/libretro"; make_file="Makefile"
+elif [[ -f "$work/src/burner/libretro/Makefile" ]]; then
+	make_dir="$work/src/burner/libretro"; make_file="Makefile"
 elif [[ -f "$work/libretro/Makefile" ]]; then
 	make_dir="$work/libretro"; make_file="Makefile"
 elif [[ -f "$work/Libretro/Makefile" ]]; then
 	make_dir="$work/Libretro"; make_file="Makefile"
 elif [[ -f "$work/Makefile" ]]; then
 	make_dir="$work"; make_file="Makefile"
+elif [[ -f "$work/makefile" ]]; then
+	make_dir="$work"; make_file="makefile"
 else
 	echo "ERROR: no encuentro Makefile en $work" >&2; exit 4
 fi
@@ -66,7 +70,7 @@ echo "==> make -C $make_dir -f $make_file -j$jobs $*"
 make -C "$make_dir" -f "$make_file" -j"$jobs" "$@"
 
 shopt -s nullglob
-bins=("$work"/*.so "$work"/*.dylib "$work/libretro"/*.so "$work/libretro"/*.dylib "$work/Libretro"/*.so "$work/Libretro"/*.dylib "$work/src/os/libretro"/*.so "$work/src/os/libretro"/*.dylib)
+bins=("$work"/*.so "$work"/*.dylib "$work/libretro"/*.so "$work/libretro"/*.dylib "$work/Libretro"/*.so "$work/Libretro"/*.dylib "$work/src/os/libretro"/*.so "$work/src/os/libretro"/*.dylib "$work/src/burner/libretro"/*.so "$work/src/burner/libretro"/*.dylib)
 [[ ${#bins[@]} -gt 0 ]] || { echo "ERROR: no se generó ningún binario en $work" >&2; exit 3; }
 for b in "${bins[@]}"; do
 	cp -f "$b" "$src/"

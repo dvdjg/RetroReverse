@@ -20,5 +20,6 @@ clone() {
 clone libretro-stella   https://github.com/libretro/stella.git
 clone libretro-gambatte https://github.com/libretro/gambatte-libretro.git
 clone libretro-smsplus  https://github.com/libretro/smsplus-gx.git
+clone libretro-fbneo    https://github.com/libretro/fbneo.git
 
 echo "cores nuevos listos en $DEST"

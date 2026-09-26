@@ -13,6 +13,7 @@ cores=(
 	"libretro-stella/stella2023_libretro.so"
 	"libretro-gambatte/gambatte_libretro.so"
 	"libretro-smsplus/smsplus_libretro.so"
+	"libretro-fbneo/fbneo_libretro.so"
 )
 
 if [[ ! -x "$ORCH/host_test" ]]; then

@@ -60,6 +60,7 @@ el binario de vuelta. `RR_JOBS` limita el paralelismo.
 | **stella** | `libretro-stella/stella2023_libretro.so` | Atari 2600 |
 | **gambatte** | `libretro-gambatte/gambatte_libretro.so` | Game Boy / Game Boy Color |
 | **smsplus-gx** | `libretro-smsplus/smsplus_libretro.so` | Master System / Game Gear |
+| **fbneo** | `libretro-fbneo/fbneo_libretro.so` | Arcade moderno (CPS1/2/3, Neo Geo, Psikyo…) |
 | **RetroArch** | `external/RetroArch/retroarch-linux-x86_64` | Frontend de referencia (1.22.2) |
 
 `stella` se compila desde `src/os/libretro` (el `Makefile` raíz es el standalone y pide
