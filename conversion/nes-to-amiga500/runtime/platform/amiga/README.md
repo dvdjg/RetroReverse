@@ -3,6 +3,10 @@
 Implementación de la interfaz [`Host`](../host.hpp) para el **Amiga 500** (OCS/ECS, 68000). Aquí se
 mapea cada método del contrato a hardware nativo; el núcleo (`NesSystem`) no cambia.
 
+> **Diseño de la API que el emulador espera**: [`SERVICES.md`](SERVICES.md) (catálogo de servicios y
+> estructura ideal de clases) e [`services.hpp`](services.hpp) (interfaces propuestas para scroll
+> por HW, tiles, Copper, sprites y Paula). Es una **propuesta** para encajar tu API de recursos.
+
 > Estado: **especificación** (el backend SDL3 es el ejecutable hoy). La base de pantalla/Chip
 > RAM/VBlank ya está descrita en [`../../../docs/RUNTIME_AMIGA.md`](../../../docs/RUNTIME_AMIGA.md).
 
