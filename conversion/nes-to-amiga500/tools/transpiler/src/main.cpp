@@ -11,6 +11,9 @@
 #include "host_io.hpp"
 #include "transpiler.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+
 #include <eng/core/types/types.hpp>
 #include <eng/core/util/dynamic_string.hpp>
 #include <eng/core/util/heap_alloc.hpp>
@@ -310,6 +313,97 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-bench-rom  <salida.nes>");
 	n2a::out_line("     --emit-cnrom-rom  <salida.nes>");
 	n2a::out_line("     --emit-ram-rom    <salida.nes>");
+	n2a::out_line("Uso (varias ROMs -> plugins .n2x):");
+	n2a::out_line("     nes_transpiler <rom1.nes> [rom2.nes ...] --emit-lib --outdir <dir> \\");
+	n2a::out_line("         --entry <plugin_entry.cpp> --inc <dir> [--inc <dir> ...] [--cxx g++]");
+}
+
+/// Extrae el nombre base (sin directorio ni extensión) de `path` en `out`.
+void base_name(const char* path, char* out, eng::usize cap) {
+	eng::usize start = 0u;
+	for (eng::usize i = 0; path[i] != '\0'; ++i) {
+		if (path[i] == '/' || path[i] == '\\') {
+			start = i + 1u;
+		}
+	}
+	eng::usize j = 0u;
+	for (eng::usize i = start; path[i] != '\0' && path[i] != '.' && j + 1u < cap; ++i) {
+		out[j++] = path[i];
+	}
+	out[j] = '\0';
+}
+
+/// Compone `dir/base.ext` en `out` (sin superar `cap`).
+void join_path(const eng::util::StringView& dir, const char* base, const char* ext, char* out,
+	       eng::usize cap) {
+	std::snprintf(out, cap, "%.*s/%s%s", static_cast<int>(dir.size()), dir.data(), base, ext);
+}
+
+/// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
+bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
+	ByteBuffer bytes;
+	if (!n2a::read_whole_file(rom, bytes)) {
+		n2a::err_line("error: no se pudo leer la ROM");
+		return false;
+	}
+	n2a::Transpiler tp;
+	if (!tp.load(bytes.data(), bytes.size())) {
+		n2a::err_line("error: ROM no valida (iNES NROM/CNROM, PRG fija)");
+		return false;
+	}
+	tp.disassemble();
+	tp.build_basic_blocks();
+	if (facts != nullptr && !load_facts(facts, tp)) {
+		n2a::err_line("error: no se pudo leer el fichero de hechos (--facts)");
+		return false;
+	}
+	Dyn gen;
+	tp.generate(gen);
+	if (!n2a::write_whole_file(out_cpp, gen.view())) {
+		n2a::err_line("error: no se pudo escribir el .cpp");
+		return false;
+	}
+	Dyn s;
+	s.append("OK  instrucciones=");
+	s.append_u32(static_cast<eng::u32>(tp.instruction_count()));
+	s.append("  bloques=");
+	s.append_u32(static_cast<eng::u32>(tp.block_count()));
+	s.append("  -> ");
+	s.append(out_cpp);
+	n2a::out_line(s.view());
+	return true;
+}
+
+/// Compila el plugin `.n2x` a partir de `entry` (`plugin_entry.cpp`) y del
+/// transpilado `n2a_game_impl.cpp` que debe estar en `outdir`.
+/// \return `true` si el compilador terminó con éxito.
+bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, const char* n2x,
+		      const eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc>& incs) {
+	char cmd[8192];
+	eng::usize o = 0u;
+	auto app = [&](const char* s) {
+		while (*s != '\0' && o + 2u < sizeof cmd) {
+			cmd[o++] = *s++;
+		}
+	};
+	app(cxx);
+	app(" -std=gnu++23 -O2 -shared -static-libgcc -static-libstdc++");
+#ifndef _WIN32
+	app(" -fPIC");
+#endif
+	app(" -I");
+	app(outdir);
+	for (eng::usize k = 0; k < incs.size(); ++k) {
+		app(" -I");
+		app(incs[k].data());
+	}
+	app(" ");
+	app(entry);
+	app(" -o ");
+	app(n2x);
+	cmd[o] = '\0';
+	n2a::out_line(eng::util::StringView(cmd));
+	return std::system(cmd) == 0;
 }
 
 } // namespace
@@ -326,10 +420,15 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	eng::util::StringView input;
 	eng::util::StringView output("generated_game.cpp");
-	eng::util::StringView facts_path;
-	int emit = 0; // 0 = transpilar, 1 = mini, 2 = branch, 3 = misc
+	eng::util::StringView outdir(".");
+	const char* facts_path = nullptr;
+	const char* entry = nullptr;
+	const char* cxx = "g++";
+	bool emit_lib = false;
+	int emit = 0; // 0 = transpilar, 1..7 = ROMs de prueba
+	eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc> incs {};
+	eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc> inputs {};
 
 	for (int i = 1; i < argc; ++i) {
 		const eng::util::StringView arg(argv[i]);
@@ -348,7 +447,7 @@ int main(int argc, char** argv) {
 			       : (arg == "--emit-bench-rom")  ? 5
 			       : (arg == "--emit-cnrom-rom")  ? 6
 							      : 7;
-			input = eng::util::StringView(argv[++i]);
+			(void)inputs.push_back(eng::util::StringView(argv[++i]));
 			continue;
 		}
 		if (arg == "-o" && i + 1 < argc) {
@@ -356,21 +455,42 @@ int main(int argc, char** argv) {
 			continue;
 		}
 		if (arg == "--facts" && i + 1 < argc) {
-			facts_path = eng::util::StringView(argv[++i]);
+			facts_path = argv[++i];
 			continue;
 		}
-		input = arg;
+		if (arg == "--emit-lib") {
+			emit_lib = true;
+			continue;
+		}
+		if (arg == "--outdir" && i + 1 < argc) {
+			outdir = eng::util::StringView(argv[++i]);
+			continue;
+		}
+		if (arg == "--entry" && i + 1 < argc) {
+			entry = argv[++i];
+			continue;
+		}
+		if (arg == "--cxx" && i + 1 < argc) {
+			cxx = argv[++i];
+			continue;
+		}
+		if (arg == "--inc" && i + 1 < argc) {
+			(void)incs.push_back(eng::util::StringView(argv[++i]));
+			continue;
+		}
+		(void)inputs.push_back(arg);
 	}
 
 	if (emit != 0) {
-		const bool ok = (emit == 1)   ? write_ines_rom(input.data(), kMiniProg, sizeof(kMiniProg))
-				: (emit == 2) ? write_ines_rom(input.data(), kBranchProg, sizeof(kBranchProg))
-				: (emit == 3) ? write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg))
-				: (emit == 4) ? write_ines_rom(input.data(), kAssumeProg, sizeof(kAssumeProg))
-				: (emit == 5) ? write_ines_rom(input.data(), kBenchProg, sizeof(kBenchProg))
-				: (emit == 6) ? write_ines_rom_mapped(input.data(), kBenchProg,
-								      sizeof(kBenchProg), 3u, 1u)
-					      : write_ines_rom(input.data(), kRamProg, sizeof(kRamProg));
+		const char* in0 = inputs.back().data();
+		const bool ok = (emit == 1)   ? write_ines_rom(in0, kMiniProg, sizeof(kMiniProg))
+				: (emit == 2) ? write_ines_rom(in0, kBranchProg, sizeof(kBranchProg))
+				: (emit == 3) ? write_ines_rom(in0, kMiscProg, sizeof(kMiscProg))
+				: (emit == 4) ? write_ines_rom(in0, kAssumeProg, sizeof(kAssumeProg))
+				: (emit == 5) ? write_ines_rom(in0, kBenchProg, sizeof(kBenchProg))
+				: (emit == 6) ? write_ines_rom_mapped(in0, kBenchProg, sizeof(kBenchProg),
+								      3u, 1u)
+					      : write_ines_rom(in0, kRamProg, sizeof(kRamProg));
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");
 			return 1;
@@ -379,46 +499,57 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-	if (input.empty()) {
+	if (inputs.empty()) {
 		print_usage(argv[0]);
 		return 1;
 	}
 
-	ByteBuffer rom;
-	if (!n2a::read_whole_file(input.data(), rom)) {
-		n2a::err_line("error: no se pudo leer el fichero de entrada");
-		return 1;
+	// Modo biblioteca: una o más ROMs -> .cpp (fuente) + .n2x (plugin compilado).
+	if (emit_lib) {
+		if (entry == nullptr) {
+			n2a::err_line("error: --emit-lib requiere --entry <plugin_entry.cpp>");
+			return 1;
+		}
+		int rc = 0;
+		for (eng::usize k = 0; k < inputs.size(); ++k) {
+			char base[256];
+			base_name(inputs[k].data(), base, sizeof base);
+			char cpp[1024];
+			join_path(outdir, base, ".cpp", cpp, sizeof cpp);
+			char impl[1024];
+			join_path(outdir, "n2a_game_impl", ".cpp", impl, sizeof impl);
+			char n2x[1024];
+			join_path(outdir, base, ".n2x", n2x, sizeof n2x);
+			if (!transpile_rom(inputs[k].data(), cpp, facts_path)) {
+				rc = 1;
+				continue;
+			}
+			// Copia el transpilado a `n2a_game_impl.cpp` (nombre que incluye el entry).
+			ByteBuffer src;
+			if (!n2a::read_whole_file(cpp, src) ||
+			    !n2a::write_whole_file(impl, eng::util::StringView(
+							 reinterpret_cast<const char*>(src.data()),
+							 src.size()))) {
+				n2a::err_line("error: no se pudo preparar n2a_game_impl.cpp");
+				rc = 1;
+				continue;
+			}
+			if (build_plugin_lib(cxx, entry, outdir.data(), n2x, incs)) {
+				Dyn ok;
+				ok.append("plugin -> ");
+				ok.append(n2x);
+				n2a::out_line(ok.view());
+			} else {
+				n2a::err_line("error: la compilacion del plugin fallo (revisa --cxx/--inc)");
+				rc = 1;
+			}
+		}
+		return rc;
 	}
 
-	n2a::Transpiler tp;
-	if (!tp.load(rom.data(), rom.size())) {
-		n2a::err_line("error: ROM no válida (se espera iNES NROM, mapper 0)");
+	// Modo simple: una ROM -> un .cpp.
+	if (!transpile_rom(inputs[0].data(), output.data(), facts_path)) {
 		return 1;
 	}
-	tp.disassemble();
-	tp.build_basic_blocks();
-
-	if (!facts_path.empty() && !load_facts(facts_path.data(), tp)) {
-		n2a::err_line("error: no se pudo leer el fichero de hechos (--facts)");
-		return 1;
-	}
-
-	Dyn generated;
-	tp.generate(generated);
-	if (!n2a::write_whole_file(output.data(), generated.view())) {
-		n2a::err_line("error: no se pudo escribir el fichero de salida");
-		return 1;
-	}
-
-	Dyn summary;
-	summary.append("OK  instrucciones=");
-	summary.append_u32(static_cast<eng::u32>(tp.instruction_count()));
-	summary.append("  bloques=");
-	summary.append_u32(static_cast<eng::u32>(tp.block_count()));
-	summary.append("  desconocidos=");
-	summary.append_u32(static_cast<eng::u32>(tp.unknown_count()));
-	summary.append("  -> ");
-	summary.append(output);
-	n2a::out_line(summary.view());
 	return 0;
 }

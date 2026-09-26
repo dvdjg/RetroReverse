@@ -74,6 +74,21 @@ nes_transpiler --emit-cnrom-rom  ../../generated/cnrom.nes
 Acepta **NROM (mapper 0) y CNROM (3)**, ambos con PRG fija (CNROM solo conmuta CHR, vía el mapper del
 runtime). UxROM/MMC1 (bancos de PRG) no se pueden decodificar estáticamente todavía.
 
+### Bibliotecas `.n2x` (`--emit-lib`, una o varias ROMs)
+
+Genera, por ROM, el `.cpp` **y** (si encuentra compilador) la biblioteca cargable `.n2x`:
+
+```bash
+nes_transpiler rom1.nes rom2.nes --emit-lib --outdir generated \
+  --entry ../../runtime/plugin/plugin_entry.cpp \
+  --inc <Amiga-Cpp/engine/include> --inc ../../runtime/include --inc ../../runtime/plugin \
+  --cxx g++
+```
+
+El `.n2x` es un **cartucho autocontenido** (código + PRG + CHR + mapper) con ABI C versionada
+([`../../runtime/plugin/README.md`](../../runtime/plugin/README.md)); el gestor lo carga en runtime y
+aporta el intérprete/PPU/APU.
+
 `--emit-*-rom` generan ROMs iNES **propias** (homebrew mínimo) para probar el pipeline sin ROMs de
 terceros.
 

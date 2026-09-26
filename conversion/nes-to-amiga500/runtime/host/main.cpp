@@ -17,6 +17,7 @@
 #endif
 
 #include "../enhance/profile_io.hpp"
+#include "../plugin/n2a_loader.hpp"
 #include "fastcpu.hpp"
 #include "nes_system.hpp"
 #include "rom_loader.hpp"
@@ -98,11 +99,39 @@ void emu_tick() {
 
 } // namespace
 
+/// ¿`s` termina con `suf`? (para detectar `.n2x`).
+static bool ends_with(const char* s, const char* suf) {
+	const eng::usize ns = std::strlen(s);
+	const eng::usize nf = std::strlen(suf);
+	return ns >= nf && std::strcmp(s + (ns - nf), suf) == 0;
+}
+
+/// Plugin transpilado cargado (si `argv[1]` es un `.n2x`).
+static n2a::TranspiledGame g_game;
+static n2a::Mapper g_cart;
+
 int main(int argc, char** argv) {
 	if (argc < 2) {
-		std::printf("uso: nes_sdl <rom.nes> [frames]\n");
+		std::printf("uso: nes_sdl <rom.nes|juego.n2x> [frames]\n");
 		return 1;
 	}
+	const bool is_plugin = ends_with(argv[1], ".n2x");
+	if (is_plugin) {
+		// Plugin transpilado (`.n2x`): el cartucho y el código vienen del plugin;
+		// el intérprete/PPU/APU/mapper los pone este host (fallback en RAM/saltos).
+		if (!g_game.load(argv[1])) {
+			std::printf("error: plugin '%s' invalido o ABI/arquitectura incompatible\n",
+				    argv[1]);
+			return 1;
+		}
+		g_game.fill_mapper(g_cart);
+		g_nes.load_mapper(g_cart);
+		g_nes.reset();
+		g_nes.fast_ctx = &g_game;
+		g_nes.fast_run = &n2a::TranspiledGame::fast_run;
+		std::printf("nes_sdl: plugin='%s' mapper=%d PRG=%u CHR=%u motor=codegen\n", argv[1],
+			    g_game.fn_mapper(), g_game.fn_prg_size(), g_game.fn_chr_size());
+	} else {
 	if (!n2a::load_ines(argv[1], g_rom)) {
 		std::printf("error: no se pudo cargar '%s' (iNES NROM/UxROM/CNROM/MMC1)\n", argv[1]);
 		return 1;
@@ -154,6 +183,7 @@ int main(int argc, char** argv) {
 		std::printf("nes_sdl: perfil '%s' bpp=%u pack=%d paleta=%d\n", g_profile.profile.name,
 			    g_profile.profile.gfx.bpp_bg, static_cast<int>(g_profile.has_provider),
 			    static_cast<int>(g_profile.has_palette));
+	}
 	}
 
 	if (!g_host.init("NES -> SDL3", n2a::NesSystem::kScreenW, n2a::NesSystem::kScreenH, 22050)) {

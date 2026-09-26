@@ -447,7 +447,9 @@ private:
 
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> rom_ {}; ///< ROM iNES completa.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> prg_ {}; ///< Solo la PRG-ROM.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> chr_ {}; ///< Solo la CHR-ROM (si la hay).
 	eng::u32 prg_size_ = 0;                                   ///< Tamaño de PRG en bytes.
+	eng::u32 chr_size_ = 0;                                   ///< Tamaño de CHR en bytes (0 = CHR RAM).
 	int mapper_ = 0;                                          ///< Número de mapper iNES.
 	bool has_trainer_ = false;                                ///< ¿Trae trainer de 512 B?
 	eng::u16 reset_ = 0;                                      ///< Vector de reset.
@@ -499,8 +501,8 @@ private:
 		const eng::u8 chr_pages = rom_[5];
 		const eng::u8 flags6 = rom_[6];
 		const eng::u8 flags7 = rom_[7];
-		(void)chr_pages;
 		prg_size_ = static_cast<eng::u32>(prg_pages) * 16384u;
+		chr_size_ = static_cast<eng::u32>(chr_pages) * 8192u;
 		mapper_ = static_cast<int>((flags6 >> 4u) | (flags7 & 0xF0u));
 		has_trainer_ = (flags6 & 0x04u) != 0u;
 		const bool prg_fixed = (mapper_ == 0 || mapper_ == 3);
@@ -520,6 +522,16 @@ private:
 		(void)prg_.resize(prg_size_, 0u);
 		for (eng::u32 i = 0; i < prg_size_; ++i) {
 			prg_[i] = rom_[offset + i];
+		}
+		// CHR-ROM (tras la PRG), para que el transpilado sea un cartucho completo.
+		const eng::usize chr_off = offset + prg_size_;
+		if (chr_size_ != 0u && chr_off + chr_size_ <= rom_.size()) {
+			(void)chr_.resize(chr_size_, 0u);
+			for (eng::u32 i = 0; i < chr_size_; ++i) {
+				chr_[i] = rom_[chr_off + i];
+			}
+		} else {
+			chr_size_ = 0u; // CHR truncada o ausente: se trata como CHR RAM
 		}
 		if (prg_.size() < 6u) {
 			return false;
@@ -738,6 +750,28 @@ private:
 			}
 		}
 		out.append("};\n\n");
+		// CHR-ROM y mapper, para que el transpilado sea un **cartucho autocontenido**
+		// (lo usa el plugin `.n2x`: PRG para el código, CHR/mapper para la PPU).
+		out.append("static constexpr eng::usize kChrSize = ");
+		out.append_u32(chr_size_);
+		out.append(";\nstatic constexpr eng::u8 CHR_ROM[kChrSize > 0u ? kChrSize : 1u] = {\n");
+		const eng::u32 chr_n = chr_size_ != 0u ? chr_size_ : 1u;
+		for (eng::u32 i = 0; i < chr_n; ++i) {
+			if ((i % 16u) == 0u) {
+				out.append("    ");
+			}
+			out.append("0x");
+			out.append_hex(i < chr_size_ ? chr_[i] : 0u, 2u, true);
+			out.append(',');
+			if ((i % 16u) == 15u || i + 1u == chr_n) {
+				out.append('\n');
+			} else {
+				out.append(' ');
+			}
+		}
+		out.append("};\nstatic constexpr int kMapper = ");
+		out.append_s32(mapper_);
+		out.append(";\n\n");
 	}
 
 	/// Traduce una instrucción a una o varias líneas de C++.
