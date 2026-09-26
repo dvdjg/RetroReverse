@@ -67,6 +67,18 @@ el binario de vuelta. `RR_JOBS` limita el paralelismo.
 `./configure`). El script de build autodetecta ese caso. `libretro-stella`/`libretro-gambatte`/
 `libretro-smsplus` se clonan con [`scripts/fetch-cores.sh`](../../scripts/fetch-cores.sh).
 
+### Arcade: `mame2003-plus` vs `fbneo`
+
+| Core | Base | Romsets | Ejemplos de la selección |
+|---|---|---|---|
+| **mame2003-plus** | MAME 0.78 (~pre-1990) | `roms/arcade/*.zip` | pacman, defender, gng, ghouls, goldnaxe, altbeast, rtype, ddragon(2), shinobi, gauntlet(2), robocop, 1943, rastan, sf2, blktiger, vigilant |
+| **fbneo** | FinalBurn Neo (moderno) | `roms/fbneo/*.zip` | robocop, 1943, 1944, s1945, rastan, sf2, sfiii, sfiii3, blktiger (+ Neo Geo) |
+
+- Los títulos **post-1990** (1944, s1945, sfiii/sfiii3) **no** están en 0.78 → usar **FBNeo**.
+- BIOS: FBNeo puede pedir `neogeo.zip` (ya en `roms/fbneo/`). `cps3.zip` **no** está en la
+  colección, pero los sets `sfiii/sfiii3` arrancan igual en FBNeo.
+- Verificado en `scripts/smoke-cores.sh` (incluye `fbneo-1944`, `fbneo-sfiii`).
+
 ## Test
 
 ```sh

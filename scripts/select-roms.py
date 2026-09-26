@@ -25,7 +25,7 @@ ARCADE = [
     "goldnaxe", "altbeast", "rtype", "buggyboy", "ddragon", "ddragon2",
     "shinobi", "gauntlet", "gauntlet2p", "vigilant",
     # Ampliación (2026): clásicos y serie Capcom/Strikers
-    "robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3",
+    "robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3", "blktiger",
 ]
 
 # --- Consolas: sistema -> [(patrón de zip, extensión preferida)] ---
@@ -90,6 +90,7 @@ AMIGA = [
     "Jim Power in Mutant Planet", "James Pond - Underwater Agent",
     "James Pond 2 - Codename RoboCod", "James Pond 3 - Operation Starfish",
     "Mega Typhoon", "Xenon 2 - Megablast",
+    "Black Tiger",
     # Discos adicionales (multi-disco)
     "Jim Power in Mutant Planet_Disk2", "Xenon 2 - Megablast_Disk2",
     "James Pond 3 - Operation Starfish (AGA)_Disk2",
@@ -97,8 +98,8 @@ AMIGA = [
 ]
 
 # --- FBNeo: mismos títulos para la ruta FBNeo (sets propios) ---
-FBNEO = ["robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3"]
-FBNEO_BIOS = ["cps3"]  # BIOS de CPS3 (si existe en la colección)
+FBNEO = ["robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3", "blktiger"]
+FBNEO_BIOS = ["cps3", "neogeo"]  # BIOS compartidas (si existen en la colección)
 
 # Algunos sistemas están repartidos en varias carpetas de la colección.
 CONSOLE_DIRS = {"megadrive": ["megadrive", "genesis"]}

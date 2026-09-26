@@ -25,6 +25,9 @@ run gamegear      libretro-smsplus/smsplus_libretro.so             "gamegear/Col
 run atari2600     libretro-stella/stella2023_libretro.so           "atari2600/Adventure (1978) (Atari).a26"
 run gb            libretro-gambatte/gambatte_libretro.so           "gb/Tetris (World) (Rev A).gb"
 run gbc           libretro-gambatte/gambatte_libretro.so           "gbc/Tetris DX (World) (SGB Enhanced) (GB Compatible).gbc"
+# Arcade moderno (post-1990) que mame2003-plus no soporta -> FBNeo
+run fbneo-1944    libretro-fbneo/fbneo_libretro.so                 "fbneo/1944.zip"
+run fbneo-sfiii   libretro-fbneo/fbneo_libretro.so                 "fbneo/sfiii.zip"
 
 echo
 echo "salida en $OUT"
