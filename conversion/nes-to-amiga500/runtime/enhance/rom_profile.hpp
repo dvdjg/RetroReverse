@@ -115,7 +115,6 @@ inline bool parse_hex(eng::util::StringView s, eng::u32& out) {
 /// \return `true` si se reconoció al menos el CRC.
 inline bool parse_profile(eng::util::StringView text, RomProfile& out) {
 	using eng::util::StringView;
-	bool got_crc = false;
 	while (!text.empty()) {
 		const eng::usize nl = text.find('\n');
 		StringView line = (nl == StringView::npos) ? text : text.substr(0u, nl);
@@ -142,7 +141,6 @@ inline bool parse_profile(eng::util::StringView text, RomProfile& out) {
 		if (key == "crc") {
 			if (detail::parse_hex(val, num)) {
 				out.crc = num;
-				got_crc = true;
 			}
 		} else if (key == "name") {
 			detail::copy_str(out.name, sizeof out.name, val);
@@ -159,7 +157,7 @@ inline bool parse_profile(eng::util::StringView text, RomProfile& out) {
 			detail::copy_str(out.audio.plugin, sizeof out.audio.plugin, val);
 		}
 	}
-	return got_crc;
+	return true;
 }
 
 } // namespace n2a::enhance

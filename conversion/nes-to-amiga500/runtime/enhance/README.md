@@ -78,12 +78,13 @@ audio.plugin  linear
   - Interfaces (`ITileProvider`, `NesTileProvider`) y **pack loader** (`PackProvider`,
     `load_pack`, `load_palette`) con formato binario documentado.
   - **Perfiles** (`RomProfile`, `parse_profile`) y carga en host (`profile_io.hpp`): busca
-    `<rom>.n2a`, resuelve rutas relativas y monta el proveedor/paleta.
-  - **Frontends**: el runner SDL3 y el core libretro buscan el perfil por ROM; la PPU usa
-    `tile_provider`/`ext_palette`. **Core Options V2** (vídeo/audio) con fallback V1.
+    `<rom>.n2a`, `<dir>/packs/<crc|nombre>.n2a` y `<system_dir>/nes_packs/<crc>.n2a`.
+  - **Herramienta** [`../tools/packtool/ppm_to_pack.cpp`](../tools/packtool/ppm_to_pack.cpp):
+    convierte una imagen **PPM** (rejilla de tiles 8×8) a `.gfx` (4 bpp) + `.pal` + `.n2a`.
+  - **Frontends**: el runner SDL3 y el core libretro aplican el perfil; **Core Options V2**
+    (`nes_use_pack`, plugins) con fallback V1 y selección **por juego**.
   - **Test**: `enhance/test/enhance_test.cpp` verifica que la emulación es **idéntica** con y sin
     pack (solo cambia el framebuffer).
 - **PENDIENTE**:
-  - Herramienta para **generar packs** (convertir PNG→tileset 4 bpp + paleta).
-  - Repositorio/carpeta estándar de packs y resolución por **directorio de sistema** de RetroArch.
-  - Opciones por juego explícitas en RetroArch (además del perfil `<rom>.n2a`).
+  - Entrada **PNG** en la herramienta y cuantización mejor (median-cut/k-means).
+  - Documentar el flujo de autor (packs por juego) y validar packs reales.

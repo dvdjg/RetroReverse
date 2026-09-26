@@ -15,7 +15,8 @@ AMIGA_CPP ?= ../../../../../../Amiga-Cpp
 LIBRETRO_INC := $(REPO)/external/libretro-common/include
 ENG_INC := $(AMIGA_CPP)/engine/include
 
-INC := -I$(LIBRETRO_INC) -I$(ENG_INC) -I../include -I../fallback -I../platform -I../host
+INC := -I$(LIBRETRO_INC) -I$(ENG_INC) -I../include -I../fallback -I../platform -I../host \
+       -I../../tools/transpiler/src
 CXXFLAGS ?= -std=gnu++23 -O2 -fPIC -Wall -Wextra
 
 TARGET ?= build/nes_libretro.so

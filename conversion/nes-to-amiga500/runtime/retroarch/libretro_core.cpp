@@ -7,10 +7,12 @@
 // Compilación: ver runtime/retroarch/README.md (Makefile; incluye libretro.h de
 // external/libretro-common/include).
 
+#include <cstdio>
 #include <cstring>
 
 #include <libretro.h>
 
+#include "../../tools/transpiler/src/transpiler.hpp"
 #include "../enhance/profile_io.hpp"
 #include "nes_system.hpp"
 #include "plugins.hpp"
@@ -31,6 +33,9 @@ static bool g_loaded = false;      ///< ¿Hay ROM cargada?
 static n2a::retro::VideoPlugin* g_video = &n2a::retro::Plugins::default_video();
 static n2a::retro::AudioPlugin* g_audio = &n2a::retro::Plugins::default_audio();
 static n2a::enhance::AppliedProfile g_profile; ///< Perfil por ROM (si lo hay).
+static char g_system_dir[512] = {}; ///< Directorio de sistema (packs).
+static bool g_use_pack = true;      ///< ¿Aplicar el perfil/pack de la ROM?
+static bool g_analyze = true;       ///< ¿Analizar (transpilar) la ROM al cargar?
 
 static eng::u32 g_fb[256 * 240];          ///< Framebuffer XRGB8888.
 static eng::s16 g_audio_buf[4096 * 2];    ///< Muestras estéreo S16.
@@ -55,6 +60,28 @@ void refresh_plugins() {
 	retro_variable a {"nes_audio_plugin", nullptr};
 	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &a) && a.value != nullptr) {
 		g_audio = &n2a::retro::Plugins::audio(a.value);
+	}
+}
+
+/// Lee una core option booleana ("enabled"/"disabled").
+bool get_bool_opt(const char* key, bool def) {
+	retro_variable v {key, nullptr};
+	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &v) && v.value != nullptr) {
+		return v.value[0] != 'd';
+	}
+	return def;
+}
+
+/// Copia el directorio de sistema del frontend a `g_system_dir`.
+void fetch_system_dir() {
+	g_system_dir[0] = '\0';
+	const char* sys = nullptr;
+	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys != nullptr) {
+		eng::usize o = 0;
+		for (eng::usize i = 0; sys[i] != '\0' && o + 2u < sizeof g_system_dir; ++i) {
+			g_system_dir[o++] = sys[i];
+		}
+		g_system_dir[o] = '\0';
 	}
 }
 
@@ -96,6 +123,7 @@ void set_core_options() {
 		static retro_core_option_v2_category cats[] = {
 			{"video", "Video", "Opciones de video del emulador"},
 			{"audio", "Audio", "Opciones de audio del emulador"},
+			{"rom", "ROM", "Ajustes por ROM"},
 			{nullptr, nullptr, nullptr},
 		};
 		static retro_core_option_v2_definition defs[] = {
@@ -104,6 +132,12 @@ void set_core_options() {
 			 "raw"},
 			{"nes_audio_plugin", "Audio plugin", nullptr, "Convierte el audio del APU.", nullptr,
 			 "audio", {{"linear", nullptr}, {"mute", nullptr}, {nullptr, nullptr}}, "linear"},
+			{"nes_use_pack", "Ajustes por ROM", nullptr,
+			 "Usa el pack de tiles/paleta del perfil de la ROM.", nullptr, "rom",
+			 {{"enabled", nullptr}, {"disabled", nullptr}, {nullptr, nullptr}}, "enabled"},
+			{"nes_analyze", "Analizar ROM al cargar", nullptr,
+			 "Ejecuta el transpilador (grafo de basic blocks) al cargar.", nullptr, "rom",
+			 {{"enabled", nullptr}, {"disabled", nullptr}, {nullptr, nullptr}}, "enabled"},
 			{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{nullptr, nullptr}},
 			 nullptr},
 		};
@@ -113,6 +147,8 @@ void set_core_options() {
 		static const retro_variable vars[] = {
 			{"nes_video_plugin", "Video plugin; raw|gray"},
 			{"nes_audio_plugin", "Audio plugin; linear|mute"},
+			{"nes_use_pack", "Ajustes por ROM; enabled|disabled"},
+			{"nes_analyze", "Analizar ROM al cargar; enabled|disabled"},
 			{nullptr, nullptr},
 		};
 		env_cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(vars));
@@ -178,18 +214,45 @@ bool retro_load_game(const struct retro_game_info* game) {
 	g_sys.load_mapper(g_rom.mapper);
 	g_sys.reset();
 
-	// Ajustes por ROM (opcional): "<rom>.n2a" (pack de tiles / paleta).
-	if (game->path != nullptr) {
+	g_use_pack = get_bool_opt("nes_use_pack", true);
+	g_analyze = get_bool_opt("nes_analyze", true);
+	fetch_system_dir();
+
+	// Ajustes por ROM (opcional): perfil/pack de tiles + paleta extendida.
+	if (g_use_pack && game->path != nullptr) {
 		const eng::u32 crc = n2a::enhance::crc32(g_rom.rom, g_rom.file_size);
-		if (n2a::enhance::load_rom_profile(game->path, crc, g_profile)) {
+		if (n2a::enhance::load_rom_profile(game->path, crc, g_profile, g_system_dir)) {
 			if (g_profile.has_provider) {
 				g_sys.ppu.tile_provider = &g_profile.provider;
 			}
 			if (g_profile.has_palette) {
 				g_sys.ppu.ext_palette = g_profile.palette_ptr();
 			}
+			std::printf("nes: perfil '%s' bpp=%u pack=%d pal=%d\n", g_profile.profile.name,
+				    g_profile.profile.gfx.bpp_bg, static_cast<int>(g_profile.has_provider),
+				    static_cast<int>(g_profile.has_palette));
+		} else {
+			std::printf("nes: sin perfil para '%s'\n", game->path);
+		}
+	} else {
+		std::printf("nes: perfil omitido (use_pack=%d path=%s)\n", static_cast<int>(g_use_pack),
+			    game->path != nullptr ? game->path : "(null)");
+	}
+
+	// Análisis en proceso (transpilador): grafo de basic blocks de la ROM.
+	if (g_analyze) {
+		n2a::Transpiler tp;
+		if (tp.load(g_rom.rom, g_rom.file_size)) {
+			tp.disassemble();
+			tp.build_basic_blocks();
+			std::printf("nes: analisis ROM -> instrucciones=%u bloques=%u\n",
+				    static_cast<unsigned>(tp.instruction_count()),
+				    static_cast<unsigned>(tp.block_count()));
+		} else {
+			std::printf("nes: analisis omitido (mapper %u no soportado aun)\n", g_rom.mapper_no);
 		}
 	}
+
 	refresh_plugins();
 	g_loaded = true;
 	return true;
