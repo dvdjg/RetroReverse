@@ -121,6 +121,34 @@ bool SdlHost::poll(InputState& in) {
 	return true;
 }
 
+bool SdlHost::menu_poll(int& action) {
+	action = 0;
+	SDL_Event e;
+	while (SDL_PollEvent(&e)) {
+		if (e.type == SDL_EVENT_QUIT) {
+			quit_window = true;
+			return false;
+		}
+		if (e.type == SDL_EVENT_KEY_DOWN) {
+			switch (e.key.scancode) {
+			case SDL_SCANCODE_UP: action = 1; break;
+			case SDL_SCANCODE_DOWN: action = 2; break;
+			case SDL_SCANCODE_RETURN:
+			case SDL_SCANCODE_KP_ENTER:
+			case SDL_SCANCODE_SPACE: action = 3; break;
+			case SDL_SCANCODE_V: action = 4; break;
+			case SDL_SCANCODE_ESCAPE:
+			case SDL_SCANCODE_Q: action = 5; break;
+			default: break;
+			}
+			if (action != 0) {
+				return true;
+			}
+		}
+	}
+	return true;
+}
+
 /// Pausa el hilo `ms` milisegundos.
 void SdlHost::delay_ms(int ms) {
 	SDL_Delay(static_cast<Uint32>(ms));

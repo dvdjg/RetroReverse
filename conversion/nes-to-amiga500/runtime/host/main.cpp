@@ -6,9 +6,14 @@
 //
 // Uso: nes_sdl <rom.nes> [frames]   (sin `frames` = bucle hasta cerrar)
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
 
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
@@ -110,39 +115,6 @@ static bool ends_with(const char* s, const char* suf) {
 static n2a::TranspiledGame g_game;
 static n2a::Mapper g_cart;
 
-// --- Gestor: selector nativo de `.n2x` (SDL_ShowOpenFileDialog) ---
-static char g_pick_path[1024];
-static bool g_pick_done = false;
-
-/// Callback del diálogo: guarda la ruta elegida (o cadena vacía si se cancela).
-static void pick_callback(void* /*userdata*/, const char* const* files, int /*filter*/) {
-	g_pick_done = true;
-	g_pick_path[0] = '\0';
-	if (files != nullptr && files[0] != nullptr) {
-		std::snprintf(g_pick_path, sizeof g_pick_path, "%s", files[0]);
-	}
-}
-
-/// Muestra el diálogo nativo para elegir un `.n2x` en `dir`.
-/// \return `true` si el usuario eligió un fichero (en `out`).
-static bool pick_n2x(SDL_Window* parent, const char* dir, char* out, eng::usize cap) {
-	SDL_DialogFileFilter filter {"Juegos transpilados", "n2x"};
-	g_pick_done = false;
-	g_pick_path[0] = '\0';
-	SDL_ShowOpenFileDialog(pick_callback, nullptr, parent, &filter, 1, dir, false);
-	// Espera al callback con tope (por si el backend no soporta diálogos).
-	const eng::u64 t0 = SDL_GetTicks();
-	while (!g_pick_done && SDL_GetTicks() - t0 < 120000u) {
-		SDL_PumpEvents();
-		SDL_Delay(10);
-	}
-	if (!g_pick_done || g_pick_path[0] == '\0') {
-		return false;
-	}
-	std::snprintf(out, cap, "%s", g_pick_path);
-	return true;
-}
-
 /// Verificación headless: ejecuta el plugin y el intérprete sobre la misma ROM y
 /// compara RAM y framebuffer. \return 0 si coinciden, 2 si no, 1 si error.
 static int verify_n2x(const char* path, int frames) {
@@ -180,9 +152,114 @@ static int verify_n2x(const char* path, int frames) {
 			++fb;
 		}
 	}
-	std::printf("verify '%s' (%d frames): RAM %d/2048, pixeles %d/%d -> %s\n", path, frames, ram,
+		std::printf("verify '%s' (%d frames): RAM %d/2048, pixeles %d/%d -> %s\n", path, frames, ram,
 		    fb, fb_total, (ram == 0 && fb == 0) ? "IDENTICO" : "DIVERGE");
 	return (ram == 0 && fb == 0) ? 0 : 2;
+}
+
+// --- Gestor: lista de `.n2x` y su sidecar ---
+/// Entrada del gestor (un `.n2x` y metadatos del sidecar).
+struct MenEntry {
+	std::string path; ///< Ruta del `.n2x`.
+	std::string name; ///< Nombre del fichero.
+	std::string arch; ///< Plataforma (del sidecar).
+	std::string crc;  ///< CRC32 de la ROM (del sidecar).
+};
+
+/// Lee el campo `"key"` del sidecar JSON `path` (cadena o número). Vacío si no está.
+static std::string json_field(const std::string& path, const char* key) {
+	std::ifstream f(path);
+	if (!f) {
+		return std::string();
+	}
+	const std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+	const std::string pat = std::string("\"") + key + "\"";
+	const std::size_t k = s.find(pat);
+	if (k == std::string::npos) {
+		return std::string();
+	}
+	const std::size_t c = s.find(':', k);
+	if (c == std::string::npos) {
+		return std::string();
+	}
+	std::size_t i = c + 1u;
+	while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) {
+		++i;
+	}
+	if (i < s.size() && s[i] == '"') {
+		++i;
+		const std::size_t e = s.find('"', i);
+		return s.substr(i, e - i);
+	}
+	std::size_t e = i;
+	while (e < s.size() && s[e] != ',' && s[e] != '}' && s[e] != '\n') {
+		++e;
+	}
+	std::string v = s.substr(i, e - i);
+	while (!v.empty() && (v.back() == ' ' || v.back() == '\r')) {
+		v.pop_back();
+	}
+	return v;
+}
+
+/// Escanea `dir` buscando `.n2x` y lee su sidecar (arch/CRC).
+static void scan_n2x(const char* dir, std::vector<MenEntry>& out) {
+	std::error_code ec;
+	std::filesystem::directory_iterator it(dir, ec);
+	const std::filesystem::directory_iterator end;
+	for (; !ec && it != end; it.increment(ec)) {
+		const std::filesystem::path& p = it->path();
+		if (p.extension() == ".n2x") {
+			MenEntry m;
+			m.path = p.string();
+			m.name = p.filename().string();
+			m.arch = json_field(m.path + ".json", "arch");
+			m.crc = json_field(m.path + ".json", "rom_crc32");
+			out.push_back(std::move(m));
+		}
+	}
+}
+
+/// Dibuja la lista del gestor con el texto incorporado de SDL3.
+static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, int sel,
+			 const std::string& msg) {
+	SDL_Renderer* r = host.ren;
+	SDL_SetRenderScale(r, 1.0f, 1.0f);
+	SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+	SDL_RenderClear(r);
+	SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+	SDL_RenderDebugText(r, 4.0f, 4.0f, "Gestor de juegos transpilados (.n2x)");
+	SDL_SetRenderDrawColor(r, 200, 180, 120, 255);
+	SDL_RenderDebugText(r, 4.0f, 14.0f, "Flechas=sel  Enter=jugar  V=verificar  Esc=salir");
+	SDL_SetRenderDrawColor(r, 255, 150, 150, 255);
+	SDL_RenderDebugText(r, 4.0f, 24.0f, "(c) codigo nativo: carga bajo tu responsabilidad");
+	int y = 40;
+	if (list.empty()) {
+		SDL_SetRenderDrawColor(r, 255, 120, 120, 255);
+		SDL_RenderDebugText(r, 4.0f, static_cast<float>(y), "No hay .n2x aqui (usa --emit-lib).");
+	} else {
+		for (std::size_t i = 0; i < list.size() && y < 228; ++i, y += 10) {
+			std::string line = (static_cast<int>(i) == sel) ? "> " : "  ";
+			line += list[i].name;
+			if (!list[i].arch.empty()) {
+				line += "  [" + list[i].arch + "]";
+			}
+			if (static_cast<int>(i) == sel) {
+				SDL_SetRenderDrawColor(r, 40, 60, 120, 255);
+				SDL_FRect bg {0.0f, static_cast<float>(y) - 1.0f, 256.0f, 10.0f};
+				SDL_RenderFillRect(r, &bg);
+				SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+			} else {
+				SDL_SetRenderDrawColor(r, 200, 200, 200, 255);
+			}
+			SDL_RenderDebugText(r, 4.0f, static_cast<float>(y), line.c_str());
+		}
+	}
+	if (!msg.empty()) {
+		SDL_SetRenderDrawColor(r, 120, 255, 120, 255);
+		SDL_RenderDebugText(r, 4.0f, 232.0f, msg.c_str());
+	}
+	SDL_RenderPresent(r);
 }
 
 int main(int argc, char** argv) {
@@ -201,35 +278,59 @@ int main(int argc, char** argv) {
 	}
 	if (std::strcmp(argv[1], "--manager") == 0) {
 		const char* dir = (argc > 2) ? argv[2] : ".";
-		if (!g_host.init("NES transpilados (Esc: elegir otro)", n2a::NesSystem::kScreenW,
-				 n2a::NesSystem::kScreenH, 22050)) {
+		std::vector<MenEntry> list;
+		scan_n2x(dir, list);
+		std::sort(list.begin(), list.end(),
+			  [](const MenEntry& a, const MenEntry& b) { return a.name < b.name; });
+		if (!g_host.init("Gestor NES .n2x", n2a::NesSystem::kScreenW, n2a::NesSystem::kScreenH,
+				 22050)) {
 			std::printf("error: no se pudo iniciar SDL3\n");
 			return 1;
 		}
+		int sel = 0;
+		std::string msg;
 		for (;;) {
-			char path[1024];
-			if (!pick_n2x(g_host.win, dir, path, sizeof path)) {
-				break; // cancelado: salir
+			draw_manager(g_host, list, sel, msg);
+			int act = 0;
+			if (!g_host.menu_poll(act)) {
+				break; // ventana cerrada
 			}
-			if (!g_game.load(path)) {
-				std::printf("error: plugin '%s' invalido o ABI incompatible\n", path);
-				continue;
+			const int n = static_cast<int>(list.size());
+			if (act == 1 && n > 0) {
+				sel = (sel + n - 1) % n;
+			} else if (act == 2 && n > 0) {
+				sel = (sel + 1) % n;
+			} else if (act == 4 && n > 0) {
+				// Verificar: compara plugin vs intérprete (headless).
+				const int r = verify_n2x(list[sel].path.c_str(), 60);
+				msg = (r == 0)   ? "Verificacion: IDENTICO"
+				      : (r == 2) ? "Verificacion: DIVERGE"
+						 : "Verificacion: error";
+			} else if (act == 3 && n > 0) {
+				if (!g_game.load(list[sel].path.c_str())) {
+					msg = "No se pudo cargar el .n2x";
+					continue;
+				}
+				g_game.fill_mapper(g_cart);
+				g_nes.load_mapper(g_cart);
+				g_nes.reset();
+				g_nes.fast_ctx = &g_game;
+				g_nes.fast_run = &n2a::TranspiledGame::fast_run;
+				std::printf("nes_sdl: '%s' motor=codegen\n", list[sel].path.c_str());
+				g_frames_limit = -1;
+				g_host.quit_window = false;
+				g_host.escape_menu = false;
+				while (emu_tick_once() != 0) {
+					g_host.delay_ms(16);
+				}
+				if (g_host.quit_window) {
+					break;
+				}
+				msg = "Esc: volver al gestor";
+			} else if (act == 5) {
+				break; // salir
 			}
-			g_game.fill_mapper(g_cart);
-			g_nes.load_mapper(g_cart);
-			g_nes.reset();
-			g_nes.fast_ctx = &g_game;
-			g_nes.fast_run = &n2a::TranspiledGame::fast_run;
-			std::printf("nes_sdl: '%s' motor=codegen (Esc: volver al gestor)\n", path);
-			g_frames_limit = -1;
-			g_host.quit_window = false;
-			g_host.escape_menu = false;
-			while (emu_tick_once() != 0) {
-				g_host.delay_ms(16);
-			}
-			if (g_host.quit_window) {
-				break; // ventana cerrada: salir del gestor
-			}
+			g_host.delay_ms(16);
 		}
 		g_host.shutdown();
 		return 0;

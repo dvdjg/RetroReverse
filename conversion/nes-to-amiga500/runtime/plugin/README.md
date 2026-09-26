@@ -73,9 +73,11 @@ En el host SDL3:
 
 - **Ejecutar**: `nes_sdl juego.x64nt.n2x` lo carga y ejecuta (teclado: `Z`/`Espacio`=A, `X`=B,
   `Enter`=Start, flechas=cruceta, `Esc`=salir).
-- **Gestor GUI**: `nes_sdl --manager <dir>` abre el **selector nativo** de `.n2x` de esa carpeta
-  (SDL_ShowOpenFileDialog); al elegir uno lo ejecuta; `Esc` vuelve al selector para cargar otro;
-  cerrar la ventana sale.
+- **Gestor GUI**: `nes_sdl --manager <dir>` lista en pantalla los `.n2x` de la carpeta (con su
+  plataforma leída del sidecar), resaltando la selección. Teclas: `↑`/`↓` mover, `Enter` **jugar**,
+  `V` **verificar** (compara plugin vs intérprete y muestra `IDENTICO`/`DIVERGE`), `Esc`/`Q` salir.
+  Muestra un aviso de seguridad (código nativo). Al jugar, `Esc` vuelve al gestor. El texto usa la
+  fuente incorporada de SDL3 (`SDL_RenderDebugText`), sin dependencias externas.
 - **Verificar**: `nes_sdl --verify juego.x64nt.n2x [frames]` ejecuta el plugin y el intérprete sobre
   la misma ROM y compara RAM/framebuffer (`IDENTICO`/`DIVERGE`), sin ventana.
 
@@ -97,7 +99,8 @@ Resultado con Super Mario Bros: `ABI v1/1`, `RAM 0/2048`, `pixeles 0/61440`, `~1
 - **HECHO**: ABI + `plugin_entry.cpp`; `--emit-lib` multi-ROM con autodetección de compilador; nombre
   con **plataforma** (`<rom>.<arch>.n2x`); cartucho autocontenido (PRG+CHR+mapper); **sidecar JSON** y
   **caché por CRC**; **autodetección de rutas** de `--entry`; loader `dlopen`/`LoadLibrary` con
-  validación; carga directa, **gestor** (`--manager`) y **verificación** (`--verify`) en el host SDL3.
-- **PENDIENTE**: gestor con lista/info en pantalla (hoy selector nativo); **compilación en paralelo**;
-  aviso explícito de seguridad (código nativo); soporte de `wasm`/`a500` aún sin toolchain integrado
-  (la etiqueta y la ABI ya lo contemplan).
+  validación; carga directa, **gestor con lista/info en pantalla** (`--manager`) y **verificación**
+  (`--verify` y tecla `V`) en el host SDL3.
+- **PENDIENTE**: **compilación en paralelo** de varias ROMs; toolchain `wasm`/`a500` integrado en
+  `--emit-lib` (la etiqueta y la ABI ya lo contemplan); mostrar el CRC/título del sidecar en la lista
+  (hoy nombre + plataforma) y filtrar por arquitectura.

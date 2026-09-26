@@ -32,6 +32,10 @@ struct SdlHost : Host {
 	void present(const eng::u8* rgb) override;
 	void audio_write(const eng::s16* frames, int count) override;
 	bool poll(InputState& in) override;
+	/// Entrada del **gestor** (menú): teclas crudas de navegación.
+	/// \param action 0=nada, 1=arriba, 2=abajo, 3=Enter, 4=V(verificar), 5=Salir.
+	/// \return `false` si se cerró la ventana.
+	bool menu_poll(int& action);
 	void delay_ms(int ms) override;
 	eng::u64 ticks_ms() override;
 };
