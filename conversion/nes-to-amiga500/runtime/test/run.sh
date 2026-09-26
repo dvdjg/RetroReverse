@@ -58,6 +58,15 @@ else
 	echo "AVISO: sin ROM en roms/nes; se omite el test de ajustes por ROM."
 fi
 
+echo "[extra] motor rapido: equivalencia + FPS (interprete vs pre-decodificado)"
+if [ -n "$ROM_NES" ] && [ -f "$ROM_NES" ]; then
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \
+		"$ROOT/tools/bench_engine.cpp" -o "$ROOT/build/bench_engine"
+	"$ROOT/build/bench_engine" "$ROM_NES" 120
+else
+	echo "AVISO: sin ROM en roms/nes; se omite el test del motor rapido."
+fi
+
 echo "[extra] telemetria de valores (--facts)"
 if [ -f "$NESTEST" ]; then
 	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" "$ROOT/tools/facts_from_run.cpp" -o "$ROOT/build/facts_from_run"

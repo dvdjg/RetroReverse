@@ -29,6 +29,7 @@ $Inc = @(
 	"-I$(Join-Path $Here '..\include')",
 	"-I$(Join-Path $Here '..\fallback')",
 	"-I$(Join-Path $Here '..\platform')",
+	"-I$(Join-Path $Here '..\..\tools\transpiler\src')",
 	"-I$(Join-Path $SDL3 'include')"
 )
 

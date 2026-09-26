@@ -38,6 +38,8 @@ El usuario los cambia en RetroArch → **Core Options**:
 
 - `nes_video_plugin` = `raw` | `gray` (paleta 2C02G, escala de grises)
 - `nes_audio_plugin` = `linear` | `mute`
+- `nes_engine` = `fast` | `interpreter`: motor de CPU (ejecutor **pre-decodificado** o intérprete;
+  mismo resultado, ver [`../docs/FAST_EXECUTOR.md`](../docs/FAST_EXECUTOR.md))
 
 `plugins.hpp` define `VideoPlugin` (convierte el framebuffer de **índices NES** a XRGB8888) y
 `AudioPlugin` (mono del APU → estéreo S16). Añadir un plugin = implementar la interfaz y
@@ -62,7 +64,8 @@ La idea es que el core **lleve el transpilador** y, al cargar la ROM, la convier
 
 1. **Análisis en proceso (por defecto)**: el core incluye el analizador del transpilador
    (`tools/transpiler`), construye el **grafo de basic blocks** y lo ejecuta con el motor rápido
-   (hoy, `NesSystem` usa el intérprete; el grafo se enganchará como camino HLE).
+   (hoy el **ejecutor pre-decodificado** `FastCpu` alimenta `retro_run` vía `nes_engine`; el grafo
+   se enganchará como camino HLE).
 2. **Wasm/nativo (opcional)**: como RetroArch, el core puede compilarse a **wasm** con Emscripten
    (`emcc -sUSE_SDL=2` no aplica; es un core: `emcc -shared ...`), de modo que "transpilar" y
    ejecutar ocurran en el navegador con el mismo código.
@@ -96,7 +99,8 @@ contrato libretro:
 - **HECHO**: core que compila, se carga en el orquestador, ejecuta frames con determinismo y genera
   screenshot; plugins de vídeo/audio por **Core Options V2** (con fallback V1); **perfil por ROM** en
   varias ubicaciones (`<rom>.n2a`, `<dir>/packs/…`, `<system_dir>/nes_packs/<crc>.n2a`); opciones
-  **`nes_use_pack`** y **`nes_analyze`**; **análisis/transpilación al cargar** (grafo de bloques);
-  savestates; RAM expuesta.
-- **PENDIENTE**: enganchar el camino transpilado/HLE en `retro_run` (hoy intérprete); *drag & drop*
-  de ROM; build wasm del core; cores hermanos (ver [`ADDING_A_CORE.md`](ADDING_A_CORE.md)).
+  **`nes_use_pack`**, **`nes_analyze`** y **`nes_engine`**; **análisis/transpilación al cargar**
+  (grafo de bloques); **ejecutor rápido en `retro_run`** (`nes_engine=fast`, equivalente al
+  intérprete); savestates; RAM expuesta.
+- **PENDIENTE**: generar el ejecutor desde el grafo de bloques/HLE y ampliar su cobertura; *drag &
+  drop* de ROM; build wasm del core; cores hermanos (ver [`ADDING_A_CORE.md`](ADDING_A_CORE.md)).

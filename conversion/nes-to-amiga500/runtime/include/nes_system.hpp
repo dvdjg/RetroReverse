@@ -36,6 +36,18 @@ struct NesSystem {
 	CPU cpu;         ///< Estado de la CPU.
 	Interpreter interp; ///< Intérprete 6502 que ejecuta el código.
 
+	/// Hook del **camino rápido/transpilado**: si devuelve ciclos > 0, la
+	/// instrucción la resolvió el ejecutor pre-decodificado; si 0, se cae al
+	/// intérprete. Permite cambiar de motor sin tocar `NesSystem`.
+	using FastStep = int (*)(void* ctx, CPU& cpu, NESMemory& mem);
+	/// Ejecutor rápido **por bloques**: ejecuta varias instrucciones hasta un
+	/// salto o hasta que agotaría `budget` ciclos (frontera de scanline), sin
+	/// alterar el timing. `out_instrs` recibe cuántas ejecutó.
+	using FastRun = int (*)(void* ctx, CPU& cpu, NESMemory& mem, int budget, int* out_instrs);
+	void* fast_ctx = nullptr;       ///< Contexto del ejecutor rápido.
+	FastStep fast_step = nullptr;   ///< Ejecutor rápido de una instrucción (o `nullptr`).
+	FastRun fast_run = nullptr;     ///< Ejecutor rápido por bloques (o `nullptr`).
+
 	eng::u8 pad1 = 0;    ///< Estado del mando 1 (bit por botón).
 	eng::u8 pad2 = 0;    ///< Estado del mando 2.
 	bool strobe = false; ///< Strobe de `$4016`.
@@ -75,6 +87,59 @@ struct NesSystem {
 		interp.jammed = false;
 	}
 
+	/// Ejecuta un **bloque** (varias instrucciones) si hay ejecutor rápido por
+	/// bloques, o una sola instrucción de lo contrario, y avanza PPU/NMI. Es el
+	/// ladrillo de `run_frame()`; se expone para pruebas en lockstep.
+	/// \param out_instrs Nº de instrucciones ejecutadas (salida); puede ser `nullptr`.
+	/// \return Ciclos de CPU consumidos por el bloque.
+	int step_block(int* out_instrs) {
+		if (fast_run != nullptr) {
+			const int budget = cycles_to_scanline();
+			int n = 0;
+			int cyc = fast_run(fast_ctx, cpu, mem, budget, &n);
+			if (cyc <= 0) {
+				cyc = interp.step(); // primera instrucción no cubierta/bloque vacío
+				n = 1;
+			}
+			clock_ppu(cyc);
+			if (ppu.nmi_occurred) {
+				ppu.nmi_occurred = false;
+				trigger_nmi();
+			}
+			if (out_instrs != nullptr) {
+				*out_instrs = n;
+			}
+			return cyc;
+		}
+		const int cyc = step_instruction();
+		if (out_instrs != nullptr) {
+			*out_instrs = 1;
+		}
+		return cyc;
+	}
+
+	/// Ejecuta **una** instrucción de CPU y avanza la PPU/NMI en consecuencia.
+	/// Se expone para pruebas en lockstep (comparar intérprete vs ejecutor rápido
+	/// instrucción a instrucción).
+	/// \return Ciclos de CPU consumidos por la instrucción.
+	int step_instruction() {
+		int cyc;
+		if (fast_step != nullptr) {
+			cyc = fast_step(fast_ctx, cpu, mem);
+			if (cyc <= 0) {
+				cyc = interp.step(); // opcode no cubierto: cae al intérprete
+			}
+		} else {
+			cyc = interp.step();
+		}
+		clock_ppu(cyc);
+		if (ppu.nmi_occurred) {
+			ppu.nmi_occurred = false;
+			trigger_nmi();
+		}
+		return cyc;
+	}
+
 	/// Ejecuta un frame completo: corre la CPU a lo largo de las 262 líneas de la
 	/// PPU (incluido VBlank) hasta que la PPU vuelve a la línea 0. Así el juego ve
 	/// el flag de VBlank y ejecuta su rutina de actualización.
@@ -86,19 +151,16 @@ struct NesSystem {
 		bool seen_vblank = false;
 		int guard = 0;
 		for (;;) {
-			const int cyc = interp.step();
-			clock_ppu(cyc);
-			if (ppu.nmi_occurred) {
-				ppu.nmi_occurred = false;
-				trigger_nmi();
-			}
+			int n = 0;
+			step_block(&n);
+			guard += (n > 0) ? n : 1;
 			if (ppu.scanline == 241u) {
 				seen_vblank = true;
 			}
 			if (seen_vblank && ppu.scanline == 0u) {
 				break; // el frame se ha completado (la PPU volvió a la línea 0)
 			}
-			if (++guard > 120000) {
+			if (guard > 120000) {
 				break; // salvaguarda anti-cuelgue
 			}
 		}
@@ -193,6 +255,15 @@ private:
 			mapper.cpu_write(a, v);
 			return;
 		}
+	}
+
+	/// Máximo de ciclos de CPU que caben antes de cruzar la frontera de scanline
+	/// (341 dots, 3 por ciclo). `ppu_dot` está en `[0, 340]`; devolver 0 fuerza
+	/// que el siguiente bloque ejecute una sola instrucción (puede cruzar).
+	/// \return Ciclos hasta el próximo límite de scanline.
+	[[nodiscard]] int cycles_to_scanline() const {
+		const int b = (340 - ppu_dot) / 3;
+		return b < 0 ? 0 : b;
 	}
 
 	/// Avanza la PPU `cpu_cycles*3` dots (341 dots por línea). Al cambiar de

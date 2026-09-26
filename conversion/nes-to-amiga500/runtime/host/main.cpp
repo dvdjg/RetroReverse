@@ -8,6 +8,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
@@ -16,6 +17,7 @@
 #endif
 
 #include "../enhance/profile_io.hpp"
+#include "fastcpu.hpp"
 #include "nes_system.hpp"
 #include "rom_loader.hpp"
 #include "sdl_host.hpp"
@@ -24,6 +26,7 @@ namespace {
 
 n2a::LoadedRom g_rom;   ///< ROM y mapper.
 n2a::NesSystem g_nes;   ///< Sistema NES (CPU+PPU+APU+mapper).
+n2a::FastCpu g_fast;    ///< Ejecutor rápido (si `NES_ENGINE=fast`).
 n2a::SdlHost g_host;    ///< Backend SDL3.
 eng::u8 g_rgb[n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH * 3]; ///< Frame RGB.
 eng::s16 g_audio[1024]; ///< Búfer de audio por frame.
@@ -72,7 +75,19 @@ int main(int argc, char** argv) {
 	}
 	g_nes.load_mapper(g_rom.mapper);
 	g_nes.reset();
-	std::printf("nes_sdl: mapper=%u PRG=%u CHR=%u\n", g_rom.mapper_no, g_rom.prg_size, g_rom.chr_size);
+
+	// Motor de CPU: con NES_ENGINE=fast se usa el ejecutor pre-decodificado; si no,
+	// el intérprete. El ejecutor cae al intérprete en los opcodes no cubiertos.
+	const char* engine = std::getenv("NES_ENGINE");
+	if (engine != nullptr && std::strcmp(engine, "fast") == 0 &&
+	    g_fast.build(g_rom.mapper.prg, g_rom.mapper.prg_size, g_nes.mem.read16(0xFFFCu),
+			 g_nes.mem.read16(0xFFFAu), g_nes.mem.read16(0xFFFEu))) {
+		g_nes.fast_ctx = &g_fast;
+		g_nes.fast_step = &n2a::FastCpu::step;
+		g_nes.fast_run = &n2a::FastCpu::run_block;
+	}
+	std::printf("nes_sdl: mapper=%u PRG=%u CHR=%u motor=%s\n", g_rom.mapper_no, g_rom.prg_size,
+		    g_rom.chr_size, g_nes.fast_run != nullptr ? "rapido(bloques)" : "interprete");
 
 	// Ajustes por ROM (opcional): "<rom>.n2a" con pack de tiles y/o paleta.
 	static n2a::enhance::AppliedProfile g_profile;

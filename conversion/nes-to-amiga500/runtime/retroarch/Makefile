@@ -21,7 +21,9 @@ CXXFLAGS ?= -std=gnu++23 -O2 -fPIC -Wall -Wextra
 
 TARGET ?= build/nes_libretro.so
 SRC := libretro_core.cpp
-HDR := $(wildcard *.hpp) $(wildcard ../include/*.hpp) $(wildcard ../fallback/*.hpp)
+HDR := $(wildcard *.hpp) $(wildcard ../include/*.hpp) $(wildcard ../fallback/*.hpp) \
+       $(wildcard ../host/*.hpp) $(wildcard ../enhance/*.hpp) $(wildcard ../platform/*.hpp) \
+       $(wildcard ../../tools/transpiler/src/*.hpp)
 
 .PHONY: all clean
 all: $(TARGET)

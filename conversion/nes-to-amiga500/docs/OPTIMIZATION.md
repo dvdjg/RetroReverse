@@ -217,8 +217,14 @@ visibles** del original se reproducen, no se "arreglan".
   `--facts`.
 - **VSA estática (intra-bloque)**: el codegen propaga `LDA #c; STA a` y emite `N2A_ASSUME` al leer
   `a` **sin** fichero de hechos (caso `--emit-vsa-rom`).
+- **Ejecutor rápido pre-decodificado**: [`FAST_EXECUTOR.md`](FAST_EXECUTOR.md) —
+  [`../runtime/host/fastcpu.hpp`](../runtime/host/fastcpu.hpp) decodifica la PRG por dirección y
+  ejecuta un subconjunto caliente de opcodes (cae al intérprete en el resto). Equivalente y
+  1,6–2× más rápido en CPU (sin render); activable en SDL (`NES_ENGINE=fast`) y en el core libretro
+  (`nes_engine`).
 - **Pendiente**: interpretación abstracta de valores sobre el IR, clonado con guarda (fast path +
-  genérico), PGO cruzado y extracción dirigida por trazas de qué direcciones se leen.
+  genérico), PGO cruzado, extracción dirigida por trazas de qué direcciones se leen y **generar el
+  ejecutor desde el grafo de basic blocks** (portable a `m68k`).
 
 ## Referencias
 

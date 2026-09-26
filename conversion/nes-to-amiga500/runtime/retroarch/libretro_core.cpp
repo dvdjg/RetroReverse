@@ -14,6 +14,7 @@
 
 #include "../../tools/transpiler/src/transpiler.hpp"
 #include "../enhance/profile_io.hpp"
+#include "../host/fastcpu.hpp"
 #include "nes_system.hpp"
 #include "plugins.hpp"
 #include "rom_loader.hpp"
@@ -36,6 +37,8 @@ static n2a::enhance::AppliedProfile g_profile; ///< Perfil por ROM (si lo hay).
 static char g_system_dir[512] = {}; ///< Directorio de sistema (packs).
 static bool g_use_pack = true;      ///< ¿Aplicar el perfil/pack de la ROM?
 static bool g_analyze = true;       ///< ¿Analizar (transpilar) la ROM al cargar?
+static bool g_engine_fast = true;   ///< ¿Usar el ejecutor rápido (pre-decodificado)?
+static n2a::FastCpu g_fast;         ///< Ejecutor rápido (si `g_engine_fast`).
 
 static eng::u32 g_fb[256 * 240];          ///< Framebuffer XRGB8888.
 static eng::s16 g_audio_buf[4096 * 2];    ///< Muestras estéreo S16.
@@ -61,6 +64,15 @@ void refresh_plugins() {
 	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &a) && a.value != nullptr) {
 		g_audio = &n2a::retro::Plugins::audio(a.value);
 	}
+}
+
+/// Lee una core option de texto; devuelve `def` si no está definida.
+const char* get_str_opt(const char* key, const char* def) {
+	retro_variable v {key, nullptr};
+	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &v) && v.value != nullptr) {
+		return v.value;
+	}
+	return def;
 }
 
 /// Lee una core option booleana ("enabled"/"disabled").
@@ -138,6 +150,9 @@ void set_core_options() {
 			{"nes_analyze", "Analizar ROM al cargar", nullptr,
 			 "Ejecuta el transpilador (grafo de basic blocks) al cargar.", nullptr, "rom",
 			 {{"enabled", nullptr}, {"disabled", nullptr}, {nullptr, nullptr}}, "enabled"},
+			{"nes_engine", "Motor de CPU", nullptr,
+			 "Ejecutor rapido pre-decodificado o interprete (mismo resultado).", nullptr, "rom",
+			 {{"fast", nullptr}, {"interpreter", nullptr}, {nullptr, nullptr}}, "fast"},
 			{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{nullptr, nullptr}},
 			 nullptr},
 		};
@@ -149,6 +164,7 @@ void set_core_options() {
 			{"nes_audio_plugin", "Audio plugin; linear|mute"},
 			{"nes_use_pack", "Ajustes por ROM; enabled|disabled"},
 			{"nes_analyze", "Analizar ROM al cargar; enabled|disabled"},
+			{"nes_engine", "Motor de CPU; fast|interpreter"},
 			{nullptr, nullptr},
 		};
 		env_cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(vars));
@@ -218,6 +234,22 @@ bool retro_load_game(const struct retro_game_info* game) {
 	g_analyze = get_bool_opt("nes_analyze", true);
 	fetch_system_dir();
 
+	// Motor de CPU: ejecutor rapido pre-decodificado o interprete. El rapido cae
+	// al interprete en los opcodes no cubiertos, asi que el resultado es identico.
+	g_engine_fast = std::strcmp(get_str_opt("nes_engine", "fast"), "interpreter") != 0;
+	if (g_engine_fast &&
+	    g_fast.build(g_rom.mapper.prg, g_rom.mapper.prg_size, g_sys.mem.read16(0xFFFCu),
+			 g_sys.mem.read16(0xFFFAu), g_sys.mem.read16(0xFFFEu))) {
+		g_sys.fast_ctx = &g_fast;
+		g_sys.fast_step = &n2a::FastCpu::step;
+		g_sys.fast_run = &n2a::FastCpu::run_block;
+	} else {
+		g_sys.fast_ctx = nullptr;
+		g_sys.fast_step = nullptr;
+		g_sys.fast_run = nullptr;
+	}
+	std::printf("nes: motor de CPU = %s\n", g_sys.fast_run != nullptr ? "rapido(bloques)" : "interprete");
+
 	// Ajustes por ROM (opcional): perfil/pack de tiles + paleta extendida.
 	if (g_use_pack && game->path != nullptr) {
 		const eng::u32 crc = n2a::enhance::crc32(g_rom.rom, g_rom.file_size);
@@ -260,7 +292,13 @@ bool retro_load_game(const struct retro_game_info* game) {
 
 bool retro_load_game_special(unsigned, const struct retro_game_info*, size_t) { return false; }
 
-void retro_unload_game() { g_loaded = false; }
+void retro_unload_game() {
+	g_loaded = false;
+	g_sys.fast_step = nullptr;
+	g_sys.fast_run = nullptr;
+	g_sys.fast_ctx = nullptr;
+	g_fast.destroy();
+}
 
 void retro_run() {
 	if (!g_loaded) {
