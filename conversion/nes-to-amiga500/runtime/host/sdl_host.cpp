@@ -19,7 +19,8 @@ bool SdlHost::init(const char* title, int width, int height, int sample_rate) {
 	}
 	w = width;
 	h = height;
-	win = SDL_CreateWindow(title, width, height, 0);
+	const int s = initial_scale > 0 ? initial_scale : 1;
+	win = SDL_CreateWindow(title, width * s, height * s, SDL_WINDOW_RESIZABLE);
 	if (win == nullptr) {
 		SDL_Log("SDL_CreateWindow: %s", SDL_GetError());
 		return false;
@@ -29,6 +30,10 @@ bool SdlHost::init(const char* title, int width, int height, int sample_rate) {
 		SDL_Log("SDL_CreateRenderer: %s", SDL_GetError());
 		return false;
 	}
+	// Presentación lógica con **escala entera**: el frame 256x240 se reescala a la
+	// ventana (reescalable) manteniendo el aspecto y píxeles nítidos; al redimensionar
+	// se adapta (letterbox al mayor múltiplo entero).
+	SDL_SetRenderLogicalPresentation(ren, width, height, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 	tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, width, height);
 	if (tex == nullptr) {
 		SDL_Log("SDL_CreateTexture: %s", SDL_GetError());
@@ -87,8 +92,15 @@ void SdlHost::audio_write(const eng::s16* frames, int count) {
 	SDL_PutAudioStreamData(stream, frames, count * static_cast<int>(sizeof(eng::s16)));
 }
 
-/// Procesa eventos SDL y traduce teclado a mando NES.
-/// \return `false` si se cierra la ventana.
+/// \return `true` si `scancode` está pulsada (estado por nivel de SDL).
+bool SdlHost::key_down(int scancode) const {
+	const bool* k = SDL_GetKeyboardState(nullptr);
+	return k[scancode];
+}
+
+/// Procesa eventos y traduce el **estado** del teclado a mando NES. Al leer el
+/// estado por nivel (no eventos) se soportan varias teclas a la vez.
+/// \return `false` si se cierra la ventana o se pulsa `Esc`.
 bool SdlHost::poll(InputState& in) {
 	SDL_Event e;
 	while (SDL_PollEvent(&e)) {
@@ -96,27 +108,19 @@ bool SdlHost::poll(InputState& in) {
 			quit_window = true;
 			return false;
 		}
-		if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
-			const bool down = (e.type == SDL_EVENT_KEY_DOWN);
-			switch (e.key.scancode) {
-			case SDL_SCANCODE_Z:
-			case SDL_SCANCODE_SPACE: in.a = down; break;
-			case SDL_SCANCODE_X: in.b = down; break;
-			case SDL_SCANCODE_RETURN: in.start = down; break;
-			case SDL_SCANCODE_BACKSPACE:
-			case SDL_SCANCODE_RSHIFT: in.select = down; break;
-			case SDL_SCANCODE_UP: in.up = down; break;
-			case SDL_SCANCODE_DOWN: in.down = down; break;
-			case SDL_SCANCODE_LEFT: in.left = down; break;
-			case SDL_SCANCODE_RIGHT: in.right = down; break;
-			case SDL_SCANCODE_ESCAPE:
-				if (down) {
-					escape_menu = true;
-				}
-				return false;
-			default: break;
-			}
-		}
+	}
+	const bool* k = SDL_GetKeyboardState(nullptr);
+	in.a = k[SDL_SCANCODE_Z] || k[SDL_SCANCODE_SPACE];
+	in.b = k[SDL_SCANCODE_X];
+	in.start = k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_KP_ENTER];
+	in.select = k[SDL_SCANCODE_BACKSPACE] || k[SDL_SCANCODE_RSHIFT];
+	in.up = k[SDL_SCANCODE_UP];
+	in.down = k[SDL_SCANCODE_DOWN];
+	in.left = k[SDL_SCANCODE_LEFT];
+	in.right = k[SDL_SCANCODE_RIGHT];
+	if (k[SDL_SCANCODE_ESCAPE]) {
+		escape_menu = true;
+		return false;
 	}
 	return true;
 }
@@ -137,6 +141,7 @@ bool SdlHost::menu_poll(int& action) {
 			case SDL_SCANCODE_KP_ENTER:
 			case SDL_SCANCODE_SPACE: action = 3; break;
 			case SDL_SCANCODE_V: action = 4; break;
+			case SDL_SCANCODE_S: action = 6; break;
 			case SDL_SCANCODE_ESCAPE:
 			case SDL_SCANCODE_Q: action = 5; break;
 			default: break;

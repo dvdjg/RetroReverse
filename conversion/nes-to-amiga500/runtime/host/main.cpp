@@ -24,7 +24,9 @@
 #include "../enhance/profile_io.hpp"
 #include "../plugin/n2a_loader.hpp"
 #include "fastcpu.hpp"
+#include "n2a_config.hpp"
 #include "n2a_log.hpp"
+#include "n2a_shaders.hpp"
 #include "nes_system.hpp"
 #include "rom_loader.hpp"
 #include "sdl_host.hpp"
@@ -47,6 +49,30 @@ eng::u8 g_rgb[n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH * 3]; ///< Fra
 eng::s16 g_audio[1024]; ///< Búfer de audio por frame.
 int g_frames_limit = -1; ///< Nº de frames a ejecutar (-1 = infinito).
 int g_frame = 0;         ///< Frames ejecutados.
+
+// --- Configuración y shaders (declarados antes de `emu_tick_once`) ---
+n2a::N2AConfig g_cfg;                  ///< Opciones persistentes (archivo editable).
+char g_cfg_path[512] = "nes_sdl.cfg";  ///< Ruta del archivo de config.
+int g_shader = 2;                      ///< Shader activo (ver `n2a_shaders.hpp`).
+int g_shader_next_sc = 0;              ///< Scancode para el siguiente shader.
+int g_shader_prev_sc = 0;              ///< Scancode para el shader anterior.
+bool g_next_was_down = false;          ///< Estado previo (detección de flanco).
+bool g_prev_was_down = false;
+
+/// \return `true` en el flanco de subida (se pulsó desde el frame anterior).
+inline bool edge(bool now, bool& was) {
+	const bool rising = now && !was;
+	was = now;
+	return rising;
+}
+
+/// Cambia el shader `delta` posiciones (cíclico) y guarda la config.
+void shader_cycle(int delta) {
+	g_shader = (g_shader + delta + n2a::kShaderCount) % n2a::kShaderCount;
+	g_cfg.shader = n2a::kShaderNames[g_shader];
+	(void)g_cfg.save(g_cfg_path);
+	n2a::log_emit(n2a::LogLevel::Info, "INFO", "shader -> %s", n2a::kShaderNames[g_shader]);
+}
 
 #ifdef N2A_CODEGEN
 n2a::FastCpu g_gen_fast; ///< Fallback (RAM/saltos calculados) del motor codegen.
@@ -84,6 +110,14 @@ int emu_tick_once() {
 	g_nes.pad1 = in.to_pad();
 	g_nes.run_frame();
 	g_nes.frame_rgb(eng::Span<eng::u8> {g_rgb, sizeof g_rgb});
+	// Cambio de shader en partida (teclas configurables, por flanco).
+	if (g_shader_next_sc != 0 && edge(g_host.key_down(g_shader_next_sc), g_next_was_down)) {
+		shader_cycle(+1);
+	}
+	if (g_shader_prev_sc != 0 && edge(g_host.key_down(g_shader_prev_sc), g_prev_was_down)) {
+		shader_cycle(-1);
+	}
+	n2a::shader_apply(g_shader, g_rgb, n2a::NesSystem::kScreenW, n2a::NesSystem::kScreenH);
 	g_host.present(g_rgb);
 	g_nes.apu.generate_samples(eng::Span<eng::s16> {g_audio, 512});
 	g_host.audio_write(g_audio, 512);
@@ -120,6 +154,33 @@ static bool ends_with(const char* s, const char* suf) {
 /// Plugin transpilado cargado (si `argv[1]` es un `.n2x`).
 static n2a::TranspiledGame g_game;
 static n2a::Mapper g_cart;
+
+/// Lanza ShaderGlass con el perfil configurado (si hay), de forma desacoplada.
+static void launch_shaderglass() {
+	if (g_cfg.shaderglass_exe.empty()) {
+		return;
+	}
+	char cmd[1600];
+#if defined(_WIN32)
+	std::snprintf(cmd, sizeof cmd, "start \"\" \"%s\" \"%s\"", g_cfg.shaderglass_exe.c_str(),
+		      g_cfg.shaderglass_profile.c_str());
+#else
+	std::snprintf(cmd, sizeof cmd, "\"%s\" \"%s\" &", g_cfg.shaderglass_exe.c_str(),
+		      g_cfg.shaderglass_profile.c_str());
+#endif
+	N2A_LOGI("lanzando ShaderGlass: %s", cmd);
+	(void)std::system(cmd);
+}
+
+/// Tras inicializar SDL: resuelve las teclas de shader y lanza ShaderGlass.
+static void post_init_shaders() {
+	g_shader_next_sc = static_cast<int>(SDL_GetScancodeFromName(g_cfg.shader_next.c_str()));
+	g_shader_prev_sc = static_cast<int>(SDL_GetScancodeFromName(g_cfg.shader_prev.c_str()));
+	N2A_LOGI("shader='%s' teclas: next=%s(%d) prev=%s(%d)", n2a::kShaderNames[g_shader],
+		 g_cfg.shader_next.c_str(), g_shader_next_sc, g_cfg.shader_prev.c_str(),
+		 g_shader_prev_sc);
+	launch_shaderglass();
+}
 
 /// Verificación headless: ejecuta el plugin y el intérprete sobre la misma ROM y
 /// compara RAM y framebuffer. \return 0 si coinciden, 2 si no, 1 si error.
@@ -236,10 +297,11 @@ static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, 
 	SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
 	SDL_RenderDebugText(r, 4.0f, 4.0f, "Gestor de juegos transpilados (.n2x)");
 	SDL_SetRenderDrawColor(r, 200, 180, 120, 255);
-	SDL_RenderDebugText(r, 4.0f, 14.0f, "Flechas=sel  Enter=jugar  V=verificar  Esc=salir");
+	SDL_RenderDebugText(r, 4.0f, 14.0f, "Flechas=sel Enter=jugar V=verificar");
+	SDL_RenderDebugText(r, 4.0f, 24.0f, "S=shaders Esc=salir");
 	SDL_SetRenderDrawColor(r, 255, 150, 150, 255);
-	SDL_RenderDebugText(r, 4.0f, 24.0f, "(c) codigo nativo: carga bajo tu responsabilidad");
-	int y = 40;
+	SDL_RenderDebugText(r, 4.0f, 34.0f, "(c) codigo nativo: bajo tu responsabilidad");
+	int y = 48;
 	if (list.empty()) {
 		SDL_SetRenderDrawColor(r, 255, 120, 120, 255);
 		SDL_RenderDebugText(r, 4.0f, static_cast<float>(y), "No hay .n2x aqui (usa --emit-lib).");
@@ -278,6 +340,31 @@ static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, 
 	SDL_RenderPresent(r);
 }
 
+/// Dibuja el **menú de shaders** (selección con flechas).
+static void draw_shader_menu(n2a::SdlHost& host, int sel) {
+	SDL_Renderer* r = host.ren;
+	SDL_SetRenderScale(r, 1.0f, 1.0f);
+	SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+	SDL_RenderClear(r);
+	SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+	SDL_RenderDebugText(r, 4.0f, 4.0f, "Shader de video");
+	SDL_SetRenderDrawColor(r, 200, 180, 120, 255);
+	SDL_RenderDebugText(r, 4.0f, 14.0f, "Flechas=elegir Enter=aplicar Esc=volver");
+	for (int i = 0; i < n2a::kShaderCount; ++i) {
+		const float y = 32.0f + static_cast<float>(i) * 12.0f;
+		if (i == sel) {
+			SDL_SetRenderDrawColor(r, 40, 60, 120, 255);
+			SDL_FRect bg {0.0f, y - 1.0f, 256.0f, 12.0f};
+			SDL_RenderFillRect(r, &bg);
+			SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+		} else {
+			SDL_SetRenderDrawColor(r, 200, 200, 200, 255);
+		}
+		SDL_RenderDebugText(r, 4.0f, y, n2a::kShaderNames[i]);
+	}
+	SDL_RenderPresent(r);
+}
+
 int main(int argc, char** argv) {
 	// Configuración de trazas (antes que nada, para trazar el resto).
 	{
@@ -299,7 +386,21 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
-	N2A_LOGI("nes_sdl arrancando (nivel de log=%d)", n2a::log_level());
+	// Configuración del host (archivo editable; se crea con valores por defecto).
+	for (int i = 1; i < argc; ++i) {
+		if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
+			std::snprintf(g_cfg_path, sizeof g_cfg_path, "%s", argv[++i]);
+		}
+	}
+	const bool had_cfg = g_cfg.load(g_cfg_path);
+	if (!had_cfg) {
+		(void)g_cfg.save(g_cfg_path);
+	}
+	g_shader = n2a::shader_index(g_cfg.shader.c_str());
+	g_host.initial_scale = g_cfg.scale;
+
+	N2A_LOGI("nes_sdl arrancando (log=%d) config='%s'%s scale=%d shader=%s", n2a::log_level(),
+		 g_cfg_path, had_cfg ? "" : " (nuevo)", g_cfg.scale, g_cfg.shader.c_str());
 
 	if (argc < 2) {
 		std::printf("uso: nes_sdl <rom.nes|juego.n2x> [frames] [--verbose|--trace]\n");
@@ -327,16 +428,44 @@ int main(int argc, char** argv) {
 			std::printf("error: no se pudo iniciar SDL3\n");
 			return 1;
 		}
+		post_init_shaders();
 		int sel = 0;
+		int mode = 0; // 0 = lista de juegos, 1 = menú de shaders
+		int shader_sel = g_shader;
 		std::string msg;
 		for (;;) {
-			draw_manager(g_host, list, sel, msg);
+			if (mode == 0) {
+				draw_manager(g_host, list, sel, msg);
+			} else {
+				draw_shader_menu(g_host, shader_sel);
+			}
 			int act = 0;
 			if (!g_host.menu_poll(act)) {
 				break; // ventana cerrada
 			}
+			if (mode == 1) { // menú de shaders
+				if (act == 1) {
+					shader_sel = (shader_sel + n2a::kShaderCount - 1) % n2a::kShaderCount;
+				} else if (act == 2) {
+					shader_sel = (shader_sel + 1) % n2a::kShaderCount;
+				} else if (act == 3) {
+					g_shader = shader_sel;
+					g_cfg.shader = n2a::kShaderNames[g_shader];
+					(void)g_cfg.save(g_cfg_path);
+					N2A_LOGI("shader -> %s", n2a::kShaderNames[g_shader]);
+					mode = 0;
+					msg = "shader aplicado";
+				} else if (act == 5) {
+					mode = 0;
+				}
+				g_host.delay_ms(16);
+				continue;
+			}
 			const int n = static_cast<int>(list.size());
-			if (act == 1 && n > 0) {
+			if (act == 6) {
+				mode = 1; // abrir menú de shaders
+				shader_sel = g_shader;
+			} else if (act == 1 && n > 0) {
 				sel = (sel + n - 1) % n;
 			} else if (act == 2 && n > 0) {
 				sel = (sel + 1) % n;
@@ -457,6 +586,7 @@ int main(int argc, char** argv) {
 		std::printf("error: no se pudo iniciar SDL3\n");
 		return 1;
 	}
+	post_init_shaders();
 	g_frames_limit = (argc > 2) ? std::atoi(argv[2]) : -1;
 
 #ifdef __EMSCRIPTEN__

@@ -38,6 +38,22 @@ El núcleo es **agnóstico** y corre sobre la interfaz `Host` ([`platform/host.h
     `nes_sdl_codegen.exe` (ejecuta el **C++ transpilado**; fallback a `FastCpu`/intérprete para RAM/
     saltos calculados). Es específico por ROM (C++ no se compila en runtime). Ver
     [`../docs/FAST_EXECUTOR.md`](../docs/FAST_EXECUTOR.md).
+
+### Configuración, shaders y ShaderGlass
+
+- **`nes_sdl.cfg`** (junto al ejecutable; `--config <f>`): archivo editable (`clave = valor`) con
+  `scale` (escala entera de la ventana; por defecto **4** → cada píxel NES = 4x4 px), `shader`,
+  `shader_next`/`shader_prev` (teclas SDL para cambiarlo **en partida**) y los campos de ShaderGlass.
+- **Shaders propios** ([`host/n2a_shaders.hpp`](host/n2a_shaders.hpp)): `none`, `scanlines` y
+  `crt80s` (TV de los 80: scanlines + **beam** + viñeta + tono cálido). Se eligen en el gestor
+  (`S` → menú de shaders) y con `shader_next`/`shader_prev` durante la partida; se guardan en `nes_sdl.cfg`.
+- **Ventana reescalable** con **escala entera** (`SDL_LOGICAL_PRESENTATION_INTEGER_SCALE`): el frame
+  256x240 se reescala a la ventana manteniendo píxeles nítidos (letterbox al mayor múltiplo entero).
+- **ShaderGlass** ([`external/ShaderGlass`](../../../external/ShaderGlass), GPLv3): overlay externo
+  que captura la ventana (modo *Window Clone*) y aplica shaders de RetroArch. Configura
+  `shaderglass_exe` (y opcionalmente `shaderglass_profile` `.sgp`); el host lo **lanza** al arrancar.
+  Dentro de ShaderGlass, elige un shader CRT (p. ej. `crt/crt-geom` o `crt/crt-interlaced-halation`,
+  con *beam*/scanlines) — la librería ya viene en el clon.
 - **Amiga 500**: [`platform/amiga/README.md`](platform/amiga/README.md) (Copper/Blitter/Paula).
 - **RetroArch (libretro)**: core en [`retroarch/`](retroarch/README.md) (`nes_libretro.so`) con
   plugins de vídeo/audio; se carga desde RetroArch y transpila/ejecuta la ROM.

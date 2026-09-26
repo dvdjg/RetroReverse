@@ -22,10 +22,14 @@ struct SdlHost : Host {
 	SDL_Renderer* ren = nullptr;       ///< Renderer 2D.
 	SDL_Texture* tex = nullptr;        ///< Textura RGB del frame.
 	SDL_AudioStream* stream = nullptr; ///< Stream de audio mono S16.
-	int w = 0;                         ///< Ancho del frame.
-	int h = 0;                         ///< Alto del frame.
+	int w = 0;                         ///< Ancho del frame (nativo, p. ej. 256).
+	int h = 0;                         ///< Alto del frame (nativo, p. ej. 240).
+	int initial_scale = 4;             ///< Escala de la ventana al arrancar (entera).
 	bool quit_window = false;  ///< `poll` devolvió `false` por cierre de ventana.
 	bool escape_menu = false;  ///< `poll` devolvió `false` por `Esc` (volver al gestor).
+
+	/// \return Pulsación baja-nivel de `scancode` (soporta teclas simultáneas).
+	[[nodiscard]] bool key_down(int scancode) const;
 
 	bool init(const char* title, int width, int height, int sample_rate) override;
 	void shutdown() override;
