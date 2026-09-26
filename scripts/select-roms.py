@@ -24,6 +24,8 @@ ARCADE = [
     "pacman", "mspacman", "defender", "phoenix", "atetris", "gng", "ghouls",
     "goldnaxe", "altbeast", "rtype", "buggyboy", "ddragon", "ddragon2",
     "shinobi", "gauntlet", "gauntlet2p", "vigilant",
+    # Ampliación (2026): clásicos y serie Capcom/Strikers
+    "robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3",
 ]
 
 # --- Consolas: sistema -> [(patrón de zip, extensión preferida)] ---
@@ -82,7 +84,21 @@ CONSOLES = {
 }
 
 # --- Amiga 500 (bajo subcarpetas por letra) ---
-AMIGA = ["Wizball", "Buggy Boy", "Pac-Mania", "Bubble Bobble"]
+AMIGA = [
+    "Wizball", "Buggy Boy", "Pac-Mania", "Bubble Bobble",
+    # Ampliación (2026)
+    "Jim Power in Mutant Planet", "James Pond - Underwater Agent",
+    "James Pond 2 - Codename RoboCod", "James Pond 3 - Operation Starfish",
+    "Mega Typhoon", "Xenon 2 - Megablast",
+    # Discos adicionales (multi-disco)
+    "Jim Power in Mutant Planet_Disk2", "Xenon 2 - Megablast_Disk2",
+    "James Pond 3 - Operation Starfish (AGA)_Disk2",
+    "James Pond 3 - Operation Starfish (AGA)_Disk3",
+]
+
+# --- FBNeo: mismos títulos para la ruta FBNeo (sets propios) ---
+FBNEO = ["robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3"]
+FBNEO_BIOS = ["cps3"]  # BIOS de CPS3 (si existe en la colección)
 
 # Algunos sistemas están repartidos en varias carpetas de la colección.
 CONSOLE_DIRS = {"megadrive": ["megadrive", "genesis"]}
@@ -141,6 +157,33 @@ def main():
         out = DST / "arcade" / src.name
         out.write_bytes(src.read_bytes())
         rows.append(("arcade", out.relative_to(ROOT), src.relative_to(SRC.parent),
+                     "-", out.stat().st_size, sha1(out)))
+
+    # FBNeo (mismos títulos; sets propios para la ruta FBNeo)
+    for name in FBNEO:
+        src = SRC / "fbneo" / f"{name}.zip"
+        if not src.is_file():
+            missing.append(f"fbneo/{name}.zip"); continue
+        (DST / "fbneo").mkdir(parents=True, exist_ok=True)
+        out = DST / "fbneo" / src.name
+        out.write_bytes(src.read_bytes())
+        rows.append(("fbneo", out.relative_to(ROOT), src.relative_to(SRC.parent),
+                     "-", out.stat().st_size, sha1(out)))
+
+    # BIOS FBNeo (CPS3); se busca en varias carpetas de la colección.
+    for name in FBNEO_BIOS:
+        found = None
+        for base in (SRC / "fbneo", SRC / "bios" / "fbneo", SRC / "bios"):
+            cand = base / f"{name}.zip"
+            if cand.is_file():
+                found = cand
+                break
+        if found is None:
+            missing.append(f"fbneo bios {name}.zip"); continue
+        (DST / "fbneo").mkdir(parents=True, exist_ok=True)
+        out = DST / "fbneo" / found.name
+        out.write_bytes(found.read_bytes())
+        rows.append(("fbneo(bios)", out.relative_to(ROOT), found.relative_to(SRC.parent),
                      "-", out.stat().st_size, sha1(out)))
 
     # Consolas

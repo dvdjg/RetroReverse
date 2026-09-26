@@ -21,6 +21,22 @@ Generado por [`scripts/select-roms.py`](../scripts/select-roms.py). El contenido
 | arcade | `roms/arcade/gauntlet.zip` | `roms/arcade/gauntlet.zip` | `-` | 250719 | `d68748bc3745` |
 | arcade | `roms/arcade/gauntlet2p.zip` | `roms/arcade/gauntlet2p.zip` | `-` | 324803 | `5447dd7ed95b` |
 | arcade | `roms/arcade/vigilant.zip` | `roms/arcade/vigilant.zip` | `-` | 443625 | `2a812fe0eaba` |
+| arcade | `roms/arcade/robocop.zip` | `roms/arcade/robocop.zip` | `-` | 403852 | `b1dd795c6b2d` |
+| arcade | `roms/arcade/1943.zip` | `roms/arcade/1943.zip` | `-` | 1101145 | `b43b514bfd6e` |
+| arcade | `roms/arcade/1944.zip` | `roms/arcade/1944.zip` | `-` | 15448248 | `f74e9cb1c571` |
+| arcade | `roms/arcade/s1945.zip` | `roms/arcade/s1945.zip` | `-` | 5455851 | `588e673cd5e4` |
+| arcade | `roms/arcade/rastan.zip` | `roms/arcade/rastan.zip` | `-` | 523814 | `b66fde2a00bf` |
+| arcade | `roms/arcade/sf2.zip` | `roms/arcade/sf2.zip` | `-` | 3551819 | `bd59872a57f1` |
+| arcade | `roms/arcade/sfiii.zip` | `roms/arcade/sfiii.zip` | `-` | 38868497 | `b4f3f8e1437c` |
+| arcade | `roms/arcade/sfiii3.zip` | `roms/arcade/sfiii3.zip` | `-` | 70592155 | `09ac08c7e011` |
+| fbneo | `roms/fbneo/robocop.zip` | `roms/fbneo/robocop.zip` | `-` | 403811 | `55849befd421` |
+| fbneo | `roms/fbneo/1943.zip` | `roms/fbneo/1943.zip` | `-` | 305674 | `f6df3dbe6faf` |
+| fbneo | `roms/fbneo/1944.zip` | `roms/fbneo/1944.zip` | `-` | 15448196 | `3b32fcfd7aa1` |
+| fbneo | `roms/fbneo/s1945.zip` | `roms/fbneo/s1945.zip` | `-` | 5455851 | `588e673cd5e4` |
+| fbneo | `roms/fbneo/rastan.zip` | `roms/fbneo/rastan.zip` | `-` | 523814 | `b66fde2a00bf` |
+| fbneo | `roms/fbneo/sf2.zip` | `roms/fbneo/sf2.zip` | `-` | 3551819 | `bd59872a57f1` |
+| fbneo | `roms/fbneo/sfiii.zip` | `roms/fbneo/sfiii.zip` | `-` | 38868497 | `b4f3f8e1437c` |
+| fbneo | `roms/fbneo/sfiii3.zip` | `roms/fbneo/sfiii3.zip` | `-` | 70592155 | `09ac08c7e011` |
 | nes | `roms/nes/Super Mario Bros. (World).nes` | `roms/nes/Super Mario Bros. (World).zip` | `Super Mario Bros. (World).nes` | 40976 | `ea343f4e445a` |
 | nes | `roms/nes/Donkey Kong (World) (Rev A).nes` | `roms/nes/Donkey Kong (World) (Rev A).zip` | `Donkey Kong (World) (Rev A).nes` | 24592 | `d8dfacbfec34` |
 | nes | `roms/nes/Donkey Kong Jr. (World) (Rev A).nes` | `roms/nes/Donkey Kong Jr. (World) (Rev A).zip` | `Donkey Kong Jr. (World) (Rev A).nes` | 24592 | `02633e208732` |
@@ -62,6 +78,20 @@ Generado por [`scripts/select-roms.py`](../scripts/select-roms.py). El contenido
 | amiga | `roms/amiga/Buggy Boy.adf` | `roms/amiga500/B/Buggy Boy.zip` | `Buggy Boy.adf` | 901120 | `ff1757579d22` |
 | amiga | `roms/amiga/Pac-Mania.adf` | `roms/amiga500/P/Pac-Mania.zip` | `Pac-Mania.adf` | 901120 | `04e81a902e4e` |
 | amiga | `roms/amiga/Bubble Bobble.adf` | `roms/amiga500/B/Bubble Bobble.zip` | `Bubble Bobble.adf` | 901120 | `ee143724c9cc` |
+| amiga | `roms/amiga/Jim Power in Mutant Planet_Disk1.adf` | `roms/amiga500/J/Jim Power in Mutant Planet_Disk1.zip` | `Jim Power in Mutant Planet_Disk1.adf` | 901120 | `caa12d2a6171` |
+| amiga | `roms/amiga/James Pond - Underwater Agent.adf` | `roms/amiga500/J/James Pond - Underwater Agent.zip` | `James Pond - Underwater Agent.adf` | 901120 | `d61727f7e48c` |
+| amiga | `roms/amiga/James Pond 2 - Codename RoboCod.adf` | `roms/amiga500/J/James Pond 2 - Codename RoboCod.zip` | `James Pond 2 - Codename RoboCod.adf` | 901120 | `b1b916651e00` |
+| amiga | `roms/amiga/James Pond 3 - Operation Starfish (AGA)_Disk1.adf` | `roms/amiga500/J/James Pond 3 - Operation Starfish (AGA)_Disk1.zip` | `James Pond 3 - Operation Starfish (AGA)_Disk1.adf` | 901120 | `84c64283bf02` |
+| amiga | `roms/amiga/Mega Typhoon (1996)(Nordlicht PD)[h TRSI][t +5 CRX][f 100% Ross].adf` | `roms/amiga500/M/Mega Typhoon (1996)(Nordlicht PD)[h TRSI][t +5 CRX][f 100% Ross].zip` | `Mega Typhoon (1996)(Nordlicht PD)[h TRSI][t +5 CRX][f 100% Ross].adf` | 901120 | `886c772a87eb` |
+| amiga | `roms/amiga/Xenon 2 - Megablast_Disk1.adf` | `roms/amiga500/X/Xenon 2 - Megablast_Disk1.zip` | `Xenon 2 - Megablast_Disk1.adf` | 901120 | `fc5e23f9b406` |
+| amiga | `roms/amiga/Jim Power in Mutant Planet_Disk2.adf` | `roms/amiga500/J/Jim Power in Mutant Planet_Disk2.zip` | `Jim Power in Mutant Planet_Disk2.adf` | 901120 | `218ff573f91d` |
+| amiga | `roms/amiga/Xenon 2 - Megablast_Disk2.adf` | `roms/amiga500/X/Xenon 2 - Megablast_Disk2.zip` | `Xenon 2 - Megablast_Disk2.adf` | 901120 | `a748afc7a142` |
+| amiga | `roms/amiga/James Pond 3 - Operation Starfish (AGA)_Disk2.adf` | `roms/amiga500/J/James Pond 3 - Operation Starfish (AGA)_Disk2.zip` | `James Pond 3 - Operation Starfish (AGA)_Disk2.adf` | 901120 | `fcabd3048ae5` |
+| amiga | `roms/amiga/James Pond 3 - Operation Starfish (AGA)_Disk3.adf` | `roms/amiga500/J/James Pond 3 - Operation Starfish (AGA)_Disk3.zip` | `James Pond 3 - Operation Starfish (AGA)_Disk3.adf` | 901120 | `17df0f5c95ec` |
 | amiga(bios) | `roms/amiga/kick34005.A500` | `bios/kick34005.A500` | `-` | 262144 | `891e9a547772` |
 | amiga(bios) | `roms/amiga/kick33180.A500` | `bios/kick33180.A500` | `-` | 262144 | `11f9e62cf299` |
 | amiga(bios) | `roms/amiga/kick39106.A1200` | `bios/kick39106.A1200` | `-` | 524288 | `70033828182f` |
+
+## No encontrados
+
+- fbneo bios cps3.zip

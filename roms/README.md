@@ -10,6 +10,7 @@ Suelta aquí los ficheros por sistema y luego se promueven al nodo del juego que
 | Subcarpeta | Qué va | Formatos habituales | Nodo destino (ejemplo) |
 |---|---|---|---|
 | `arcade/` | Romsets MAME (=1 `*.zip` por juego) | `*.zip` (`pacman.zip`, …) | `platforms/arcade/dedicated/namco_pacman/pacman/rom/raw/` |
+| `fbneo/` | Romsets FBNeo (mismos títulos, sets propios) + BIOS | `*.zip` | ruta del core **FBNeo** |
 | `nes/` | Juegos NES (extraídos del zip) | `*.nes`, `*.fds` | `platforms/consoles/nes/rom/raw/` |
 | `megadrive/` | Mega Drive / Genesis (extraídos) | `*.md`, `*.bin`, `*.gen` | `platforms/consoles/megadrive/rom/raw/` |
 | `amiga/` | Discos Amiga + kickstarts | `*.adf`, `*.ipf`, `*.dms`, `*.hdf` | `platforms/computers/amiga500/rom/raw/` |
