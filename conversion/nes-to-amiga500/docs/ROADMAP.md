@@ -74,7 +74,18 @@ llamadas `cpu.*` que imitan el ensamblador. Detalle en [`TRANSPILER.md`](TRANSPI
 **Estado: prototipo funcional** en [`../tools/transpiler/`](../tools/transpiler/README.md)
 (C++23 sobre `eng/core`, sin STL): iNES → desasm recursivo → basic blocks → codegen NROM, con
 ramas/`JMP`/`JSR`/`RTS`, tabla de despacho y *smoke test* que compila y ejecuta el C++ generado
-(ROMs propias). Pendiente: runtime real (F3) y mappers (F9).
+(ROMs propias).
+
+El **codegen** ya se mide: `tools/transpiler/tests/bench_codegen.sh` compara el C++ generado con el
+intérprete y con `FastCpu` sobre una ROM de cálculo (~13× vs intérprete, con equivalencia exacta), y
+los hechos `hot` (`--facts`) marcan bloques `hot`/`cold` a partir de telemetría.
+
+Además, el **camino pre-decodificado** ya corre en el runtime: `FastCpu`
+([`FAST_EXECUTOR.md`](FAST_EXECUTOR.md)) decodifica la PRG por dirección y ejecuta un subconjunto
+caliente de opcodes (cae al intérprete en el resto), equivalente al intérprete y 1,6–2× más rápido en
+CPU; activable en SDL (`NES_ENGINE=fast`) y en el core libretro (`nes_engine`). Es el puente hacia el
+ejecutor generado desde el grafo de basic blocks. Pendiente: runtime real (F3), mappers (F9) y
+portar el ejecutor a `m68k`.
 
 Pipeline: parseo iNES/NES 2.0 → vectores → desensamblado recursivo → CFG → basic blocks →
 codegen (`goto` + etiquetas) → tabla de despacho + arranque.

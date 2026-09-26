@@ -50,6 +50,36 @@ bool parse_hex(StringView s, eng::u16& out) {
 	return true;
 }
 
+/// Igual que `parse_hex` pero para un contador de 32 bits (calor de bloque).
+/// \param s Texto hexadecimal (con o sin `0x`).
+/// \param out Valor parseado.
+/// \return `true` si `s` era un hexadecimal válido.
+bool parse_hex32(StringView s, eng::u32& out) {
+	if (s.size() >= 2u && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+		s.remove_prefix(2u);
+	}
+	if (s.empty()) {
+		return false;
+	}
+	eng::u32 v = 0;
+	for (eng::usize i = 0; i < s.size(); ++i) {
+		const char c = s[i];
+		eng::u32 d;
+		if (c >= '0' && c <= '9') {
+			d = static_cast<eng::u32>(c - '0');
+		} else if (c >= 'a' && c <= 'f') {
+			d = static_cast<eng::u32>(c - 'a' + 10);
+		} else if (c >= 'A' && c <= 'F') {
+			d = static_cast<eng::u32>(c - 'A' + 10);
+		} else {
+			return false;
+		}
+		v = v * 16u + d;
+	}
+	out = v;
+	return true;
+}
+
 /// Consume los espacios iniciales de `s`.
 void skip_ws(StringView& s) {
 	while (!s.empty() && (s[0] == ' ' || s[0] == '\t' || s[0] == '\r')) {
@@ -81,6 +111,7 @@ StringView next_token(StringView& s) {
 /// range  <addr> <min> <max>
 /// set    <addr> <v1> [v2] [v3] [v4]
 /// power2 <addr>
+/// hot    <addr> <ejecuciones>   (marca el bloque `hot`/`cold`)
 /// ```
 /// \return `true` si el fichero se leyó (las líneas inválidas se ignoran).
 bool load_facts(const char* path, n2a::Transpiler& tp) {
@@ -132,6 +163,11 @@ bool load_facts(const char* path, n2a::Transpiler& tp) {
 			}
 		} else if (kind == "power2") {
 			f.kind = n2a::FactKind::Power2;
+		} else if (kind == "hot") {
+			f.kind = n2a::FactKind::Hot;
+			if (!parse_hex32(next_token(line), f.heat)) {
+				continue;
+			}
 		} else {
 			continue;
 		}
@@ -223,6 +259,21 @@ constexpr eng::u8 kMiscProg[] = {
 // $2A y emite `N2A_ASSUME` sin necesidad de un fichero de hechos.
 constexpr eng::u8 kAssumeProg[] = {0xA9u, 0x2Au, 0x85u, 0x10u, 0xA5u, 0x10u, 0x00u};
 
+// ROM de **carga de cálculo** para medir el codegen: bucle doble (128×256
+// iteraciones) con CLC/ADC/STA/LDA/EOR/ROL/DEC/BNE y termina en BRK. No depende
+// de la PPU, así que sirve para comparar codegen vs intérprete vs ejecutor rápido.
+//   $8000: LDX #$00 ; LDA #$00 ; STA $10 ; LDA #$FF ; STA $12
+//   $800A: CLC ; ADC #$07 ; STA $10 ; LDA $10 ; EOR #$5A ; STA $11 ; ROL $11
+//          DEC $12 ; BNE $800A          (256 iteraciones)
+//          INX ; CPX #$80 ; BNE $8002   (128 iteraciones)
+//   $8020: BRK
+constexpr eng::u8 kBenchProg[] = {
+	0xA2u, 0x00u, 0xA9u, 0x00u, 0x85u, 0x10u, 0xA9u, 0xFFu, 0x85u, 0x12u,
+	0x18u, 0x69u, 0x07u, 0x85u, 0x10u, 0xA5u, 0x10u, 0x49u, 0x5Au, 0x85u,
+	0x11u, 0x26u, 0x11u, 0xC6u, 0x12u, 0xD0u, 0xEFu, 0xE8u, 0xE0u, 0x80u,
+	0xD0u, 0xE2u, 0x00u,
+};
+
 /// Imprime la ayuda de línea de comandos.
 /// \param argv0 Nombre del programa (no se usa; se mantiene por uniformidad).
 void print_usage(const char* argv0) {
@@ -233,6 +284,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-branch-rom <salida.nes>");
 	n2a::out_line("     --emit-misc-rom   <salida.nes>");
 	n2a::out_line("     --emit-vsa-rom    <salida.nes>");
+	n2a::out_line("     --emit-bench-rom  <salida.nes>");
 }
 
 } // namespace
@@ -261,12 +313,13 @@ int main(int argc, char** argv) {
 			return 0;
 		}
 		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom" ||
-		     arg == "--emit-vsa-rom") &&
+		     arg == "--emit-vsa-rom" || arg == "--emit-bench-rom") &&
 		    i + 1 < argc) {
 			emit = (arg == "--emit-mini-rom")     ? 1
 			       : (arg == "--emit-branch-rom") ? 2
 			       : (arg == "--emit-misc-rom")   ? 3
-							      : 4;
+			       : (arg == "--emit-vsa-rom")    ? 4
+							      : 5;
 			input = eng::util::StringView(argv[++i]);
 			continue;
 		}
@@ -285,7 +338,8 @@ int main(int argc, char** argv) {
 		const bool ok = (emit == 1)   ? write_ines_rom(input.data(), kMiniProg, sizeof(kMiniProg))
 				: (emit == 2) ? write_ines_rom(input.data(), kBranchProg, sizeof(kBranchProg))
 				: (emit == 3) ? write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg))
-					      : write_ines_rom(input.data(), kAssumeProg, sizeof(kAssumeProg));
+				: (emit == 4) ? write_ines_rom(input.data(), kAssumeProg, sizeof(kAssumeProg))
+					      : write_ines_rom(input.data(), kBenchProg, sizeof(kBenchProg));
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");
 			return 1;

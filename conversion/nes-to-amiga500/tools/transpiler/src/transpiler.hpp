@@ -50,15 +50,20 @@ enum class FactKind : eng::u8 {
 	Range,  ///< Está en `[0, values[1]]` (`values[0]` = mínimo, informativo).
 	Set,    ///< Pertenece al conjunto `values[0..count-1]`.
 	Power2, ///< Es una potencia de dos (o cero).
+	Hot,    ///< `addr` es inicio de bloque y se ejecutó `count` veces (0 = nunca).
 };
 
-/// Hecho sobre el valor de una dirección de memoria que el codegen traduce a
-/// `N2A_ASSUME` en los bloques que lean esa dirección.
+/// Hecho sobre una dirección que el codegen consume: los de **valor**
+/// (`Eq`/`Range`/`Set`/`Power2`) se traducen a `N2A_ASSUME` en los bloques que
+/// leen esa dirección; los de **calor** (`Hot`) marcan el bloque como
+/// `__attribute__((hot))`/`((cold))` para reordenar y ajustar el código (ver
+/// [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
 struct Fact {
-	FactKind kind = FactKind::Eq; ///< Interpretación de `values`.
-	eng::u16 addr = 0;            ///< Dirección observada.
+	FactKind kind = FactKind::Eq; ///< Interpretación de `values`/`count`.
+	eng::u16 addr = 0;            ///< Dirección observada (valor) o inicio de bloque (calor).
 	eng::u8 values[4] {};         ///< Valores según `kind`.
 	eng::u8 count = 0;            ///< Nº de valores usados (para `Set`).
+	eng::u32 heat = 0;            ///< Ejecuciones observadas (para `Hot`).
 };
 
 /// Transpilador de una ROM NES (NROM) a C++23.
@@ -923,6 +928,9 @@ private:
 	void emit_assumptions(Dyn& out, eng::u16 start) const {
 		for (eng::usize i = 0; i < facts_.size(); ++i) {
 			const Fact& f = facts_[i];
+			if (f.kind == FactKind::Hot) {
+				continue; // el calor de bloque no es una suposición de valor
+			}
 			if (!block_reads(start, f.addr)) {
 				continue;
 			}
@@ -955,16 +963,38 @@ private:
 				out.append_hex(f.addr, 4u, true);
 				out.append(") - 1u)) == 0u");
 				break;
+			case FactKind::Hot:
+				break; // ya filtrado arriba; evita el aviso de switch
 			}
 			out.append(");\n");
 		}
+	}
+
+	/// Nº de ejecuciones observado para el bloque que empieza en `addr` según un
+	/// hecho `Hot` (`--facts`). Permite marcar el bloque `hot`/`cold`.
+	/// \param addr Dirección de inicio del bloque.
+	/// \return Ejecuciones, o `-1` si no hay dato de calor para ese bloque.
+	[[nodiscard]] int hot_count(eng::u16 addr) const {
+		for (eng::usize i = 0; i < facts_.size(); ++i) {
+			if (facts_[i].kind == FactKind::Hot && facts_[i].addr == addr) {
+				return static_cast<int>(facts_[i].heat);
+			}
+		}
+		return -1;
 	}
 
 	void emit_blocks(Dyn& out) const {
 		out.append("// ---- Basic blocks ----\n\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (leaders_[a] != 0u) {
-				out.append("static void bb_");
+				const int heat = hot_count(static_cast<eng::u16>(a));
+				out.append("static void ");
+				if (heat > 0) {
+					out.append("__attribute__((hot)) ");
+				} else if (heat == 0) {
+					out.append("__attribute__((cold)) ");
+				}
+				out.append("bb_");
 				out.append_hex(static_cast<eng::u16>(a), 4u, true);
 				out.append("(CPU& cpu);\n");
 			}
@@ -977,7 +1007,16 @@ private:
 			}
 			const eng::u16 start = static_cast<eng::u16>(a);
 			emit_block_doc(out, start);
-			out.append("static void bb_");
+			// Calor del bloque (telemetría `--facts`): `hot`/`cold` guían al
+			// compilador (reordenado y `-Os` en los fríos). Sin dato, sin marca.
+			const int heat = hot_count(start);
+			out.append("static void ");
+			if (heat > 0) {
+				out.append("__attribute__((hot)) ");
+			} else if (heat == 0) {
+				out.append("__attribute__((cold)) ");
+			}
+			out.append("bb_");
 			out.append_hex(start, 4u, true);
 			out.append("(CPU& cpu) {\n");
 			if (labels_[start] != 0u) {

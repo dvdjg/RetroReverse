@@ -75,6 +75,13 @@ compile_generated misc 'int main() {
 			(g_state.mem.ram[0x40] == 0x55u);
 	return ok ? 0 : 1;
 }'
+# Calor de bloque: un hecho `hot` marca el bloque como __attribute__((hot)).
+printf 'hot 8000 5\n' > "$TMP/hot.txt"
+"$BIN" "$GEN/misc.nes" --facts "$TMP/hot.txt" -o "$GEN/misc_hot.cpp"
+if ! grep -q "__attribute__((hot)) bb_8000" "$GEN/misc_hot.cpp"; then
+	echo "ERROR: el codegen no marco el bloque caliente con --facts hot" >&2
+	exit 1
+fi
 
 echo "[5/5] caso VSA (N2A_ASSUME inferido sin --facts)"
 "$BIN" --emit-vsa-rom "$GEN/vsa.nes"
@@ -87,5 +94,8 @@ compile_generated vsa 'int main() {
 	game_main();
 	return (g_state.cpu.A == 0x2Au) ? 0 : 1;
 }'
+
+echo "[6/6] benchmark codegen vs interprete vs ejecutor rapido"
+bash "$ROOT/tests/bench_codegen.sh"
 
 echo "TEST OK"

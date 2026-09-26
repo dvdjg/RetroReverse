@@ -66,6 +66,8 @@ nes_transpiler juego.nes --facts hechos.txt -o ../../generated/game.cpp
 nes_transpiler --emit-mini-rom   ../../generated/mini.nes
 nes_transpiler --emit-branch-rom ../../generated/branch.nes
 nes_transpiler --emit-misc-rom   ../../generated/misc.nes
+nes_transpiler --emit-vsa-rom    ../../generated/vsa.nes
+nes_transpiler --emit-bench-rom  ../../generated/bench.nes
 ```
 
 `--emit-*-rom` generan ROMs iNES **propias** (homebrew mínimo) para probar el pipeline sin ROMs de
@@ -82,10 +84,16 @@ eq     <addr> <valor>
 range  <addr> <min> <max>
 set    <addr> <v1> [v2] [v3] [v4]
 power2 <addr>
+hot    <addr> <ejecuciones>   # calor de bloque: >=1 hot, 0 cold
 ```
 
 Los hechos deben venir **validados** por análisis o telemetría: si no se cumplen en ejecución, el
 comportamiento es indefinido (como `[[assume]]`).
+
+El hecho **`hot`** no es una suposición de valor: marca el bloque que empieza en `<addr>` como
+`__attribute__((hot))` (ejecutado) o `((cold))` (nunca), para que el compilador reordene y ajuste el
+código. Se genera con la telemetría del runtime
+([`../../runtime/tools/opcode_hist.cpp`](../../runtime/tools/opcode_hist.cpp), 4.º argumento = fichero).
 
 ## Forma del código generado
 
@@ -102,6 +110,7 @@ comportamiento es indefinido (como `[[assume]]`).
 - Cada bloque lleva una **ficha** (rango 6502, qué hace, quién lo llama, recursos), según la regla
   de código autodocumentado de [`../../../../AGENTS.md`](../../../../AGENTS.md).
 - `N2A_ASSUME(...)` al inicio del bloque para los hechos leídos (`--facts`).
+- `__attribute__((hot))`/`((cold))` en la firma del bloque según el calor (`--facts hot`).
 
 ## Test
 
@@ -115,9 +124,12 @@ runtime** (`-I ../../runtime/include`) y comprueba el estado final:
 - **mini**: `X=1, A=$23, ram[0]=$23`;
 - **branch**: bucle de 5 con `ADC`/`BNE`/`JSR`/`RTS` → `A=X=5, ram[$10]=5`;
 - **misc**: pila, desplazamientos (A y memoria), `INC`/`DEC` de memoria y `JMP (ind)`; además
-  transpila con `--facts` y comprueba que el generado contiene `N2A_ASSUME`.
+  transpila con `--facts` y comprueba que el generado contiene `N2A_ASSUME` y la marca `hot`.
+- **bench** (`[6/6]`, `tests/bench_codegen.sh`): mide el **codegen** frente al intérprete y al
+  ejecutor rápido sobre una ROM de cálculo (ver [`../../docs/FAST_EXECUTOR.md`](../../docs/FAST_EXECUTOR.md)).
 
 La CPU del runtime se valida aparte con `nestest` en [`../../runtime/test/run.sh`](../../runtime/test/run.sh).
+El motor m68k (sin el engine) se comprueba en [`../m68k/run.ps1`](../m68k/run.ps1).
 
 ## Codificación
 
