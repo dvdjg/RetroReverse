@@ -15,6 +15,7 @@
 #include <emscripten.h>
 #endif
 
+#include "../enhance/profile_io.hpp"
 #include "nes_system.hpp"
 #include "rom_loader.hpp"
 #include "sdl_host.hpp"
@@ -72,6 +73,21 @@ int main(int argc, char** argv) {
 	g_nes.load_mapper(g_rom.mapper);
 	g_nes.reset();
 	std::printf("nes_sdl: mapper=%u PRG=%u CHR=%u\n", g_rom.mapper_no, g_rom.prg_size, g_rom.chr_size);
+
+	// Ajustes por ROM (opcional): "<rom>.n2a" con pack de tiles y/o paleta.
+	static n2a::enhance::AppliedProfile g_profile;
+	const eng::u32 crc = n2a::enhance::crc32(g_rom.rom, g_rom.file_size);
+	if (n2a::enhance::load_rom_profile(argv[1], crc, g_profile)) {
+		if (g_profile.has_provider) {
+			g_nes.ppu.tile_provider = &g_profile.provider;
+		}
+		if (g_profile.has_palette) {
+			g_nes.ppu.ext_palette = g_profile.palette_ptr();
+		}
+		std::printf("nes_sdl: perfil '%s' bpp=%u pack=%d paleta=%d\n", g_profile.profile.name,
+			    g_profile.profile.gfx.bpp_bg, static_cast<int>(g_profile.has_provider),
+			    static_cast<int>(g_profile.has_palette));
+	}
 
 	if (!g_host.init("NES -> SDL3", n2a::NesSystem::kScreenW, n2a::NesSystem::kScreenH, 22050)) {
 		std::printf("error: no se pudo iniciar SDL3\n");

@@ -21,6 +21,7 @@ struct LoadedRom {
 	unsigned mapper_no = 0;       ///< Número de mapper detectado.
 	eng::u32 prg_size = 0;        ///< Tamaño de PRG en bytes.
 	eng::u32 chr_size = 0;        ///< Tamaño de CHR en bytes (0 = CHR RAM).
+	eng::usize file_size = 0;     ///< Bytes válidos del fichero iNES (para CRC32).
 };
 
 /// Interpreta los bytes de una ROM iNES/NES2.0 ya copiados en `out.rom`.
@@ -31,6 +32,7 @@ inline bool parse_ines(eng::usize size, LoadedRom& out) {
 	if (size < 16u || out.rom[0] != 'N' || out.rom[1] != 'E' || out.rom[2] != 'S' || out.rom[3] != 0x1Au) {
 		return false;
 	}
+	out.file_size = size;
 	const eng::u8 flags6 = out.rom[6];
 	const eng::u8 flags7 = out.rom[7];
 	unsigned mapper_no = static_cast<unsigned>((flags6 >> 4u) | (flags7 & 0xF0u));

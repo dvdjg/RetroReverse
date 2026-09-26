@@ -11,6 +11,7 @@
 
 #include <libretro.h>
 
+#include "../enhance/profile_io.hpp"
 #include "nes_system.hpp"
 #include "plugins.hpp"
 #include "rom_loader.hpp"
@@ -29,6 +30,7 @@ static n2a::NesSystem g_sys;       ///< Núcleo NES.
 static bool g_loaded = false;      ///< ¿Hay ROM cargada?
 static n2a::retro::VideoPlugin* g_video = &n2a::retro::Plugins::default_video();
 static n2a::retro::AudioPlugin* g_audio = &n2a::retro::Plugins::default_audio();
+static n2a::enhance::AppliedProfile g_profile; ///< Perfil por ROM (si lo hay).
 
 static eng::u32 g_fb[256 * 240];          ///< Framebuffer XRGB8888.
 static eng::s16 g_audio_buf[4096 * 2];    ///< Muestras estéreo S16.
@@ -81,6 +83,42 @@ eng::u8 read_nes_pad(unsigned port) {
 	return pad;
 }
 
+/// Publica las **core options**: V2 si el frontend lo soporta, si no V1.
+void set_core_options() {
+	if (env_cb == nullptr) {
+		return;
+	}
+	unsigned version = 0;
+	if (!env_cb(RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION, &version)) {
+		version = 0;
+	}
+	if (version >= 2u) {
+		static retro_core_option_v2_category cats[] = {
+			{"video", "Video", "Opciones de video del emulador"},
+			{"audio", "Audio", "Opciones de audio del emulador"},
+			{nullptr, nullptr, nullptr},
+		};
+		static retro_core_option_v2_definition defs[] = {
+			{"nes_video_plugin", "Video plugin", nullptr, "Convierte los graficos de la NES.",
+			 nullptr, "video", {{"raw", nullptr}, {"gray", nullptr}, {nullptr, nullptr}},
+			 "raw"},
+			{"nes_audio_plugin", "Audio plugin", nullptr, "Convierte el audio del APU.", nullptr,
+			 "audio", {{"linear", nullptr}, {"mute", nullptr}, {nullptr, nullptr}}, "linear"},
+			{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{nullptr, nullptr}},
+			 nullptr},
+		};
+		retro_core_options_v2 opts {cats, defs};
+		env_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, &opts);
+	} else {
+		static const retro_variable vars[] = {
+			{"nes_video_plugin", "Video plugin; raw|gray"},
+			{"nes_audio_plugin", "Audio plugin; linear|mute"},
+			{nullptr, nullptr},
+		};
+		env_cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(vars));
+	}
+}
+
 } // namespace
 
 // --- Ciclo de vida ---------------------------------------------------------
@@ -117,13 +155,8 @@ void retro_init() {
 	if (env_cb != nullptr) {
 		enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
 		env_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt);
-		static const retro_variable vars[] = {
-			{"nes_video_plugin", "Video plugin; raw|gray"},
-			{"nes_audio_plugin", "Audio plugin; linear|mute"},
-			{nullptr, nullptr},
-		};
-		env_cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(vars));
 	}
+	set_core_options();
 }
 
 void retro_deinit() {}
@@ -144,6 +177,19 @@ bool retro_load_game(const struct retro_game_info* game) {
 	}
 	g_sys.load_mapper(g_rom.mapper);
 	g_sys.reset();
+
+	// Ajustes por ROM (opcional): "<rom>.n2a" (pack de tiles / paleta).
+	if (game->path != nullptr) {
+		const eng::u32 crc = n2a::enhance::crc32(g_rom.rom, g_rom.file_size);
+		if (n2a::enhance::load_rom_profile(game->path, crc, g_profile)) {
+			if (g_profile.has_provider) {
+				g_sys.ppu.tile_provider = &g_profile.provider;
+			}
+			if (g_profile.has_palette) {
+				g_sys.ppu.ext_palette = g_profile.palette_ptr();
+			}
+		}
+	}
 	refresh_plugins();
 	g_loaded = true;
 	return true;

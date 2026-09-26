@@ -49,6 +49,15 @@ else
 	echo "AVISO: sin ROM en roms/nes; se omite el test del sistema."
 fi
 
+echo "[extra] ajustes por ROM (pack 4 bpp sin afectar a la emulacion)"
+if [ -n "$ROM_NES" ] && [ -f "$ROM_NES" ]; then
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \
+		"$ROOT/enhance/test/enhance_test.cpp" -o "$ROOT/build/enhance_test"
+	"$ROOT/build/enhance_test" "$ROM_NES" 30
+else
+	echo "AVISO: sin ROM en roms/nes; se omite el test de ajustes por ROM."
+fi
+
 echo "[extra] telemetria de valores (--facts)"
 if [ -f "$NESTEST" ]; then
 	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" "$ROOT/tools/facts_from_run.cpp" -o "$ROOT/build/facts_from_run"

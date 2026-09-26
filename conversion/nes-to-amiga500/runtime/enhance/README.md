@@ -74,8 +74,16 @@ audio.plugin  linear
 
 ## Estado y siguientes pasos
 
-- **HECHO**: interfaces (`ITileProvider`, `NesTileProvider`), perfiles (`RomProfile`,
-  `parse_profile`), hook en la PPU con **proveedor 4 bpp probado**, paleta extendida en la
-  conversión a RGB y en el plugin de vídeo.
-- **PENDIENTE**: cargador real de packs (tileset 4 bpp + paleta desde fichero), búsqueda por
-  CRC en los frontends y core options por juego en RetroArch.
+- **HECHO**:
+  - Interfaces (`ITileProvider`, `NesTileProvider`) y **pack loader** (`PackProvider`,
+    `load_pack`, `load_palette`) con formato binario documentado.
+  - **Perfiles** (`RomProfile`, `parse_profile`) y carga en host (`profile_io.hpp`): busca
+    `<rom>.n2a`, resuelve rutas relativas y monta el proveedor/paleta.
+  - **Frontends**: el runner SDL3 y el core libretro buscan el perfil por ROM; la PPU usa
+    `tile_provider`/`ext_palette`. **Core Options V2** (vídeo/audio) con fallback V1.
+  - **Test**: `enhance/test/enhance_test.cpp` verifica que la emulación es **idéntica** con y sin
+    pack (solo cambia el framebuffer).
+- **PENDIENTE**:
+  - Herramienta para **generar packs** (convertir PNG→tileset 4 bpp + paleta).
+  - Repositorio/carpeta estándar de packs y resolución por **directorio de sistema** de RetroArch.
+  - Opciones por juego explícitas en RetroArch (además del perfil `<rom>.n2a`).

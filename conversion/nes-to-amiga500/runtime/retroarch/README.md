@@ -94,7 +94,8 @@ contrato libretro:
 ## Estado
 
 - **HECHO**: core que compila, se carga en el orquestador, ejecuta frames con determinismo y genera
-  screenshot; plugins de vídeo/audio por core options; savestates; RAM expuesta.
-- **PENDIENTE**: enganchar el camino transpilado/HLE; **cargador de packs por ROM** (tiles 4 bpp +
-  paleta) y perfil por CRC; core options V2 con etiquetas/idiomas; *drag & drop* de ROM; build wasm
-  del core; cores hermanos (Megadrive, …).
+  screenshot; plugins de vídeo/audio por **Core Options V2** (con fallback V1); **perfil por ROM**
+  (`<rom>.n2a` con pack de tiles 4 bpp y paleta); savestates; RAM expuesta.
+- **PENDIENTE**: enganchar el camino transpilado/HLE; carpeta estándar de packs (por directorio de
+  sistema) y herramientas para generarlos; core options por juego explícitas; *drag & drop* de ROM;
+  build wasm del core; cores hermanos (Megadrive, …).
