@@ -95,9 +95,8 @@ int main(int argc, char** argv) {
 	std::printf("instrucciones: %lu  cubiertas: %lu (%.1f%%)  fallback: %lu (%.1f%%)\n", total,
 			g_covered, total ? 100.0 * g_covered / total : 0.0, g_fallback,
 			total ? 100.0 * g_fallback / total : 0.0);
-	std::printf("  de ellas, por direccion no decodificada: %lu (%.1f%%); por opcode no cubierto: %lu\n",
-			g_undecoded, total ? 100.0 * g_undecoded / total : 0.0,
-			g_fallback - g_undecoded);
+	std::printf("  decodificaciones al vuelo (has==0 antes del step): %lu (%.2f%%)\n",
+			g_undecoded, total ? 100.0 * g_undecoded / total : 0.0);
 
 	// Ranking de opcodes que caen al intérprete (los candidatos a cubrir),
 	// ordenados por frecuencia.

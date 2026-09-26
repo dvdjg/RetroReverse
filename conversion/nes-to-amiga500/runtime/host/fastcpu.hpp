@@ -33,8 +33,10 @@ struct FastCpu {
 		eng::u8 size = 1;     ///< Bytes de la instrucción.
 	};
 
-	Dec* dec = nullptr;      ///< Tabla por dirección (0x10000 entradas).
-	eng::u8* has = nullptr;  ///< 1 si la dirección es inicio de instrucción.
+	Dec* dec = nullptr;             ///< Tabla por dirección (0x10000 entradas).
+	eng::u8* has = nullptr;         ///< 1 si la dirección es inicio de instrucción.
+	const eng::u8* prg_ = nullptr;  ///< PRG-ROM (observador) para decodificar bajo demanda.
+	eng::u32 prg_size_ = 0;         ///< Tamaño de la PRG en bytes (16 KB se espeja).
 
 	/// ¿El ejecutor rápido resuelve `op` (en vez de caer al intérprete)?
 	/// Es la lista autoritativa de cobertura: `step` la usa como puerta y las
@@ -122,6 +124,29 @@ struct FastCpu {
 			destroy();
 			return false;
 		}
+		prg_ = prg;
+		prg_size_ = prg_size;
+		decode_run(reset);
+		if (nmi >= 0x8000u) {
+			decode_run(nmi);
+		}
+		if (irq >= 0x8000u) {
+			decode_run(irq);
+		}
+		return true;
+	}
+
+	/// Decodifica el flujo de control alcanzable desde `start` (si aún no lo está),
+	/// rellenando `dec`/`has`. Se puede llamar en caliente: cuando un salto
+	/// calculado cae en una dirección sin decodificar, el ejecutor la decodifica al
+	/// primer uso (no hay asignaciones: `dec`/`has` ya están reservados).
+	/// \param start Dirección 6502 de la que partir.
+	void decode_run(eng::u16 start) {
+		if (prg_ == nullptr || prg_size_ == 0u) {
+			return;
+		}
+		const eng::u8* prg = prg_;
+		const eng::u32 prg_size = prg_size_;
 		auto rd = [&](eng::u16 a) -> int {
 			if (a < 0x8000u) {
 				return -1;
@@ -132,7 +157,6 @@ struct FastCpu {
 			}
 			return off < prg_size ? prg[off] : -1;
 		};
-
 		eng::u16 wl[4096];
 		int n = 0;
 		auto push = [&](eng::u16 a) {
@@ -140,10 +164,7 @@ struct FastCpu {
 				wl[n++] = a;
 			}
 		};
-		push(reset);
-		if (nmi >= 0x8000u) push(nmi);
-		if (irq >= 0x8000u) push(irq);
-
+		push(start);
 		while (n > 0) {
 			eng::u16 pc = wl[--n];
 			for (;;) {
@@ -210,7 +231,6 @@ struct FastCpu {
 				}
 			}
 		}
-		return true;
 	}
 
 	/// Libera la tabla decodificada.
@@ -532,7 +552,10 @@ struct FastCpu {
 		}
 		const eng::u16 pc = cpu.PC;
 		if (self->has[pc] == 0u) {
-			return 0;
+			self->decode_run(pc); // salto calculado: decodifica al primer uso
+			if (self->has[pc] == 0u) {
+				return 0;
+			}
 		}
 		const Dec& d = self->dec[pc];
 		if (!covers(d.opcode)) {
@@ -590,7 +613,13 @@ struct FastCpu {
 			}
 			const eng::u16 pc = cpu.PC;
 			if (self->has[pc] == 0u) {
-				break;
+				if (total != 0) {
+					break; // deja la decodificación para el siguiente bloque
+				}
+				self->decode_run(pc); // salto calculado: decodifica al primer uso
+				if (self->has[pc] == 0u) {
+					break;
+				}
 			}
 			const Dec& d = self->dec[pc];
 			// `eval` devuelve 0 sin efectos para opcodes no cubiertos: se corta

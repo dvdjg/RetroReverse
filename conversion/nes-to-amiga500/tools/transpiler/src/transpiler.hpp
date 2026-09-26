@@ -43,6 +43,35 @@ inline constexpr eng::u8 kHasOperand = 0x01u;
 /// El campo `flags` de `Instruction` marca que `target` es válido.
 inline constexpr eng::u8 kHasTarget = 0x02u;
 
+/// Ciclos **base** (sin penalización de página/rama) de cada opcode 6502, igual
+/// que la tabla del intérprete del runtime. Se usa para estimar los ciclos de un
+/// bloque en el código generado (`n2a_block_cycles`), de modo que el runtime pueda
+/// avanzar la PPU al ejecutar bloques generados. La estimación omite solo las
+/// penalizaciones dependientes de datos (≤ 1 ciclo por instrucción).
+/// \param op Byte de opcode.
+/// \return Ciclos base (2..8; 0 si el opcode no tiene entrada).
+[[nodiscard]] inline eng::u8 op_base_cycles(eng::u8 op) noexcept {
+	static constexpr eng::u8 t[256] = {
+		/*00*/ 7, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
+		/*10*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+		/*20*/ 6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
+		/*30*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+		/*40*/ 6, 6, 2, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,
+		/*50*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+		/*60*/ 6, 6, 2, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
+		/*70*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+		/*80*/ 2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+		/*90*/ 2, 6, 2, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
+		/*A0*/ 2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+		/*B0*/ 2, 5, 2, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
+		/*C0*/ 2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+		/*D0*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+		/*E0*/ 2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+		/*F0*/ 2, 5, 2, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+	};
+	return t[op];
+}
+
 /// Clase de hecho de valores sobre una dirección (aportado por análisis o
 /// telemetría; ver [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
 enum class FactKind : eng::u8 {
@@ -695,38 +724,29 @@ private:
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
 
+		// Las ramas y `JMP` **siempre** vuelven al despacho (`cpu.PC = destino;
+		// return;`), sin `goto` interno: así el runtime puede avanzar la PPU entre
+		// bloques y no se cuelga en un bucle de espera de VBlank. `block_start` ya
+		// no decide nada aquí (se conserva el parámetro por uniformidad).
+		(void)block_start;
 		if (info.mode == AddrMode::Rel) {
 			out.append("    ");
 			append_comment(out, in, info);
 			out.append('\n');
-			if (in.target == block_start) {
-				out.append("    if (");
-				out.append(branch_cond(m));
-				out.append(") goto ");
-				append_label_ref(out, in.target);
-				out.append(";\n");
-			} else {
-				out.append("    if (");
-				out.append(branch_cond(m));
-				out.append(") { cpu.PC = 0x");
-				out.append_hex(in.target, 4u, true);
-				out.append("; return; }\n");
-			}
+			out.append("    if (");
+			out.append(branch_cond(m));
+			out.append(") { cpu.PC = 0x");
+			out.append_hex(in.target, 4u, true);
+			out.append("; return; }\n");
 			return;
 		}
 		if (sv_equal(m, "JMP") && info.mode == AddrMode::Abs) {
 			out.append("    ");
 			append_comment(out, in, info);
 			out.append('\n');
-			if (in.target == block_start) {
-				out.append("    goto ");
-				append_label_ref(out, in.target);
-				out.append(";\n");
-			} else {
-				out.append("    cpu.PC = 0x");
-				out.append_hex(in.target, 4u, true);
-				out.append("; return;\n");
-			}
+			out.append("    cpu.PC = 0x");
+			out.append_hex(in.target, 4u, true);
+			out.append("; return;\n");
 			return;
 		}
 		if (sv_equal(m, "JMP") && info.mode == AddrMode::Ind) {
@@ -983,6 +1003,30 @@ private:
 		return -1;
 	}
 
+	/// Ciclos **base** estimados de un bloque (suma de `op_base_cycles`, sin
+	/// penalizaciones dependientes de datos). Se emite como `n2a_block_cycles`
+	/// para que el runtime pueda avanzar la PPU al ejecutar bloques generados.
+	/// \param start Dirección de inicio del bloque.
+	/// \return Ciclos base, saturado a 65535.
+	[[nodiscard]] eng::u16 block_base_cycles(eng::u16 start) const {
+		eng::u16 pc = start;
+		eng::u32 sum = 0u;
+		for (;;) {
+			if (has_instr_[pc] == 0u || (pc != start && leaders_[pc] != 0u)) {
+				break;
+			}
+			const OpcodeInfo& info = kOpcodeTable[instr_[pc].opcode];
+			sum += op_base_cycles(instr_[pc].opcode);
+			pc = static_cast<eng::u16>(pc + info.size);
+			if (info.mode == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
+			    sv_equal(info.mnemonic, "JSR") || sv_equal(info.mnemonic, "RTS") ||
+			    sv_equal(info.mnemonic, "RTI") || sv_equal(info.mnemonic, "BRK")) {
+				break;
+			}
+		}
+		return sum > 0xFFFFu ? static_cast<eng::u16>(0xFFFFu) : static_cast<eng::u16>(sum);
+	}
+
 	void emit_blocks(Dyn& out) const {
 		out.append("// ---- Basic blocks ----\n\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -1001,11 +1045,45 @@ private:
 		}
 		out.append('\n');
 
+		// Orden de definición: bloques **calientes primero** (mejor localidad de
+		// I-fetch, crítico en A500 sin caché). Los fríos (`heat==0`) van al final
+		// (además de llevar `__attribute__((cold))`); sin dato de calor se mantiene
+		// el orden por dirección. `order`/`heat` van en paralelo.
+		eng::util::Vector<eng::u16, eng::util::HeapAlloc> order {};
+		eng::util::Vector<int, eng::util::HeapAlloc> heat {};
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (leaders_[a] == 0u) {
 				continue;
 			}
-			const eng::u16 start = static_cast<eng::u16>(a);
+			(void)order.push_back(static_cast<eng::u16>(a));
+			(void)heat.push_back(hot_count(static_cast<eng::u16>(a)));
+		}
+		// rank: 0 caliente (>0), 1 sin dato (-1), 2 frío (0). Orden estable con
+		// inserción: dentro de un rango, más calor primero y, si no, por dirección.
+		const auto rank = [](int h) { return h > 0 ? 0 : (h == 0 ? 2 : 1); };
+		for (eng::usize i = 1u; i < order.size(); ++i) {
+			const eng::u16 ka = order[i];
+			const int ha = heat[i];
+			const int ra = rank(ha);
+			eng::usize j = i;
+			while (j > 0u) {
+				const int rb = rank(heat[j - 1u]);
+				const bool move = (ra != rb) ? (ra < rb)
+							     : (ra == 0) ? (ha > heat[j - 1u])
+									 : (ka < order[j - 1u]);
+				if (!move) {
+					break;
+				}
+				order[j] = order[j - 1u];
+				heat[j] = heat[j - 1u];
+				--j;
+			}
+			order[j] = ka;
+			heat[j] = ha;
+		}
+
+		for (eng::usize oi = 0; oi < order.size(); ++oi) {
+			const eng::u16 start = order[oi];
 			emit_block_doc(out, start);
 			// Calor del bloque (telemetría `--facts`): `hot`/`cold` guían al
 			// compilador (reordenado y `-Os` en los fríos). Sin dato, sin marca.
@@ -1019,10 +1097,7 @@ private:
 			out.append("bb_");
 			out.append_hex(start, 4u, true);
 			out.append("(CPU& cpu) {\n");
-			if (labels_[start] != 0u) {
-				append_label_ref(out, start, "L_");
-				out.append(":\n");
-			}
+			// (Sin etiquetas internas: las ramas vuelven al despacho por `cpu.PC`.)
 			emit_assumptions(out, start);
 
 			// VSA intra-bloque: mapa de valores constantes vistos (`LDA #c; STA a`).
@@ -1148,6 +1223,21 @@ private:
 			out.append(";\n");
 		}
 		out.append("}\n\n");
+		out.append("/// Ciclos base estimados del bloque que empieza en `pc` (sin penalización de\n");
+		out.append("/// página/rama). Permite al runtime avanzar la PPU al ejecutar bloques\n");
+		out.append("/// generados (camino transpilado). `2u` por defecto si `pc` no es un bloque.\n");
+		out.append("[[maybe_unused]] static eng::u16 n2a_block_cycles(eng::u16 pc) {\n    switch (pc) {\n");
+		for (eng::u32 a = 0; a < kSpace; ++a) {
+			if (leaders_[a] == 0u) {
+				continue;
+			}
+			out.append("    case 0x");
+			out.append_hex(static_cast<eng::u16>(a), 4u, true);
+			out.append(": return ");
+			out.append_u32(block_base_cycles(static_cast<eng::u16>(a)));
+			out.append("u;\n");
+		}
+		out.append("    default: return 2u;\n    }\n}\n\n");
 		out.append("/// Punto de entrada del juego. Arranca en el vector de reset y ejecuta\n");
 		out.append("/// bloques despachados por cpu.PC hasta que el PC no tenga bloque (retorno)\n");
 		out.append("/// o la CPU se detenga (BRK). No reserva recursos; usa g_state.\n");

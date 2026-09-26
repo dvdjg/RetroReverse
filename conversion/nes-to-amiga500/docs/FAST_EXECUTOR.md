@@ -98,8 +98,28 @@ cálculo (`--emit-bench-rom`, 294 657 instrucciones), host `g++ -O2`:
 | **Codegen (transpilador)** | ~2239 | **~13×** |
 
 Con equivalencia exacta (mismo estado final los tres). El codegen es, con diferencia, la palanca para
-superar el techo del dispatch; queda **ejecutarlo para ROMs reales** (necesita un planificador de
-PPU/VBlank) y que el *banking* no rompa la constancia.
+superar el techo del dispatch.
+
+### Codegen para ROMs reales (con PPU)
+
+`tools/transpiler/tests/gen_frame.sh` ejecuta el **código generado dentro del `NesSystem`** (PPU/APU/
+mapper reales): el transpilador emite los `bb_*` y `n2a_block_cycles(pc)` (ciclos base por bloque), y
+un hook (`gen_run`) despacha los bloques desde `retro_run`/`run_frame`, avanzando la PPU. Para que el
+runtime pueda ceder a la PPU **entre bloques**, las ramas y `JMP` generan `cpu.PC = destino; return;`
+(sin `goto` interno), de modo que un bucle de espera de VBlank no cuelga.
+
+Resultado sobre **Donkey Kong** (NROM, 60 frames, host):
+
+| Motor | fps (frame completo) |
+|---|---:|
+| Intérprete | ~4130 |
+| **Codegen** | ~5100 (**1.2×**) |
+
+Con **framebuffer idéntico** (0/61440 píxeles distintos) y 11/2048 bytes de RAM distintos. La
+diferencia de RAM viene de que la temporalización es **aproximada** (`n2a_block_cycles` suma ciclos
+base, sin penalización de página/rama ni bucles intra-bloque). El frame completo lo domina la PPU, así
+que el 13× de CPU se diluye a ~1,2×. Hechos de calor (`--facts hot`) aplicados en la misma corrida sin
+cambiar la equivalencia.
 
 ## m68k (sin el engine)
 

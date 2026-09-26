@@ -103,14 +103,18 @@ código. Se genera con la telemetría del runtime
 - Un **basic block por función** (`bb_XXXX`), con `goto` a etiquetas **solo dentro del bloque**
   (auto-bucles). Los saltos entre bloques hacen `cpu.PC = destino; return;` (vuelven al despacho),
   porque una etiqueta C++ no es visible desde otra función.
-- `JMP` absoluto estático → `goto` (mismo bloque) o `cpu.PC`/`return`; `JMP (ind)` → `cpu.JMP_ind`.
+- Ramas y `JMP` absoluto → `cpu.PC = destino; return;` (vuelven al despacho, para que el runtime
+  pueda avanzar la PPU entre bloques); `JMP (ind)` → `cpu.JMP_ind`.
 - `JSR` → `cpu.JSR_abs(destino, retorno); return;`; `RTS`/`RTI` recuperan de la pila.
 - Tabla de despacho `dispatch_table[0x10000]`, `g_state`, `game_main()` y `main()` de host tras
   `#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)`.
 - Cada bloque lleva una **ficha** (rango 6502, qué hace, quién lo llama, recursos), según la regla
   de código autodocumentado de [`../../../../AGENTS.md`](../../../../AGENTS.md).
 - `N2A_ASSUME(...)` al inicio del bloque para los hechos leídos (`--facts`).
-- `__attribute__((hot))`/`((cold))` en la firma del bloque según el calor (`--facts hot`).
+- `__attribute__((hot))`/`((cold))` en la firma del bloque según el calor (`--facts hot`), con los
+  bloques calientes emitidos primero.
+- `n2a_block_cycles(pc)`: ciclos base por bloque, para que el runtime avance la PPU al ejecutar
+  bloques generados (`tests/gen_frame.sh`).
 
 ## Test
 
@@ -127,6 +131,13 @@ runtime** (`-I ../../runtime/include`) y comprueba el estado final:
   transpila con `--facts` y comprueba que el generado contiene `N2A_ASSUME` y la marca `hot`.
 - **bench** (`[6/6]`, `tests/bench_codegen.sh`): mide el **codegen** frente al intérprete y al
   ejecutor rápido sobre una ROM de cálculo (ver [`../../docs/FAST_EXECUTOR.md`](../../docs/FAST_EXECUTOR.md)).
+
+Fuera del smoke test (tarda más) hay dos comprobaciones sobre ROMs reales/rendimiento:
+
+- `tests/gen_frame.sh`: transpila una ROM NROM real (p. ej. Donkey Kong) y la ejecuta con el **código
+  generado dentro del `NesSystem`** (PPU real), comparando con el intérprete (ver
+  [`../../docs/FAST_EXECUTOR.md`](../../docs/FAST_EXECUTOR.md)).
+- `tests/bench_codegen.sh`: mide el codegen frente al intérprete y al ejecutor rápido.
 
 La CPU del runtime se valida aparte con `nestest` en [`../../runtime/test/run.sh`](../../runtime/test/run.sh).
 El motor m68k (sin el engine) se comprueba en [`../m68k/run.ps1`](../m68k/run.ps1).

@@ -35,6 +35,21 @@ para 68000 (sin `long long` en rutas calientes, sin alineación problemática). 
 motores dan el **mismo estado final** (`steps=294657 A=9E [$10]=C4 [$11]=3C`), coherente con el
 benchmark de codegen (`tools/transpiler/tests/bench_codegen.sh`).
 
+### Cold-splitting (con hechos de calor)
+
+Si se transpila una ROM con `--facts <hot.txt>` (calor por bloque), los bloques se marcan
+`__attribute__((hot/cold))` y se emiten con los calientes primero. En m68k, GCC los separa en
+secciones, sacando el código frío del camino caliente (I-fetch sin caché). Para Donkey Kong:
+
+| Sección | Tamaño |
+|---|---:|
+| `.text` (neutro) | 21 472 B |
+| `.text.hot` | 23 664 B |
+| `.text.unlikely` (frío) | 111 154 B |
+
+El código generado es **~3× más grande** que el intérprete (47 KB): más rápido, pero pesa; el
+*cold-splitting* mantiene el camino caliente compacto.
+
 **Pendiente**: medir **ciclos reales en A500**. El benchmark es *bare-metal* (solo objeto); para
 ejecutarlo hace falta enlazarlo con un arranque AmigaDOS y lanzarlo bajo **WinUAE** (presente en el
 entorno, p. ej. `WinUAE-DBG`). Alternativas: contar instrucciones m68k del bucle caliente con
