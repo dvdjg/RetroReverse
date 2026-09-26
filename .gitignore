@@ -98,3 +98,8 @@ tools/orchestrator/cfg/
 # --- Proyectos del emulador de reversing (libRetroReversing; regenerables) ---
 RE_projects/
 **/RE_projects/
+
+# --- Plugins transpilados generados (regenerables con nes_transpiler --emit-lib) ---
+conversion/**/transpiled/
+*.n2x
+*.n2x.json

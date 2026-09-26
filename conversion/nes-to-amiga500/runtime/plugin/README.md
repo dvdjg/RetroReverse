@@ -81,6 +81,14 @@ En el host SDL3:
 - **Verificar**: `nes_sdl --verify juego.x64nt.n2x [frames]` ejecuta el plugin y el intérprete sobre
   la misma ROM y compara RAM/framebuffer (`IDENTICO`/`DIVERGE`), sin ventana.
 
+## Trazas y logs
+
+El host usa [`../host/n2a_log.hpp`](../host/n2a_log.hpp) (nivel configurable, a `stderr` sin búfer +
+fichero opcional). Por defecto **Info** (mínimo en release); `--verbose`/`-v` → Debug (pasos internos),
+`--trace` → Trace (incl. per-frame), `--log-level <n>` y `--log-file <f>`, o entorno
+`N2A_LOG=<error|warn|info|debug|trace>`. Las etapas clave (carga de plugin, ABI, motor, jugar, fin de
+frames) se registran; la **última línea** indica dónde quedó el proceso antes de fallar.
+
 ## Verificación
 
 `plugin/load_test.cpp` carga un `.n2x`, monta el `NesSystem` con su ROM y compara el **motor codegen

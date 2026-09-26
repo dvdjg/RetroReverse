@@ -13,6 +13,7 @@
 
 #include <eng/core/types/types.hpp>
 
+#include "../host/n2a_log.hpp"
 #include "../include/nes_mapper.hpp"
 #include "../include/nes_runtime.hpp"
 #include "../include/nes_system.hpp"
@@ -60,9 +61,12 @@ struct TranspiledGame {
 	/// \return `true` si se cargó y es compatible.
 	bool load(const char* path) {
 		unload();
+		N2A_LOGD("cargando plugin '%s'", path);
 #if defined(_WIN32)
 		handle = static_cast<void*>(LoadLibraryA(path));
 		if (handle == nullptr) {
+			N2A_LOGE("LoadLibrary fallo para '%s' (err %lu)", path,
+				 static_cast<unsigned long>(GetLastError()));
 			return false;
 		}
 		auto sym = [&](const char* n) { return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(handle), n)); };
@@ -85,14 +89,19 @@ struct TranspiledGame {
 		if (fn_version == nullptr || fn_arch == nullptr || fn_init == nullptr ||
 		    fn_prg == nullptr || fn_prg_size == nullptr || fn_chr == nullptr ||
 		    fn_chr_size == nullptr || fn_mapper == nullptr || fn_block == nullptr) {
+			N2A_LOGE("plugin '%s' sin ABI completa (falta algun n2a_*)", path);
 			unload();
 			return false;
 		}
 		if (fn_version() != N2A_ABI_VERSION || fn_arch() != n2a_host_arch()) {
+			N2A_LOGE("ABI/arquitectura incompatible: plugin v%d/%d, host v%d/%d ('%s')",
+				 fn_version(), fn_arch(), N2A_ABI_VERSION, n2a_host_arch(), path);
 			unload(); // binario de otra versión/arquitectura
 			return false;
 		}
+		N2A_LOGD("ABI ok (v%d/%d); init tabla de despacho", fn_version(), fn_arch());
 		fn_init();
+		N2A_LOGD("plugin listo: mapper=%d PRG=%u CHR=%u", fn_mapper(), fn_prg_size(), fn_chr_size());
 		return true;
 	}
 

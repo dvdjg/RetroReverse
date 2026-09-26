@@ -24,6 +24,7 @@
 #include "../enhance/profile_io.hpp"
 #include "../plugin/n2a_loader.hpp"
 #include "fastcpu.hpp"
+#include "n2a_log.hpp"
 #include "nes_system.hpp"
 #include "rom_loader.hpp"
 #include "sdl_host.hpp"
@@ -87,6 +88,11 @@ int emu_tick_once() {
 	g_nes.apu.generate_samples(eng::Span<eng::s16> {g_audio, 512});
 	g_host.audio_write(g_audio, 512);
 	++g_frame;
+	if (g_frame == 1) {
+		N2A_LOGD("primer frame presentado (PPU/APU ok)");
+	} else if ((g_frame % 300) == 0) {
+		N2A_LOGT("frame %d", g_frame);
+	}
 	if (g_frames_limit > 0 && g_frame >= g_frames_limit) {
 		return 0;
 	}
@@ -273,10 +279,33 @@ static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, 
 }
 
 int main(int argc, char** argv) {
+	// Configuración de trazas (antes que nada, para trazar el resto).
+	{
+		const char* env = std::getenv("N2A_LOG");
+		if (env != nullptr) {
+			n2a::log_set_level(n2a::log_parse_level(env));
+		}
+		for (int i = 1; i < argc; ++i) {
+			if (std::strcmp(argv[i], "--verbose") == 0 || std::strcmp(argv[i], "-v") == 0) {
+				n2a::log_set_level(n2a::LogLevel::Debug);
+			} else if (std::strcmp(argv[i], "--trace") == 0) {
+				n2a::log_set_level(n2a::LogLevel::Trace);
+			} else if (std::strcmp(argv[i], "--log-level") == 0 && i + 1 < argc) {
+				n2a::log_set_level(n2a::log_parse_level(argv[++i]));
+			} else if (std::strcmp(argv[i], "--log-file") == 0 && i + 1 < argc) {
+				if (!n2a::log_set_file(argv[++i])) {
+					std::fprintf(stderr, "aviso: no se pudo abrir el fichero de log\n");
+				}
+			}
+		}
+	}
+	N2A_LOGI("nes_sdl arrancando (nivel de log=%d)", n2a::log_level());
+
 	if (argc < 2) {
-		std::printf("uso: nes_sdl <rom.nes|juego.n2x> [frames]\n");
+		std::printf("uso: nes_sdl <rom.nes|juego.n2x> [frames] [--verbose|--trace]\n");
 		std::printf("     nes_sdl --verify  <juego.n2x> [frames]   (compara con el interprete)\n");
 		std::printf("     nes_sdl --manager <dir>                  (gestor de .n2x)\n");
+		std::printf("     opciones: --verbose | --trace | --log-level <n> | --log-file <f>\n");
 		return 1;
 	}
 	if (std::strcmp(argv[1], "--verify") == 0) {
@@ -292,6 +321,7 @@ int main(int argc, char** argv) {
 		scan_n2x(dir, list);
 		std::sort(list.begin(), list.end(),
 			  [](const MenEntry& a, const MenEntry& b) { return a.name < b.name; });
+		N2A_LOGI("gestor: %d .n2x en '%s'", static_cast<int>(list.size()), dir);
 		if (!g_host.init("Gestor NES .n2x", n2a::NesSystem::kScreenW, n2a::NesSystem::kScreenH,
 				 22050)) {
 			std::printf("error: no se pudo iniciar SDL3\n");
@@ -318,6 +348,7 @@ int main(int argc, char** argv) {
 						 : "Verificacion: error";
 			} else if (act == 3 && n > 0) {
 				if (!g_game.load(list[sel].path.c_str())) {
+					N2A_LOGE("etapa: carga de plugin '%s'", list[sel].path.c_str());
 					msg = "No se pudo cargar el .n2x";
 					continue;
 				}
@@ -326,13 +357,16 @@ int main(int argc, char** argv) {
 				g_nes.reset();
 				g_nes.fast_ctx = &g_game;
 				g_nes.fast_run = &n2a::TranspiledGame::fast_run;
+				N2A_LOGI("jugando '%s' (motor=codegen)", list[sel].path.c_str());
 				std::printf("nes_sdl: '%s' motor=codegen\n", list[sel].path.c_str());
 				g_frames_limit = -1;
+				g_frame = 0;
 				g_host.quit_window = false;
 				g_host.escape_menu = false;
 				while (emu_tick_once() != 0) {
 					g_host.delay_ms(16);
 				}
+				N2A_LOGI("fin de '%s': %d frames", list[sel].path.c_str(), g_frame);
 				if (g_host.quit_window) {
 					break;
 				}
@@ -350,6 +384,7 @@ int main(int argc, char** argv) {
 		// Plugin transpilado (`.n2x`): el cartucho y el código vienen del plugin;
 		// el intérprete/PPU/APU/mapper los pone este host (fallback en RAM/saltos).
 		if (!g_game.load(argv[1])) {
+			N2A_LOGE("etapa: carga de plugin '%s' (invalido o ABI/arquitectura)", argv[1]);
 			std::printf("error: plugin '%s' invalido o ABI/arquitectura incompatible\n",
 				    argv[1]);
 			return 1;
@@ -359,6 +394,8 @@ int main(int argc, char** argv) {
 		g_nes.reset();
 		g_nes.fast_ctx = &g_game;
 		g_nes.fast_run = &n2a::TranspiledGame::fast_run;
+		N2A_LOGI("plugin='%s' mapper=%d PRG=%u CHR=%u motor=codegen", argv[1], g_game.fn_mapper(),
+			 g_game.fn_prg_size(), g_game.fn_chr_size());
 		std::printf("nes_sdl: plugin='%s' mapper=%d PRG=%u CHR=%u motor=codegen\n", argv[1],
 			    g_game.fn_mapper(), g_game.fn_prg_size(), g_game.fn_chr_size());
 	} else {
