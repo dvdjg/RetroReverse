@@ -109,10 +109,25 @@ struct NesSystem {
 	/// \param out Búfer destino de tamaño al menos `kScreenW*kScreenH*3`.
 	void frame_rgb(eng::Span<eng::u8> out) const {
 		for (int i = 0; i < kScreenW * kScreenH; ++i) {
-			const eng::u8 c = static_cast<eng::u8>(ppu.fb[i] & 0x3Fu);
-			out[static_cast<eng::usize>(i) * 3u + 0u] = kPaletteRgb[c][0];
-			out[static_cast<eng::usize>(i) * 3u + 1u] = kPaletteRgb[c][1];
-			out[static_cast<eng::usize>(i) * 3u + 2u] = kPaletteRgb[c][2];
+			const eng::u8 c = ppu.fb[i];
+			eng::u8 r;
+			eng::u8 g;
+			eng::u8 b;
+			if (ppu.ext_palette != nullptr) {
+				// Paleta extendida de un pack (0x0RGB): 4 bits por canal × 17.
+				const eng::u16 v = ppu.ext_palette[c];
+				r = static_cast<eng::u8>(((v >> 8u) & 0x0Fu) * 17u);
+				g = static_cast<eng::u8>(((v >> 4u) & 0x0Fu) * 17u);
+				b = static_cast<eng::u8>((v & 0x0Fu) * 17u);
+			} else {
+				const eng::u8 cc = static_cast<eng::u8>(c & 0x3Fu);
+				r = kPaletteRgb[cc][0];
+				g = kPaletteRgb[cc][1];
+				b = kPaletteRgb[cc][2];
+			}
+			out[static_cast<eng::usize>(i) * 3u + 0u] = r;
+			out[static_cast<eng::usize>(i) * 3u + 1u] = g;
+			out[static_cast<eng::usize>(i) * 3u + 2u] = b;
 		}
 	}
 

@@ -14,6 +14,8 @@
 
 #include <eng/core/types/types.hpp>
 
+#include "../enhance/tile_provider.hpp"
+
 namespace n2a {
 
 /// Ancho y alto visibles de la NES (NTSC).
@@ -35,6 +37,11 @@ struct Ppu {
 	eng::u8 palette[0x20] {};     ///< 32 B de paleta ($3F00-$3F1F): índices de color NES.
 	const eng::u8* chr = nullptr; ///< Pattern tables (CHR-ROM), no propietario.
 	eng::u32 chr_size = 0;        ///< Tamaño de CHR en bytes.
+	/// Proveedor de tiles opcional (**ajustes por ROM**: otro grupo de tiles o
+	/// mayor profundidad, 3/4 bpp). Si es `nullptr`, se usa la CHR 2 bpp normal.
+	const enhance::ITileProvider* tile_provider = nullptr;
+	/// Paleta extendida opcional (hasta 256 colores `0x0RGB`) para packs de >2 bpp.
+	const eng::u16* ext_palette = nullptr;
 
 	// --- Dirección/scroll ---
 	eng::u16 v = 0;          ///< Dirección de VRAM ($2006) o dirección temporal.
@@ -176,15 +183,30 @@ struct Ppu {
 				const eng::u8 attr = attr_bits(nt_base, tx, ty);
 
 				const eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
-				eng::u8 p0 = chr_byte(pat);
-				eng::u8 p1 = chr_byte(static_cast<eng::u16>(pat + 8u));
 				const int bit = 7 - fine_x;
-				eng::u8 color = static_cast<eng::u8>(((p0 >> bit) & 1u) | (((p1 >> bit) & 1u) << 1u));
+				eng::u8 color;
 				eng::u8 value;
-				if (color == 0u) {
-					value = universal;
+				if (tile_provider != nullptr) {
+					// Ajuste por ROM: el proveedor decide el dibujo del tile.
+					enhance::TileRow row;
+					const bool ok = tile_provider->fetch_row(enhance::TileSpace::Bg, tile,
+										 attr, fine_y, pat, row);
+					const eng::u8 nb = tile_provider->bpp(enhance::TileSpace::Bg);
+					color = 0u;
+					if (ok) {
+						for (eng::u8 b = 0; b < nb; ++b) {
+							color = static_cast<eng::u8>(
+								color | (((row.plane[b] >> bit) & 1u) << b));
+						}
+					}
+					value = tile_provider->color(enhance::TileSpace::Bg, attr, color);
 				} else {
-					value = static_cast<eng::u8>(palette[(attr * 4 + color) & 0x1Fu] & 0x3Fu);
+					const eng::u8 p0 = chr_byte(pat);
+					const eng::u8 p1 = chr_byte(static_cast<eng::u16>(pat + 8u));
+					color = static_cast<eng::u8>(((p0 >> bit) & 1u) | (((p1 >> bit) & 1u) << 1u));
+					value = (color == 0u)
+							? universal
+							: static_cast<eng::u8>(palette[(attr * 4 + color) & 0x1Fu] & 0x3Fu);
 				}
 				fb[py * kPpuWidth + px] = value;
 				bg_opaque[py * kPpuWidth + px] = (color != 0u) ? 1u : 0u;
@@ -241,16 +263,37 @@ struct Ppu {
 					t = tile;
 				}
 				const eng::u16 pat = static_cast<eng::u16>(pbase + t * 16u + rr);
-				const eng::u8 p0 = chr_byte(pat);
-				const eng::u8 p1 = chr_byte(static_cast<eng::u16>(pat + 8u));
+				enhance::TileRow srow;
+				bool have = false;
+				eng::u8 p0 = 0;
+				eng::u8 p1 = 0;
+				if (tile_provider != nullptr) {
+					have = tile_provider->fetch_row(enhance::TileSpace::Sprite, t,
+									static_cast<eng::u8>(attr & 3u), rr, pat, srow);
+				} else {
+					p0 = chr_byte(pat);
+					p1 = chr_byte(static_cast<eng::u16>(pat + 8u));
+				}
 				for (int col = 0; col < 8; ++col) {
 					const int px = static_cast<int>(ox) + col;
 					if (px < 0 || px >= kPpuWidth) {
 						continue;
 					}
 					const int bit = flip_h ? col : (7 - col);
-					const eng::u8 color =
-						static_cast<eng::u8>(((p0 >> bit) & 1u) | (((p1 >> bit) & 1u) << 1u));
+					eng::u8 color;
+					if (tile_provider != nullptr) {
+						const eng::u8 nb = tile_provider->bpp(enhance::TileSpace::Sprite);
+						color = 0u;
+						if (have) {
+							for (eng::u8 b = 0; b < nb; ++b) {
+								color = static_cast<eng::u8>(
+									color | (((srow.plane[b] >> bit) & 1u) << b));
+							}
+						}
+					} else {
+						color = static_cast<eng::u8>(((p0 >> bit) & 1u) |
+									     (((p1 >> bit) & 1u) << 1u));
+					}
 					if (color == 0u) {
 						continue;
 					}
@@ -262,8 +305,12 @@ struct Ppu {
 					if (behind && bg_opaque[idx] != 0u) {
 						continue;
 					}
-					const eng::u8 pal = static_cast<eng::u8>(0x10u + (attr & 3u) * 4u + color);
-					fb[idx] = static_cast<eng::u8>(palette[pal & 0x1Fu] & 0x3Fu);
+					fb[idx] = (tile_provider != nullptr)
+							  ? tile_provider->color(enhance::TileSpace::Sprite,
+										 static_cast<eng::u8>(attr & 3u), color)
+							  : static_cast<eng::u8>(
+								    palette[(0x10u + (attr & 3u) * 4u + color) & 0x1Fu] &
+								    0x3Fu);
 				}
 			}
 		}

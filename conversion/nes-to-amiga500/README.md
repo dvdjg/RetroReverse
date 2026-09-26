@@ -30,6 +30,8 @@ vídeo/audio. SDL3 (3.4.16) está en `external/SDL3/`.
 
 - Plataformas: [`runtime/platform/README.md`](runtime/platform/README.md).
 - Core libretro: [`runtime/retroarch/README.md`](runtime/retroarch/README.md).
+- **Ajustes por ROM** (tiles 4 bpp, otros tilesets, paletas/audio alternativos sin tocar la
+  emulación): [`runtime/enhance/README.md`](runtime/enhance/README.md).
 
 ## Documentación
 

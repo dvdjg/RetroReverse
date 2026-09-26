@@ -41,10 +41,20 @@ struct RawVideoPlugin final : VideoPlugin {
 	void render(const Ppu& ppu, eng::u32* out, int w, int h) const override {
 		const int n = w * h;
 		for (int i = 0; i < n; ++i) {
-			const eng::u8 c = static_cast<eng::u8>(ppu.fb[i] & 0x3Fu);
-			const eng::u8 r = kPaletteRgb[c][0];
-			const eng::u8 g = kPaletteRgb[c][1];
-			const eng::u8 b = kPaletteRgb[c][2];
+			eng::u8 r;
+			eng::u8 g;
+			eng::u8 b;
+			if (ppu.ext_palette != nullptr) {
+				const eng::u16 v = ppu.ext_palette[ppu.fb[i]];
+				r = static_cast<eng::u8>(((v >> 8u) & 0x0Fu) * 17u);
+				g = static_cast<eng::u8>(((v >> 4u) & 0x0Fu) * 17u);
+				b = static_cast<eng::u8>((v & 0x0Fu) * 17u);
+			} else {
+				const eng::u8 c = static_cast<eng::u8>(ppu.fb[i] & 0x3Fu);
+				r = kPaletteRgb[c][0];
+				g = kPaletteRgb[c][1];
+				b = kPaletteRgb[c][2];
+			}
 			out[i] = 0xFF000000u | (static_cast<eng::u32>(r) << 16u) |
 				 (static_cast<eng::u32>(g) << 8u) | static_cast<eng::u32>(b);
 		}

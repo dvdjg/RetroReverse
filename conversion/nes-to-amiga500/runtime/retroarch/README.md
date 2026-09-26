@@ -44,6 +44,18 @@ El usuario los cambia en RetroArch → **Core Options**:
 registrarlo en `Plugins`. Ejemplos futuros: *composite*/NTSC, *scanlines*, reescalado, HD packs
 (vídeo); paso-bajo o mezclas alternativas (audio).
 
+### Ajustes por ROM
+
+Además de las opciones globales, el core admite **ajustes por ROM** (otro grupo de tiles, tiles
+de **4 bpp**, paletas/plugin de audio alternativos) **sin afectar a la emulación**: ver
+[`../enhance/README.md`](../enhance/README.md). Mecanismo:
+
+- **Core options por juego** de RetroArch (`*.opt`): los plugins ya son opciones; pueden fijarse
+  por título.
+- **Perfil por CRC32** ([`../enhance/rom_profile.hpp`](../enhance/rom_profile.hpp)): al cargar, el
+  core busca el perfil de la ROM y aplica `Ppu::tile_provider` / `Ppu::ext_palette`.
+- El camino HLE/Amiga no cambia: `IPatternCache`/`IScrollingLayer` aceptarán el `bpp` y la paleta.
+
 ## Transpilador integrado
 
 La idea es que el core **lleve el transpilador** y, al cargar la ROM, la convierta para ejecutarla:
@@ -83,5 +95,6 @@ contrato libretro:
 
 - **HECHO**: core que compila, se carga en el orquestador, ejecuta frames con determinismo y genera
   screenshot; plugins de vídeo/audio por core options; savestates; RAM expuesta.
-- **PENDIENTE**: enganchar el camino transpilado/HLE; core options V2 con etiquetas/idiomas;
-  *drag & drop* de ROM en RetroArch; build wasm del core; cores hermanos (Megadrive, …).
+- **PENDIENTE**: enganchar el camino transpilado/HLE; **cargador de packs por ROM** (tiles 4 bpp +
+  paleta) y perfil por CRC; core options V2 con etiquetas/idiomas; *drag & drop* de ROM; build wasm
+  del core; cores hermanos (Megadrive, …).

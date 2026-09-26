@@ -108,6 +108,33 @@ int main() {
 	// (deja OAM en un estado inocuo para las pruebas de registro siguientes)
 	ppu.oam[0] = 0xF0u;
 
+	// --- Ajuste por ROM: proveedor de tiles 4 bpp --------------------------
+	// Sustituye la lectura de CHR por planos de 4 bpp sin tocar la emulación.
+	struct Demo4bpp final : n2a::enhance::ITileProvider {
+		[[nodiscard]] eng::u8 bpp(n2a::enhance::TileSpace) const override { return 4u; }
+		[[nodiscard]] bool fetch_row(n2a::enhance::TileSpace, eng::u16, eng::u8, int, eng::u16,
+					     n2a::enhance::TileRow& out) const override {
+			out = n2a::enhance::TileRow {};
+			out.plane[0] = 0xFFu;  // bit 0 = 1
+			out.plane[3] = 0xFFu;  // bit 3 = 1  → color = 0b1001 = 9
+			return true;
+		}
+		[[nodiscard]] eng::u8 color(n2a::enhance::TileSpace, eng::u8, eng::u8 c) const override {
+			return c;  // índice directo al framebuffer
+		}
+	};
+	Demo4bpp demo;
+	ppu.tile_provider = &demo;
+	ppu.scroll_x = 0u;
+	ppu.scroll_y = 0u;
+	ppu.line_scroll = false;
+	ppu.render_background();
+	if (ppu.fb[0] != 9u) {
+		std::printf("  proveedor 4 bpp no aplicado (fb=%02X, esperado 09)\n", ppu.fb[0]);
+		++fail;
+	}
+	ppu.tile_provider = nullptr;  // vuelve al camino NES 2 bpp
+
 	// VBlank/NMI: de la scanline 240 se pasa a la 241.
 	ppu.ctrl = 0x80u;
 	ppu.scanline = 240u;
