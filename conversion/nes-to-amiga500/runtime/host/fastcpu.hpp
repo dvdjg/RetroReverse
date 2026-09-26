@@ -126,14 +126,50 @@ struct FastCpu {
 		}
 		prg_ = prg;
 		prg_size_ = prg_size;
-		decode_run(reset);
+		decode_run(reset, nullptr);
 		if (nmi >= 0x8000u) {
-			decode_run(nmi);
+			decode_run(nmi, nullptr);
 		}
 		if (irq >= 0x8000u) {
-			decode_run(irq);
+			decode_run(irq, nullptr);
 		}
 		return true;
+	}
+
+	/// Decodifica **una** instrucción en `pc` leyendo de memoria (RAM o PRG). Se usa
+	/// para **código en RAM**, que puede automodificarse: se re-decodifica en cada
+	/// ejecución (leer 1-3 bytes + tabla, barato) en vez de cachear, garantizando
+	/// corrección. Marca `has`/`dec` (0 si el opcode es desconocido).
+	/// \param pc Dirección de la instrucción.
+	/// \param mem Memoria de la consola.
+	void decode_one(eng::u16 pc, const NESMemory& mem) {
+		const int opb = mem.read(pc);
+		const OpcodeInfo& info = kOpcodeTable[opb];
+		if (info.size == 0u) {
+			has[pc] = 0u;
+			return;
+		}
+		has[pc] = 1u;
+		Dec& d = dec[pc];
+		d.opcode = static_cast<eng::u8>(opb);
+		d.size = info.size;
+		d.operand = 0u;
+		d.target = 0u;
+		if (info.size >= 2u) {
+			const int b1 = mem.read(static_cast<eng::u16>(pc + 1u));
+			if (info.mode == AddrMode::Rel) {
+				d.operand = static_cast<eng::u16>(b1);
+				d.target = static_cast<eng::u16>(pc + 2u + static_cast<eng::s8>(b1));
+			} else if (info.size == 2u) {
+				d.operand = static_cast<eng::u16>(b1);
+			} else {
+				const int b2 = mem.read(static_cast<eng::u16>(pc + 2u));
+				d.operand = static_cast<eng::u16>(b1 | (b2 << 8));
+				if (info.mode == AddrMode::Abs) {
+					d.target = d.operand; // JMP/JSR absolutos
+				}
+			}
+		}
 	}
 
 	/// Decodifica el flujo de control alcanzable desde `start` (si aún no lo está),
@@ -141,13 +177,19 @@ struct FastCpu {
 	/// calculado cae en una dirección sin decodificar, el ejecutor la decodifica al
 	/// primer uso (no hay asignaciones: `dec`/`has` ya están reservados).
 	/// \param start Dirección 6502 de la que partir.
-	void decode_run(eng::u16 start) {
+	void decode_run(eng::u16 start, const NESMemory* mem) {
 		if (prg_ == nullptr || prg_size_ == 0u) {
 			return;
 		}
 		const eng::u8* prg = prg_;
 		const eng::u32 prg_size = prg_size_;
+		// Con `mem` se decodifica también **código en RAM** ($0000-$1FFF) leyendo
+		// la RAM; sin él (build) solo la PRG. El lector evita regiones que no son
+		// código (PPU/APU) en el caso de runtime.
 		auto rd = [&](eng::u16 a) -> int {
+			if (mem != nullptr) {
+				return mem->read(a);
+			}
 			if (a < 0x8000u) {
 				return -1;
 			}
@@ -160,7 +202,8 @@ struct FastCpu {
 		eng::u16 wl[4096];
 		int n = 0;
 		auto push = [&](eng::u16 a) {
-			if (a >= 0x8000u && n < 4096) {
+			const bool ok = (mem != nullptr) ? (a >= 0x8000u || a < 0x2000u) : (a >= 0x8000u);
+			if (ok && n < 4096) {
 				wl[n++] = a;
 			}
 		};
@@ -226,8 +269,12 @@ struct FastCpu {
 					break;
 				}
 				pc = nxt;
-				if (pc < 0x8000u) {
-					break;
+				if (mem == nullptr) {
+					if (pc < 0x8000u) {
+						break;
+					}
+				} else if (pc >= 0x2000u && pc < 0x8000u) {
+					break; // fuera de RAM/PRG: no es código
 				}
 			}
 		}
@@ -551,8 +598,13 @@ struct FastCpu {
 			return 0;
 		}
 		const eng::u16 pc = cpu.PC;
-		if (self->has[pc] == 0u) {
-			self->decode_run(pc); // salto calculado: decodifica al primer uso
+		if (pc < 0x8000u) {
+			self->decode_one(pc, mem); // código en RAM: re-decodifica (automodificable)
+			if (self->has[pc] == 0u) {
+				return 0;
+			}
+		} else if (self->has[pc] == 0u) {
+			self->decode_run(pc, &mem); // salto calculado: decodifica al primer uso
 			if (self->has[pc] == 0u) {
 				return 0;
 			}
@@ -612,11 +664,16 @@ struct FastCpu {
 				break;
 			}
 			const eng::u16 pc = cpu.PC;
-			if (self->has[pc] == 0u) {
+			if (pc < 0x8000u) {
+				self->decode_one(pc, mem); // código en RAM: re-decodifica (automodificable)
+				if (self->has[pc] == 0u) {
+					break;
+				}
+			} else if (self->has[pc] == 0u) {
 				if (total != 0) {
 					break; // deja la decodificación para el siguiente bloque
 				}
-				self->decode_run(pc); // salto calculado: decodifica al primer uso
+				self->decode_run(pc, &mem); // salto calculado: decodifica al primer uso
 				if (self->has[pc] == 0u) {
 					break;
 				}

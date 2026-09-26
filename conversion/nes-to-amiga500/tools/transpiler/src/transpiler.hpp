@@ -814,8 +814,10 @@ private:
 			emit_base();
 			out.append("    cpu.JSR_abs(0x");
 			out.append_hex(in.target, 4u, true);
+			// Convención del intérprete: se apila `PC+2` (dirección del último byte
+			// del JSR) y `RTS` suma 1; así el retorno es consistente con el fallback.
 			out.append(", 0x");
-			out.append_hex(static_cast<eng::u16>(in.addr + 3u), 4u, true);
+			out.append_hex(static_cast<eng::u16>(in.addr + 2u), 4u, true);
 			out.append("); return;\n");
 			return;
 		}

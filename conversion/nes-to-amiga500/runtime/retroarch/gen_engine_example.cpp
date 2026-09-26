@@ -8,21 +8,35 @@
 
 #define N2A_NO_HOST_MAIN
 #include "gen_rom.cpp" // generado por nes_transpiler (build-codegen-core.sh)
+#include "fastcpu.hpp" // -I runtime/host (fallback de RAM/saltos calculados)
 
-/// Inicializa la tabla de despacho del código generado (una vez al cargar).
-extern "C" void n2a_codegen_init(void) { init_dispatch_table(); }
+namespace {
+n2a::FastCpu g_fast; ///< Ejecutor rápido para el fallback del codegen.
+}
+
+/// Inicializa la tabla de despacho del código generado y el ejecutor de fallback.
+extern "C" void n2a_codegen_init(void) {
+	init_dispatch_table();
+	n2a::NESMemory probe;
+	probe.prg = PRG_ROM;
+	probe.prg_size = static_cast<eng::u32>(kPrgSize);
+	g_fast.build(PRG_ROM, static_cast<eng::u32>(kPrgSize), probe.read16(0xFFFCu),
+		     probe.read16(0xFFFAu), probe.read16(0xFFFEu));
+}
 
 /// Ejecuta el `bb_*` de `cpu.PC` y devuelve sus ciclos exactos (delta de
 /// `cpu.cycles`). Si la dirección no es un bloque (salto calculado), devuelve 0 y
 /// el runtime resuelve esa instrucción con el intérprete.
 extern "C" int n2a_codegen_step(n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* n) {
-	(void)mem;
 	const eng::u16 pc = cpu.PC;
 	if (dispatch_table[pc] == nullptr) {
+		// Sin bloque estático (RAM/salto calculado): ejecutor rápido; si tampoco
+		// puede, devuelve 0 y el runtime usa el intérprete.
+		const int c = n2a::FastCpu::step(&g_fast, cpu, mem);
 		if (n != nullptr) {
-			*n = 0;
+			*n = (c > 0) ? 1 : 0;
 		}
-		return 0;
+		return c;
 	}
 	(void)budget; // cesión por instrucción pendiente (ver docs/FAST_EXECUTOR.md)
 	const eng::u32 before = cpu.cycles;

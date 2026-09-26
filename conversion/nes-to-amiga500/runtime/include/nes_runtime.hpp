@@ -451,8 +451,9 @@ struct CPU {
 	}
 	/// Llamada a subrutina: apila la dirección de regreso `ret` y salta a `t`.
 	void JSR_abs(eng::u16 t, eng::u16 ret) { push16(ret); PC = t; }
-	/// Retorno de subrutina: recupera `PC` de la pila.
-	void RTS() { PC = pull16(); }
+	/// Retorno de subrutina: recupera `PC` de la pila y suma 1 (convención del
+	/// intérprete: `JSR` apila `PC+2`, el último byte del `JSR`).
+	void RTS() { PC = static_cast<eng::u16>(pull16() + 1u); }
 	/// Retorno de interrupción: recupera los flags (ignora B y fuerza U) y `PC`,
 	/// igual que el intérprete. Restaurarlos es clave para rutinas de NMI/IRQ.
 	void RTI() {

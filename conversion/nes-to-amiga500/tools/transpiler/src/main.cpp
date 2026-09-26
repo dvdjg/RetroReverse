@@ -285,6 +285,18 @@ constexpr eng::u8 kBenchProg[] = {
 	0xD0u, 0xE2u, 0x00u,
 };
 
+// ROM que **copia una rutina a RAM ($0200) y la ejecuta** (JSR $0200), para
+// validar el código en RAM: el transpilador no la decodifica (está en RAM), así
+// que se resuelve por el fallback del runtime.
+//   $8000: LDX #$00 ; copia 17 bytes de $8012 a $0200 ; JSR $0200 ; BRK
+//   $8012: LDY #$00 ; LDA #$00 ; STA $10 ; bucle: CLC; ADC #$05; STA $10; EOR
+//          #$3C; DEY; BNE bucle ; RTS
+constexpr eng::u8 kRamProg[] = {
+	0xA2u, 0x00u, 0xBDu, 0x12u, 0x80u, 0x9Du, 0x00u, 0x02u, 0xE8u, 0xE0u, 0x11u, 0xD0u,
+	0xF5u, 0x20u, 0x00u, 0x02u, 0x00u, 0xEAu, 0xA0u, 0x00u, 0xA9u, 0x00u, 0x85u, 0x10u,
+	0x18u, 0x69u, 0x05u, 0x85u, 0x10u, 0x49u, 0x3Cu, 0x88u, 0xD0u, 0xF7u, 0x60u,
+};
+
 /// Imprime la ayuda de línea de comandos.
 /// \param argv0 Nombre del programa (no se usa; se mantiene por uniformidad).
 void print_usage(const char* argv0) {
@@ -297,6 +309,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-vsa-rom    <salida.nes>");
 	n2a::out_line("     --emit-bench-rom  <salida.nes>");
 	n2a::out_line("     --emit-cnrom-rom  <salida.nes>");
+	n2a::out_line("     --emit-ram-rom    <salida.nes>");
 }
 
 } // namespace
@@ -325,14 +338,16 @@ int main(int argc, char** argv) {
 			return 0;
 		}
 		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom" ||
-		     arg == "--emit-vsa-rom" || arg == "--emit-bench-rom" || arg == "--emit-cnrom-rom") &&
+		     arg == "--emit-vsa-rom" || arg == "--emit-bench-rom" || arg == "--emit-cnrom-rom" ||
+		     arg == "--emit-ram-rom") &&
 		    i + 1 < argc) {
 			emit = (arg == "--emit-mini-rom")     ? 1
 			       : (arg == "--emit-branch-rom") ? 2
 			       : (arg == "--emit-misc-rom")   ? 3
 			       : (arg == "--emit-vsa-rom")    ? 4
 			       : (arg == "--emit-bench-rom")  ? 5
-							      : 6;
+			       : (arg == "--emit-cnrom-rom")  ? 6
+							      : 7;
 			input = eng::util::StringView(argv[++i]);
 			continue;
 		}
@@ -353,8 +368,9 @@ int main(int argc, char** argv) {
 				: (emit == 3) ? write_ines_rom(input.data(), kMiscProg, sizeof(kMiscProg))
 				: (emit == 4) ? write_ines_rom(input.data(), kAssumeProg, sizeof(kAssumeProg))
 				: (emit == 5) ? write_ines_rom(input.data(), kBenchProg, sizeof(kBenchProg))
-					      : write_ines_rom_mapped(input.data(), kBenchProg,
-								      sizeof(kBenchProg), 3u, 1u);
+				: (emit == 6) ? write_ines_rom_mapped(input.data(), kBenchProg,
+								      sizeof(kBenchProg), 3u, 1u)
+					      : write_ines_rom(input.data(), kRamProg, sizeof(kRamProg));
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");
 			return 1;

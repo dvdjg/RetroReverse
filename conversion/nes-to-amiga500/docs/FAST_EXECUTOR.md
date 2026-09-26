@@ -156,13 +156,32 @@ cruce de página, `STA abs,Y`, `LDA (zp),Y`/`(zp,X)`, vuelta de página cero, `A
 **0 discrepancias** (los bugs de `RTI`/`BRK` se hallaron antes y quedan cubiertos por el test). Se
 ejecuta en `runtime/test/run.sh`.
 
-### Código en RAM / automodificación
+### Código en RAM, HLE y validación
 
-El transpilador solo decodifica `$8000-$FFFF`; si el programa salta a RAM (`$0000-$7FFF`), el runtime
-hace `dispatch_table[pc] == nullptr` y resuelve esa instrucción con el **intérprete** — así el código
-copiado a RAM o automodificado funciona **sin soporte específico** (solo pierde el codegen en esa zona).
-(El harness standalone `game_main` sí se detiene en `dispatch == nullptr`; es una limitación de ese
-arnés, no del runtime.)
+El transpilador solo decodifica `$8000-$FFFF`; si el programa salta a RAM (`$0000-$1FFF`), el runtime
+resuelve esas instrucciones con el **ejecutor rápido** (`FastCpu`), que ahora **decodifica RAM bajo
+demanda** leyendo los bytes en el momento (correcto ante automodificación) y solo cae al intérprete si
+el opcode tampoco está cubierto. El codegen (C++) no puede compilar RAM en runtime, así que el tramo RAM
+va a velocidad de `FastCpu`, no del codegen.
+
+Medición (`opcode_hist` reporta `f` = fracción en RAM y las direcciones RAM calientes):
+
+| ROM | f (código en RAM) |
+|---|---:|
+| Donkey Kong / Balloon Fight / SMB / Ice Climber / Excitebike | **0 %** |
+| Sintética (rutina copiada a `$0200` y bucleada) | **93.6 %** (calientes `$0207..$020E`) |
+
+En los juegos NROM el coste es **despreciable**; la ROM sintética valida el soporte y el modelo:
+`S(f) = G / (1 + f·(G-1))` con `G` = ventaja del codegen en PRG (para `G=2`: `f=0 → 2×`, `f=0.5 → 1.33×`),
+y como el frame lo domina la PPU el impacto en FPS es menor. Para RAM caliente la palanca es **HLE**:
+reconocer la rutina por sus bytes y sustituirla por código nativo (`opcode_hist` ya lista las direcciones
+candidatas).
+
+**Bug hallado al mezclar codegen y fallback**: el codegen empujaba `PC+2` pero usaba `CPU::RTS()` sin
+`+1`, mientras el fallback (intérprete/`FastCpu`) hacía `+1` → los `RTS` ejecutados en RAM volvían una
+posición de más. Se **unificó** a la convención del intérprete (`JSR` apila `PC+2`, `RTS` suma 1); los
+tests del transpilador siguen en verde y la ROM de RAM pasa a **equivalencia exacta** (RAM 0, framebuffer
+0). (El harness standalone `game_main` sigue deteniéndose en `dispatch == nullptr`.)
 
 ### Mappers (CNROM)
 

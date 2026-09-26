@@ -24,6 +24,7 @@ unsigned long g_addr[0x10000];   ///< Ejecuciones por dirección (calor de bloqu
 unsigned long g_covered = 0;     ///< Instrucciones resueltas por FastCpu.
 unsigned long g_fallback = 0;    ///< Instrucciones que caen al intérprete.
 unsigned long g_undecoded = 0;   ///< Caídas por dirección no decodificada (no por opcode).
+unsigned long g_ram = 0;         ///< Instrucciones ejecutadas en RAM (`$0000-$7FFF`).
 
 /// Hook que envuelve `FastCpu::step` para contar cobertura por opcode.
 int counting_step(void* ctx, n2a::CPU& cpu, n2a::NESMemory& mem) {
@@ -31,6 +32,9 @@ int counting_step(void* ctx, n2a::CPU& cpu, n2a::NESMemory& mem) {
 	const eng::u8 op = mem.read(pc);
 	++g_hist[op];
 	++g_addr[pc];
+	if (pc < 0x8000u) {
+		++g_ram; // código en RAM (no decodificable estáticamente)
+	}
 	if (g_fc->has[pc] == 0u) {
 		++g_undecoded; // la causa del fallback es la *dirección*, no el opcode
 	}
@@ -97,6 +101,8 @@ int main(int argc, char** argv) {
 			total ? 100.0 * g_fallback / total : 0.0);
 	std::printf("  decodificaciones al vuelo (has==0 antes del step): %lu (%.2f%%)\n",
 			g_undecoded, total ? 100.0 * g_undecoded / total : 0.0);
+	std::printf("  codigo en RAM (f): %lu (%.3f%%)\n", g_ram,
+			total ? 100.0 * g_ram / total : 0.0);
 
 	// Ranking de opcodes que caen al intérprete (los candidatos a cubrir),
 	// ordenados por frecuencia.
@@ -142,6 +148,33 @@ int main(int argc, char** argv) {
 	}
 	if (shown == 0) {
 		std::printf("  (ninguno)\n");
+	}
+
+	// Direcciones de RAM más ejecutadas: candidatas a HLE (rutinas copiadas a RAM).
+	std::printf("\n--- direcciones RAM mas calientes (candidatas a HLE) ---\n");
+	eng::u16 ram_order[512];
+	eng::u32 ram_n = 0;
+	for (eng::u32 a = 0; a < 0x8000u && ram_n < 512u; ++a) {
+		if (g_addr[a] != 0u) {
+			ram_order[ram_n++] = static_cast<eng::u16>(a);
+		}
+	}
+	for (eng::u32 i = 1u; i < ram_n; ++i) {
+		const eng::u16 ka = ram_order[i];
+		eng::u32 j = i;
+		while (j > 0u && g_addr[ka] > g_addr[ram_order[j - 1u]]) {
+			ram_order[j] = ram_order[j - 1u];
+			--j;
+		}
+		ram_order[j] = ka;
+	}
+	shown = 0;
+	for (eng::u32 i = 0; i < ram_n && shown < top; ++i) {
+		std::printf("  %04X  %8lu\n", ram_order[i], g_addr[ram_order[i]]);
+		++shown;
+	}
+	if (shown == 0) {
+		std::printf("  (ninguna: sin codigo en RAM)\n");
 	}
 
 	if (argc > 4) {

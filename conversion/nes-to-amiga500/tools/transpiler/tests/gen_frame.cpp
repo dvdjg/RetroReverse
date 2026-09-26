@@ -19,23 +19,28 @@
 #include <cstdlib>
 
 #include "../../runtime/include/nes_system.hpp"
+#include "../../runtime/host/fastcpu.hpp"
 #include "../../runtime/host/rom_loader.hpp"
 
 namespace {
 
 n2a::LoadedRom g_rom;
+n2a::FastCpu g_fast; ///< Motor rápido para el fallback (RAM y saltos calculados).
 
 /// Hook de bloque generado: ejecuta el `bb_*` de `cpu.PC` y devuelve los ciclos
 /// **exactos** que consumió (delta de `cpu.cycles`, que el código generado
 /// incrementa con el coste de cada instrucción). Si la dirección no es un bloque
 /// (salto calculado), devuelve 0 y el `NesSystem` cae al intérprete.
-int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& /*mem*/, int budget, int* n) {
+int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* n) {
 	const eng::u16 pc = cpu.PC;
 	if (dispatch_table[pc] == nullptr) {
+		// Sin bloque estático (RAM o salto calculado): usa el ejecutor rápido, que
+		// decodifica RAM bajo demanda. Si él tampoco puede, cae al intérprete.
+		const int c = n2a::FastCpu::step(&g_fast, cpu, mem);
 		if (n != nullptr) {
-			*n = 0;
+			*n = (c > 0) ? 1 : 0;
 		}
-		return 0; // sin bloque: lo resuelve el intérprete
+		return c;
 	}
 	(void)budget; // la cesión por instrucción está pendiente (ver FAST_EXECUTOR.md)
 	const eng::u32 before = cpu.cycles;
@@ -67,6 +72,13 @@ int main(int argc, char** argv) {
 	if (!n2a::load_ines(argv[1], g_rom)) {
 		std::printf("error: no se pudo cargar '%s'\n", argv[1]);
 		return 1;
+	}
+	{
+		n2a::NESMemory probe;
+		probe.prg = g_rom.mapper.prg;
+		probe.prg_size = g_rom.mapper.prg_size;
+		g_fast.build(g_rom.mapper.prg, g_rom.mapper.prg_size, probe.read16(0xFFFCu),
+			     probe.read16(0xFFFAu), probe.read16(0xFFFEu));
 	}
 
 	// Referencia: intérprete.
