@@ -30,6 +30,8 @@ El núcleo es **agnóstico** y corre sobre la interfaz `Host` ([`platform/host.h
   CMake; **navegador** con [`web/build_web.sh`](web/build_web.sh) (Emscripten, SDL3 como *port*).
   SDL3 está en `external/SDL3/` (**3.4.16**).
 - **Amiga 500**: [`platform/amiga/README.md`](platform/amiga/README.md) (Copper/Blitter/Paula).
+- **RetroArch (libretro)**: core en [`retroarch/`](retroarch/README.md) (`nes_libretro.so`) con
+  plugins de vídeo/audio; se carga desde RetroArch y transpila/ejecuta la ROM.
 
 Detalle y contrato: [`platform/README.md`](platform/README.md).
 

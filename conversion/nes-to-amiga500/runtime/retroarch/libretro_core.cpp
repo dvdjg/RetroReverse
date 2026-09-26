@@ -1,0 +1,229 @@
+// libretro_core.cpp — core libretro (RetroArch) del nodo NES→Amiga/SDL3.
+//
+// Implementa la API libretro sobre `NesSystem` (intérprete; el camino HLE/
+// transpilado se añadirá después) y expone **plugins** de vídeo/audio como core
+// options. Al cargar una ROM iNES/NES2.0 la transpila/analiza y la ejecuta.
+//
+// Compilación: ver runtime/retroarch/README.md (Makefile; incluye libretro.h de
+// external/libretro-common/include).
+
+#include <cstring>
+
+#include <libretro.h>
+
+#include "nes_system.hpp"
+#include "plugins.hpp"
+#include "rom_loader.hpp"
+
+// --- Callbacks del frontend ------------------------------------------------
+static retro_environment_t env_cb = nullptr;
+static retro_video_refresh_t video_cb = nullptr;
+static retro_audio_sample_t audio_cb = nullptr;
+static retro_audio_sample_batch_t audio_batch_cb = nullptr;
+static retro_input_poll_t input_poll_cb = nullptr;
+static retro_input_state_t input_state_cb = nullptr;
+
+// --- Estado del core -------------------------------------------------------
+static n2a::LoadedRom g_rom;       ///< ROM + mapper.
+static n2a::NesSystem g_sys;       ///< Núcleo NES.
+static bool g_loaded = false;      ///< ¿Hay ROM cargada?
+static n2a::retro::VideoPlugin* g_video = &n2a::retro::Plugins::default_video();
+static n2a::retro::AudioPlugin* g_audio = &n2a::retro::Plugins::default_audio();
+
+static eng::u32 g_fb[256 * 240];          ///< Framebuffer XRGB8888.
+static eng::s16 g_audio_buf[4096 * 2];    ///< Muestras estéreo S16.
+
+/// Estado serializable (savestate): CPU, RAM, PPU y APU.
+struct Savestate {
+	n2a::CPU cpu;
+	eng::u8 ram[0x800];
+	n2a::Ppu ppu;
+	n2a::Apu apu;
+};
+static Savestate g_state; ///< Búfer de savestate (BSS, evita pila).
+
+namespace {
+
+/// Lee las core options y selecciona los plugins de vídeo/audio.
+void refresh_plugins() {
+	retro_variable v {"nes_video_plugin", nullptr};
+	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &v) && v.value != nullptr) {
+		g_video = &n2a::retro::Plugins::video(v.value);
+	}
+	retro_variable a {"nes_audio_plugin", nullptr};
+	if (env_cb != nullptr && env_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &a) && a.value != nullptr) {
+		g_audio = &n2a::retro::Plugins::audio(a.value);
+	}
+}
+
+/// Traduce el estado del mando libretro al byte de `$4016` de la NES.
+eng::u8 read_nes_pad(unsigned port) {
+	if (input_state_cb == nullptr) {
+		return 0u;
+	}
+	eng::u8 pad = 0u;
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x01u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x02u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x04u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x08u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x10u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x20u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x40u);
+	if (input_state_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT) != 0u)
+		pad = static_cast<eng::u8>(pad | 0x80u);
+	return pad;
+}
+
+} // namespace
+
+// --- Ciclo de vida ---------------------------------------------------------
+void retro_set_environment(retro_environment_t cb) { env_cb = cb; }
+void retro_set_video_refresh(retro_video_refresh_t cb) { video_cb = cb; }
+void retro_set_audio_sample(retro_audio_sample_t cb) { audio_cb = cb; }
+void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb) { audio_batch_cb = cb; }
+void retro_set_input_poll(retro_input_poll_t cb) { input_poll_cb = cb; }
+void retro_set_input_state(retro_input_state_t cb) { input_state_cb = cb; }
+
+unsigned retro_api_version() { return RETRO_API_VERSION; }
+
+void retro_get_system_info(struct retro_system_info* info) {
+	std::memset(info, 0, sizeof(*info));
+	info->library_name = "RetroReverse NES";
+	info->library_version = "0.1";
+	info->valid_extensions = "nes";
+	info->need_fullpath = false;   // cargamos desde memoria
+	info->block_extract = false;
+}
+
+void retro_get_system_av_info(struct retro_system_av_info* info) {
+	std::memset(info, 0, sizeof(*info));
+	info->geometry.base_width = 256;
+	info->geometry.base_height = 240;
+	info->geometry.max_width = 256;
+	info->geometry.max_height = 240;
+	info->geometry.aspect_ratio = 256.0f / 240.0f;
+	info->timing.fps = 60.0988;
+	info->timing.sample_rate = 44100.0;
+}
+
+void retro_init() {
+	if (env_cb != nullptr) {
+		enum retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
+		env_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt);
+		static const retro_variable vars[] = {
+			{"nes_video_plugin", "Video plugin; raw|gray"},
+			{"nes_audio_plugin", "Audio plugin; linear|mute"},
+			{nullptr, nullptr},
+		};
+		env_cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(vars));
+	}
+}
+
+void retro_deinit() {}
+
+void retro_reset() {
+	if (g_loaded) {
+		g_sys.reset();
+	}
+}
+
+bool retro_load_game(const struct retro_game_info* game) {
+	if (game == nullptr || game->data == nullptr) {
+		return false;
+	}
+	if (!n2a::load_ines_mem(static_cast<const eng::u8*>(game->data),
+				static_cast<eng::usize>(game->size), g_rom)) {
+		return false;
+	}
+	g_sys.load_mapper(g_rom.mapper);
+	g_sys.reset();
+	refresh_plugins();
+	g_loaded = true;
+	return true;
+}
+
+bool retro_load_game_special(unsigned, const struct retro_game_info*, size_t) { return false; }
+
+void retro_unload_game() { g_loaded = false; }
+
+void retro_run() {
+	if (!g_loaded) {
+		return;
+	}
+	if (input_poll_cb != nullptr) {
+		input_poll_cb();
+	}
+	g_sys.pad1 = read_nes_pad(0);
+	g_sys.pad2 = read_nes_pad(1);
+	g_sys.run_frame();
+
+	g_video->render(g_sys.ppu, g_fb, 256, 240);
+	if (video_cb != nullptr) {
+		video_cb(g_fb, 256, 240, 256 * sizeof(eng::u32));
+	}
+
+	const int frames = static_cast<int>(44100.0 / 60.0988);  // ~734
+	g_audio->generate(g_sys.apu, g_audio_buf, frames);
+	if (audio_batch_cb != nullptr) {
+		audio_batch_cb(g_audio_buf, static_cast<size_t>(frames));
+	}
+}
+
+void retro_set_controller_port_device(unsigned, unsigned) {}
+void retro_cheat_reset() {}
+void retro_cheat_set(unsigned, bool, const char*) {}
+unsigned retro_get_region() { return RETRO_REGION_NTSC; }
+
+// --- Serialización (savestates) -------------------------------------------
+size_t retro_serialize_size() { return sizeof(Savestate); }
+
+bool retro_serialize(void* data, size_t size) {
+	if (size < sizeof(Savestate)) {
+		return false;
+	}
+	g_state.cpu = g_sys.cpu;
+	std::memcpy(g_state.ram, g_sys.mem.ram, sizeof g_state.ram);
+	g_state.ppu = g_sys.ppu;
+	g_state.apu = g_sys.apu;
+	g_state.cpu.mem = nullptr;
+	g_state.ppu.chr = nullptr;
+	std::memcpy(data, &g_state, sizeof(Savestate));
+	return true;
+}
+
+bool retro_unserialize(const void* data, size_t size) {
+	if (size < sizeof(Savestate)) {
+		return false;
+	}
+	std::memcpy(&g_state, data, sizeof(Savestate));
+	g_sys.cpu = g_state.cpu;
+	g_sys.cpu.mem = &g_sys.mem;
+	std::memcpy(g_sys.mem.ram, g_state.ram, sizeof g_state.ram);
+	g_sys.ppu = g_state.ppu;
+	g_sys.ppu.chr = g_rom.mapper.chr;
+	g_sys.ppu.chr_size = g_rom.mapper.chr_size;
+	g_sys.apu = g_state.apu;
+	return true;
+}
+
+// --- Memoria expuesta al frontend -----------------------------------------
+void* retro_get_memory_data(unsigned id) {
+	if (id == RETRO_MEMORY_SYSTEM_RAM) {
+		return g_sys.mem.ram;
+	}
+	return nullptr;
+}
+
+size_t retro_get_memory_size(unsigned id) {
+	if (id == RETRO_MEMORY_SYSTEM_RAM) {
+		return sizeof g_sys.mem.ram;
+	}
+	return 0;
+}

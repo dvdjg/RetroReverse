@@ -1,9 +1,9 @@
 #pragma once
 
 /// \file rom_loader.hpp
-/// Carga de ROM iNES / NES 2.0 para las herramientas y el runner de host:
-/// lee la cabecera, monta el `Mapper` correspondiente (NROM/UxROM/CNROM/MMC1) y
-/// expone PRG/CHR. No usa STL; el búfer de la ROM lo posee `LoadedRom`.
+/// Carga de ROM iNES / NES 2.0 para las herramientas, el runner de host y el
+/// core de RetroArch: monta el `Mapper` (NROM/UxROM/CNROM/MMC1) y expone PRG/CHR.
+/// No usa STL; los bytes viven en `LoadedRom`.
 
 #include <cstdio>
 
@@ -15,26 +15,20 @@ namespace n2a {
 
 /// ROM cargada: bytes en memoria + mapper listo para `NesSystem::load_mapper`.
 struct LoadedRom {
-	eng::u8 rom[0x40000] = {};  ///< Fichero iNES completo (hasta 256 KB).
+	eng::u8 rom[0x40000] = {};    ///< Fichero iNES completo (hasta 256 KB).
 	eng::u8 chr_ram[0x2000] = {}; ///< CHR RAM si la ROM no trae CHR-ROM.
-	Mapper mapper;              ///< Cartucho configurado.
-	unsigned mapper_no = 0;     ///< Número de mapper detectado.
-	eng::u32 prg_size = 0;      ///< Tamaño de PRG en bytes.
-	eng::u32 chr_size = 0;      ///< Tamaño de CHR en bytes (0 = CHR RAM).
+	Mapper mapper;                ///< Cartucho configurado.
+	unsigned mapper_no = 0;       ///< Número de mapper detectado.
+	eng::u32 prg_size = 0;        ///< Tamaño de PRG en bytes.
+	eng::u32 chr_size = 0;        ///< Tamaño de CHR en bytes (0 = CHR RAM).
 };
 
-/// Carga `path` en `out` y configura el mapper.
-/// \param path Fichero `.nes`.
-/// \param out  Salida (debe vivir tanto como la ROM).
+/// Interpreta los bytes de una ROM iNES/NES2.0 ya copiados en `out.rom`.
+/// \param size Número de bytes válidos en `out.rom`.
+/// \param out  Salida; el mapper apunta dentro de `out.rom`/`out.chr_ram`.
 /// \return `true` si la cabecera es válida y el mapper está soportado.
-inline bool load_ines(const char* path, LoadedRom& out) {
-	std::FILE* f = std::fopen(path, "rb");
-	if (f == nullptr) {
-		return false;
-	}
-	const eng::usize n = static_cast<eng::usize>(std::fread(out.rom, 1, sizeof out.rom, f));
-	std::fclose(f);
-	if (n < 16u || out.rom[0] != 'N' || out.rom[1] != 'E' || out.rom[2] != 'S' || out.rom[3] != 0x1Au) {
+inline bool parse_ines(eng::usize size, LoadedRom& out) {
+	if (size < 16u || out.rom[0] != 'N' || out.rom[1] != 'E' || out.rom[2] != 'S' || out.rom[3] != 0x1Au) {
 		return false;
 	}
 	const eng::u8 flags6 = out.rom[6];
@@ -49,7 +43,7 @@ inline bool load_ines(const char* path, LoadedRom& out) {
 	const eng::u32 prg_size = static_cast<eng::u32>(out.rom[4]) * 0x4000u;
 	const eng::usize chr_off = prg_off + prg_size;
 	const eng::u32 chr_size = static_cast<eng::u32>(out.rom[5]) * 0x2000u;
-	if (prg_off + prg_size > n) {
+	if (prg_off + prg_size > size) {
 		return false;
 	}
 	out.mapper_no = mapper_no;
@@ -64,7 +58,7 @@ inline bool load_ines(const char* path, LoadedRom& out) {
 	case 3u: out.mapper.kind = MapperKind::Cnrom; break;
 	default: return false;
 	}
-	if (chr_size != 0u && chr_off + chr_size <= n) {
+	if (chr_size != 0u && chr_off + chr_size <= size) {
 		out.mapper.chr = out.rom + chr_off;
 		out.mapper.chr_size = chr_size;
 	} else {
@@ -73,6 +67,31 @@ inline bool load_ines(const char* path, LoadedRom& out) {
 		out.mapper.chr_ram = out.chr_ram;
 	}
 	return true;
+}
+
+/// Carga una ROM desde memoria (p. ej. el búfer que entrega libretro).
+/// \param data Bytes de la ROM; \param size Tamaño; \param out Destino.
+/// \return `true` si es válida y el mapper está soportado.
+inline bool load_ines_mem(const eng::u8* data, eng::usize size, LoadedRom& out) {
+	if (data == nullptr || size == 0u || size > sizeof out.rom) {
+		return false;
+	}
+	for (eng::usize i = 0; i < size; ++i) {
+		out.rom[i] = data[i];
+	}
+	return parse_ines(size, out);
+}
+
+/// Carga una ROM desde un fichero `.nes`.
+/// \param path Ruta; \param out Destino. \return `true` si se pudo cargar.
+inline bool load_ines(const char* path, LoadedRom& out) {
+	std::FILE* f = std::fopen(path, "rb");
+	if (f == nullptr) {
+		return false;
+	}
+	const eng::usize n = static_cast<eng::usize>(std::fread(out.rom, 1, sizeof out.rom, f));
+	std::fclose(f);
+	return parse_ines(n, out);
 }
 
 } // namespace n2a

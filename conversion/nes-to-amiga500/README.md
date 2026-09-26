@@ -24,9 +24,12 @@ ejecutando el 6502 **transpilado a código nativo 68000/C++** en lugar de interp
 ## Plataformas de ejecución
 
 El núcleo (`runtime/`) es **agnóstico**: una interfaz `Host` abstrae vídeo/audio/entrada/tiempo, de
-modo que el mismo emulador corre sobre **Amiga 500** (Copper/Blitter/Paula) o sobre **SDL3** (PC y
-**navegador** vía Emscripten). SDL3 (3.4.16) está en `external/SDL3/`. Detalle:
-[`runtime/platform/README.md`](runtime/platform/README.md).
+modo que el mismo emulador corre sobre **Amiga 500** (Copper/Blitter/Paula), sobre **SDL3** (PC y
+**navegador** vía Emscripten) o como **core de RetroArch** (libretro), con **plugins** de
+vídeo/audio. SDL3 (3.4.16) está en `external/SDL3/`.
+
+- Plataformas: [`runtime/platform/README.md`](runtime/platform/README.md).
+- Core libretro: [`runtime/retroarch/README.md`](runtime/retroarch/README.md).
 
 ## Documentación
 
