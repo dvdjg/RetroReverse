@@ -122,6 +122,18 @@ Resultado sobre **Donkey Kong** (NROM, 60 frames, host):
 | RAM distinta | — | **12 / 2048** bytes |
 | píxeles distintos | — | **0 / 61440** |
 
+Otros NROM probados con el mismo arnés (`gen_frame.sh`):
+
+| ROM | píxeles distintos | RAM distinta | ciclos |
+|---|---:|---:|---:|
+| Donkey Kong | 0 / 61440 | 12 | 99.95 % |
+| Balloon Fight | 0 / 61440 | 9 | 99.997 % |
+| Super Mario Bros. | 61440 (FALLO) | 143 | 6.6 % (motor atascado) |
+| Excitebike / Ice Climber | — | — | **no compila**: el codegen emite métodos de opcodes **ilegales** (`ISB_absx`…) que el runtime solo expone como `*_impl` |
+
+Así que el codegen real funciona en DK y Balloon Fight; SMB y los que usan ilegales requieren trabajo
+(métodos de ilegales en el codegen; depurar SMB).
+
 El **framebuffer es idéntico**. La diferencia residual (12 bytes de RAM, 0.05 % de ciclos) procede de
 que la NMI se inyecta a **granularidad de bloque**: un bloque que cruza la línea 241 retrasa la NMI
 hasta su fin, mientras el intérprete la inyecta tras la instrucción exacta. La cesión
@@ -187,6 +199,36 @@ Balloon Fight ya estaban cubiertos: añadir opcodes no los mejora porque **~2× 
 dispatcher por dirección** (un `switch` por instrucción). Para superarlo hace falta el ejecutor por
 **bloques** (menos dispatch, asignación de registros y plegado entre instrucciones), que es el paso
 siguiente.
+
+## Intentos fallidos y decisiones (registro)
+
+Se dejan anotados los caminos probados y **descartados**, para no repetirlos.
+
+| Intento | Resultado | Qué pasó / qué se hizo |
+|---|---|---|
+| **Cesión por instrucción (`cpu.deadline`)** | ❌ FALLO: framebuffer **100 %** distinto, RAM 41 B | La idea es correcta (cortar el bloque justo antes de cruzar la línea de PPU y volver al despacho). Se implementó emitiendo `if (cpu.cycles >= cpu.deadline) { cpu.PC = <addr>; return; }` antes de cada instrucción, con `gen_run` fijando `deadline = cycles + budget`. Pero el contador `cpu.cycles` era **por bloque** (se reiniciaba en `gen_run`) y el **fallback al intérprete** no lo tocaba → el estado de ciclos se desincronizaba y el juego divergía. Probado también con margen `cycles+7` (como `FastCpu`): mismo fallo. **Revertido.** |
+| **`n2a_block_cycles` (ciclos base estáticos)** | ⚠️ Aproximado: RAM 11–12 B, ciclos 0.05 % | Sumaba ciclos base por bloque, sin penalización de página/rama ni bucles intra-bloque. Sustituido por coste **por instrucción** exacto (auditado). |
+| **`goto` interno en bloques (auto-bucle)** | ❌ Cuelga bajo el runtime | Una espera de VBlank (`LDA $2002; BPL`) quedaba como bucle **dentro** de un bloque y nunca devolvía el control para que avanzara la PPU. Se cambió a `cpu.PC = destino; return;` (las ramas ceden al despacho). |
+| **Array fijo para ordenar bloques por calor** | ❌ Desborde con ROMs grandes | Sustituido por `eng::util::Vector` sin tope. |
+| **`parse_hex` (u16) para el calor** | ❌ Truncaba >65535 | Añadido `parse_hex32`. |
+| **Core codegen como opción de runtime** | ✅ (con matiz) | C++ no se compila en tiempo de ejecución: el motor `codegen` solo existe si el core se **enlaza** con el transpilado de una ROM concreta (`build-codegen-core.sh`). El core genérico cae a `fast` si se pide `codegen`. |
+
+**Lección**: mezclar un contador de ciclos **por bloque** con el **fallback al intérprete** es frágil. La
+cesión por instrucción debe usar un contador **separado** (p. ej. `block_cycles`) que reinicie el
+runtime y que el intérprete no toque. Queda como siguiente paso.
+
+## Motor codegen en el core libretro
+
+La opción `nes_engine` admite `auto | fast | interpreter | codegen`:
+
+- **`auto`** (por defecto): usa `codegen` si el core trae el motor enlazado, si no `fast`.
+- **`codegen`**: requiere un core compilado con el transpilado de la ROM
+  ([`../runtime/retroarch/build-codegen-core.sh`](../runtime/retroarch/build-codegen-core.sh),
+  `make codegen ROM=...`). El core genérico lo anuncia y **cae a `fast`** (no se puede compilar C++ en
+  runtime).
+- `fast` / `interpreter`: como antes.
+
+Validado en el orquestador con el core codegen de Donkey Kong (`motor de CPU = codegen`, determinismo OK).
 
 ## Activación
 

@@ -38,8 +38,10 @@ El usuario los cambia en RetroArch → **Core Options**:
 
 - `nes_video_plugin` = `raw` | `gray` (paleta 2C02G, escala de grises)
 - `nes_audio_plugin` = `linear` | `mute`
-- `nes_engine` = `fast` | `interpreter`: motor de CPU (ejecutor **pre-decodificado** o intérprete;
-  mismo resultado, ver [`../docs/FAST_EXECUTOR.md`](../docs/FAST_EXECUTOR.md))
+- `nes_engine` = `auto` | `fast` | `interpreter` | `codegen`: motor de CPU. `auto` usa `codegen` si el
+  core lo trae enlazado y, si no, `fast`; `fast` es el ejecutor **pre-decodificado**; `codegen`
+  requiere un core con el transpilado de la ROM (ver abajo). Ver
+  [`../docs/FAST_EXECUTOR.md`](../docs/FAST_EXECUTOR.md).
 
 `plugins.hpp` define `VideoPlugin` (convierte el framebuffer de **índices NES** a XRGB8888) y
 `AudioPlugin` (mono del APU → estéreo S16). Añadir un plugin = implementar la interfaz y
@@ -74,11 +76,30 @@ La idea es que el core **lleve el transpilador** y, al cargar la ROM, la convier
 
 > El camino HLE/transpilado en el core se activará vía `services`/capacidades (igual que en Amiga).
 
+## Motor codegen (core específico por ROM)
+
+El motor `codegen` ejecuta el C++ **transpilado** de una ROM (más rápido en CPU, ver
+[`../docs/FAST_EXECUTOR.md`](../docs/FAST_EXECUTOR.md)). C++ no se compila en tiempo de ejecución, así
+que el core debe **enlazarse** con el transpilado de esa ROM: se genera un core específico.
+
+```bash
+# Genera build/nes_libretro_codegen.so a partir de una ROM NROM
+bash build-codegen-core.sh <rom.nes>          # o: make codegen ROM=<rom.nes>
+```
+
+`gen_engine_example.cpp` incluye el `gen_rom.cpp` generado y exporta `n2a_codegen_init` /
+`n2a_codegen_step`; `libretro_core.cpp` los referencia como **símbolos débiles**: el core genérico no
+los tiene y cae a `fast`. Si un bloque no está decodificado (salto calculado), devuelve 0 y el runtime
+resuelve esa instrucción con el intérprete (equivalencia). Probado en el orquestador con Donkey Kong
+(`motor de CPU = codegen`, determinismo OK).
+
 ## Build
 
 ```bash
 # Linux/WSL (genera build/nes_libretro.so)
 make
+# Core codegen para una ROM:
+make codegen ROM=../../roms/nes/'Donkey Kong (World) (Rev A).nes'
 # Windows/MinGW
 make CXX=g++ TARGET=build/nes_libretro.dll
 ```
@@ -100,7 +121,8 @@ contrato libretro:
   screenshot; plugins de vídeo/audio por **Core Options V2** (con fallback V1); **perfil por ROM** en
   varias ubicaciones (`<rom>.n2a`, `<dir>/packs/…`, `<system_dir>/nes_packs/<crc>.n2a`); opciones
   **`nes_use_pack`**, **`nes_analyze`** y **`nes_engine`**; **análisis/transpilación al cargar**
-  (grafo de bloques); **ejecutor rápido en `retro_run`** (`nes_engine=fast`, equivalente al
-  intérprete); savestates; RAM expuesta.
-- **PENDIENTE**: generar el ejecutor desde el grafo de bloques/HLE y ampliar su cobertura; *drag &
-  drop* de ROM; build wasm del core; cores hermanos (ver [`ADDING_A_CORE.md`](ADDING_A_CORE.md)).
+  (grafo de bloques); **motor seleccionable** `nes_engine = auto | fast | interpreter | codegen`
+  (ejecutor rápido y, con un core específico, **código transpilado**); savestates; RAM expuesta.
+- **PENDIENTE**: ampliar cobertura del codegen (opcodes ilegales, depurar SMB), cesión por instrucción
+  para NMI exacta, *drag & drop* de ROM, build wasm del core; cores hermanos (ver
+  [`ADDING_A_CORE.md`](ADDING_A_CORE.md)).

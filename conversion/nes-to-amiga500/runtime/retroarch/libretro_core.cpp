@@ -37,8 +37,7 @@ static n2a::enhance::AppliedProfile g_profile; ///< Perfil por ROM (si lo hay).
 static char g_system_dir[512] = {}; ///< Directorio de sistema (packs).
 static bool g_use_pack = true;      ///< ¿Aplicar el perfil/pack de la ROM?
 static bool g_analyze = true;       ///< ¿Analizar (transpilar) la ROM al cargar?
-static bool g_engine_fast = true;   ///< ¿Usar el ejecutor rápido (pre-decodificado)?
-static n2a::FastCpu g_fast;         ///< Ejecutor rápido (si `g_engine_fast`).
+static n2a::FastCpu g_fast;         ///< Ejecutor rápido (motor `fast`).
 
 static eng::u32 g_fb[256 * 240];          ///< Framebuffer XRGB8888.
 static eng::s16 g_audio_buf[4096 * 2];    ///< Muestras estéreo S16.
@@ -51,6 +50,21 @@ struct Savestate {
 	n2a::Apu apu;
 };
 static Savestate g_state; ///< Búfer de savestate (BSS, evita pila).
+
+// --- Motor codegen (opcional) ----------------------------------------------
+// Un core "codegen" se compila junto al transpilado de una ROM concreta (ver
+// runtime/retroarch/gen_engine_example.cpp y build-codegen-core.sh), que exporta
+// estos símbolos. En el core genérico no existen: quedan a nullptr (weak) y la
+// opción `codegen`/`auto` cae a `fast`.
+extern "C" void n2a_codegen_init(void) __attribute__((weak));
+extern "C" int n2a_codegen_step(n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* n)
+	__attribute__((weak));
+
+/// Hook `FastRun` que delega en el motor codegen enlazado (si lo hay): ejecuta el
+/// `bb_*` de `cpu.PC` y devuelve sus ciclos (delta de `cpu.cycles`).
+static int codegen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* n) {
+	return n2a_codegen_step(cpu, mem, budget, n);
+}
 
 namespace {
 
@@ -151,8 +165,11 @@ void set_core_options() {
 			 "Ejecuta el transpilador (grafo de basic blocks) al cargar.", nullptr, "rom",
 			 {{"enabled", nullptr}, {"disabled", nullptr}, {nullptr, nullptr}}, "enabled"},
 			{"nes_engine", "Motor de CPU", nullptr,
-			 "Ejecutor rapido pre-decodificado o interprete (mismo resultado).", nullptr, "rom",
-			 {{"fast", nullptr}, {"interpreter", nullptr}, {nullptr, nullptr}}, "fast"},
+			 "auto (codegen si el core lo trae, si no fast), fast, interpreter o codegen.",
+			 nullptr, "rom",
+			 {{"auto", nullptr}, {"fast", nullptr}, {"interpreter", nullptr},
+			  {"codegen", nullptr}, {nullptr, nullptr}},
+			 "auto"},
 			{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {{nullptr, nullptr}},
 			 nullptr},
 		};
@@ -164,7 +181,7 @@ void set_core_options() {
 			{"nes_audio_plugin", "Audio plugin; linear|mute"},
 			{"nes_use_pack", "Ajustes por ROM; enabled|disabled"},
 			{"nes_analyze", "Analizar ROM al cargar; enabled|disabled"},
-			{"nes_engine", "Motor de CPU; fast|interpreter"},
+			{"nes_engine", "Motor de CPU; auto|fast|interpreter|codegen"},
 			{nullptr, nullptr},
 		};
 		env_cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable*>(vars));
@@ -234,21 +251,34 @@ bool retro_load_game(const struct retro_game_info* game) {
 	g_analyze = get_bool_opt("nes_analyze", true);
 	fetch_system_dir();
 
-	// Motor de CPU: ejecutor rapido pre-decodificado o interprete. El rapido cae
-	// al interprete en los opcodes no cubiertos, asi que el resultado es identico.
-	g_engine_fast = std::strcmp(get_str_opt("nes_engine", "fast"), "interpreter") != 0;
-	if (g_engine_fast &&
-	    g_fast.build(g_rom.mapper.prg, g_rom.mapper.prg_size, g_sys.mem.read16(0xFFFCu),
-			 g_sys.mem.read16(0xFFFAu), g_sys.mem.read16(0xFFFEu))) {
+	// Motor de CPU: `auto` (codegen si el core lo trae enlazado, si no `fast`),
+	// `fast` (pre-decodificado), `interpreter`, o `codegen` (requiere que el core
+	// se haya compilado con el transpilado de la ROM). `fast`/`codegen` caen al
+	// interprete en los opcodes/direcciones no cubiertos => mismo resultado.
+	g_sys.fast_ctx = nullptr;
+	g_sys.fast_step = nullptr;
+	g_sys.fast_run = nullptr;
+	const char* eng = get_str_opt("nes_engine", "auto");
+	const bool has_codegen = (n2a_codegen_step != nullptr);
+	const bool want_interp = std::strcmp(eng, "interpreter") == 0;
+	const bool want_codegen = std::strcmp(eng, "codegen") == 0 ||
+				  (std::strcmp(eng, "auto") == 0 && has_codegen);
+	const char* mode = "interprete";
+	if (want_codegen && has_codegen) {
+		g_sys.fast_run = &codegen_run;
+		if (n2a_codegen_init != nullptr) {
+			n2a_codegen_init();
+		}
+		mode = "codegen";
+	} else if (!want_interp &&
+		   g_fast.build(g_rom.mapper.prg, g_rom.mapper.prg_size, g_sys.mem.read16(0xFFFCu),
+				g_sys.mem.read16(0xFFFAu), g_sys.mem.read16(0xFFFEu))) {
 		g_sys.fast_ctx = &g_fast;
 		g_sys.fast_step = &n2a::FastCpu::step;
 		g_sys.fast_run = &n2a::FastCpu::run_block;
-	} else {
-		g_sys.fast_ctx = nullptr;
-		g_sys.fast_step = nullptr;
-		g_sys.fast_run = nullptr;
+		mode = want_codegen ? "rapido(codegen no enlazado)" : "rapido(bloques)";
 	}
-	std::printf("nes: motor de CPU = %s\n", g_sys.fast_run != nullptr ? "rapido(bloques)" : "interprete");
+	std::printf("nes: motor de CPU = %s\n", mode);
 
 	// Ajustes por ROM (opcional): perfil/pack de tiles + paleta extendida.
 	if (g_use_pack && game->path != nullptr) {

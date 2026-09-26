@@ -25,8 +25,12 @@ HDR := $(wildcard *.hpp) $(wildcard ../include/*.hpp) $(wildcard ../fallback/*.h
        $(wildcard ../host/*.hpp) $(wildcard ../enhance/*.hpp) $(wildcard ../platform/*.hpp) \
        $(wildcard ../../tools/transpiler/src/*.hpp)
 
-.PHONY: all clean
+.PHONY: all clean codegen
 all: $(TARGET)
+
+# Core "codegen" para una ROM concreta: make codegen ROM=../../roms/nes/juego.nes
+codegen:
+	bash build-codegen-core.sh "$(ROM)"
 
 $(TARGET): $(SRC) $(HDR)
 	@mkdir -p build
