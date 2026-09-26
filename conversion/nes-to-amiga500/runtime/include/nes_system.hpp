@@ -80,6 +80,7 @@ struct NesSystem {
 		cpu.PC = mem.read16(0xFFFCu);
 		cpu.SP = 0xFDu;
 		cpu.I = true;
+		cpu.brk_halts = false; // el runtime usa la semántica del intérprete en BRK
 		ppu = Ppu {};
 		ppu.chr = mapper.chr;
 		ppu.chr_size = mapper.chr_size;

@@ -184,6 +184,11 @@ struct CPU {
 	bool C = false, Z = false, I = false, D = false, V = false, N = false;
 	/// Se pone a `true` tras `BRK`; `game_main()` lo usa para terminar el bucle.
 	bool halted = false;
+	/// Si `true`, `BRK` detiene la ejecución (`halted`, `PC=0`), usado por el
+	/// harness standalone. El runtime (`NesSystem`) lo pone a `false` para que
+	/// `BRK` siga la semántica del intérprete (salta al vector IRQ), de modo que el
+	/// código generado y el intérprete coincidan.
+	bool brk_halts = true;
 	/// Ciclos de CPU acumulados que el **código generado** incrementa con el coste
 	/// exacto de cada instrucción (base + penalización de página/rama). El runtime
 	/// lee su delta por bloque para avanzar la PPU con la misma temporalización que
@@ -448,10 +453,36 @@ struct CPU {
 	void JSR_abs(eng::u16 t, eng::u16 ret) { push16(ret); PC = t; }
 	/// Retorno de subrutina: recupera `PC` de la pila.
 	void RTS() { PC = pull16(); }
-	/// Retorno de interrupción: descarta el byte de flags y recupera `PC`.
-	void RTI() { (void)pull(); PC = pull16(); }
-	/// Interrupción por software: detiene la ejecución y deja `PC = 0` (fin del bucle).
-	void BRK() { halted = true; PC = 0u; }
+	/// Retorno de interrupción: recupera los flags (ignora B y fuerza U) y `PC`,
+	/// igual que el intérprete. Restaurarlos es clave para rutinas de NMI/IRQ.
+	void RTI() {
+		const eng::u8 p = static_cast<eng::u8>((pull() & ~0x10u) | 0x20u);
+		N = (p & 0x80u) != 0u;
+		V = (p & 0x40u) != 0u;
+		D = (p & 0x08u) != 0u;
+		I = (p & 0x04u) != 0u;
+		Z = (p & 0x02u) != 0u;
+		C = (p & 0x01u) != 0u;
+		PC = pull16();
+	}
+	/// Interrupción por software. Si `brk_halts` (harness standalone) detiene la
+	/// ejecución (`halted`, `PC = 0`). Si no (runtime), reproduce al intérprete:
+	/// apila `PC + 2` (el codegen no adelanta PC) y el estado con B/U a 1, pone
+	/// `I = 1` y salta al vector IRQ (`$FFFE`).
+	void BRK() {
+		if (brk_halts) {
+			halted = true;
+			PC = 0u;
+			return;
+		}
+		const eng::u16 ret = static_cast<eng::u16>(PC + 2u);
+		push16(ret);
+		push(static_cast<eng::u8>(0x30u | (N ? 0x80u : 0u) | (V ? 0x40u : 0u) |
+					  (D ? 0x08u : 0u) | (I ? 0x04u : 0u) | (Z ? 0x02u : 0u) |
+					  (C ? 0x01u : 0u)));
+		I = true;
+		PC = mem->read16(0xFFFEu);
+	}
 
 	/// `BIT` (página cero): `Z = (A & v) == 0`, `N = bit 7`, `V = bit 6` de `v`.
 	void BIT_zp(eng::u8 a) { const eng::u8 v = mem->read(a); Z = (A & v) == 0u; N = (v & 0x80u) != 0u; V = (v & 0x40u) != 0u; }

@@ -122,17 +122,30 @@ Resultado sobre **Donkey Kong** (NROM, 60 frames, host):
 | RAM distinta | — | **12 / 2048** bytes |
 | píxeles distintos | — | **0 / 61440** |
 
-Otros NROM probados con el mismo arnés (`gen_frame.sh`):
+Otros NROM probados con el mismo arnés (`gen_frame.sh`, 60 frames):
 
 | ROM | píxeles distintos | RAM distinta | ciclos |
 |---|---:|---:|---:|
 | Donkey Kong | 0 / 61440 | 12 | 99.95 % |
 | Balloon Fight | 0 / 61440 | 9 | 99.997 % |
-| Super Mario Bros. | 61440 (FALLO) | 143 | 6.6 % (motor atascado) |
-| Excitebike / Ice Climber | — | — | **no compila**: el codegen emite métodos de opcodes **ilegales** (`ISB_absx`…) que el runtime solo expone como `*_impl` |
+| Ice Climber | 0 / 61440 | 729 | 68.9 % |
+| Excitebike | 61440 | 35 | motor detenido |
+| Super Mario Bros. | 61440 | 143 | motor detenido |
 
-Así que el codegen real funciona en DK y Balloon Fight; SMB y los que usan ilegales requieren trabajo
-(métodos de ilegales en el codegen; depurar SMB).
+### Correcciones encontradas al ampliar a más ROMs
+
+- **Instrucciones truncadas**: al final de la PRG, un opcode con operandos fuera de la ROM se emitía
+  como llamada **sin argumento** (`ISB_absx()`), que no compilaba. Ahora el disassembler lo marca como
+  desconocido y no lo emite → **Excitebike e Ice Climber compilan**.
+- **`CPU::RTI()` no restauraba los flags** (el intérprete sí); corregido. Importante en rutinas de
+  NMI/IRQ.
+- **`CPU::BRK()` detenía el motor**; ahora el runtime fija `brk_halts=false` y `BRK` salta al vector IRQ
+  como el intérprete (el harness standalone mantiene el halt).
+
+Aun así, las ROMs **sensibles al timing** (Excitebike, SMB) siguen divergiendo: frame 1 es exacto y la
+deriva empieza después. La causa de fondo es la **NMI a granularidad de bloque** (la misma del residual
+de DK: 12 bytes), amplificada en juegos que dependen del instante exacto del VBlank. Se resolverá con la
+**cesión por instrucción** (contador separado), pendiente.
 
 El **framebuffer es idéntico**. La diferencia residual (12 bytes de RAM, 0.05 % de ciclos) procede de
 que la NMI se inyecta a **granularidad de bloque**: un bloque que cruza la línea 241 retrasa la NMI

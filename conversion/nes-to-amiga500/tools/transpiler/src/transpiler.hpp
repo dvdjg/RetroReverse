@@ -235,6 +235,13 @@ public:
 						}
 					}
 				}
+				// Instrucción truncada al final de la PRG (operandos fuera de la
+				// ROM): no es código válido, no se emite (evita llamadas sin
+				// argumento, p. ej. `ISB_absx()`).
+				if (info.size >= 2u && !has_operand(in)) {
+					++unknown_;
+					break;
+				}
 				if ((info.mode == AddrMode::Abs) && has_operand(in) &&
 				    (sv_equal(info.mnemonic, "JMP") || sv_equal(info.mnemonic, "JSR"))) {
 					in.target = in.operand;
