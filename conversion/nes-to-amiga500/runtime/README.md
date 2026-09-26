@@ -32,7 +32,12 @@ El núcleo es **agnóstico** y corre sobre la interfaz `Host` ([`platform/host.h
 - **SDL3** (PC y navegador): [`platform/sdl_host.hpp`](platform/sdl_host.hpp) +
   [`host/main.cpp`](host/main.cpp). Build PC con [`host/build-pc.ps1`](host/build-pc.ps1) (MinGW) o
   CMake; **navegador** con [`web/build_web.sh`](web/build_web.sh) (Emscripten, SDL3 como *port*).
-  SDL3 está en `external/SDL3/` (**3.4.16**).
+  SDL3 está en `external/SDL3/` (**3.4.16**). Teclado: `Z`/`Espacio`=A, `X`=B, `Enter`=Start,
+  `Backspace`/`RShift`=Select, flechas=cruceta, `Esc`=salir.
+  - **Motor codegen**: `build-pc.ps1 -CodegenRom <rom.nes>` transpila esa ROM y la enlaza en
+    `nes_sdl_codegen.exe` (ejecuta el **C++ transpilado**; fallback a `FastCpu`/intérprete para RAM/
+    saltos calculados). Es específico por ROM (C++ no se compila en runtime). Ver
+    [`../docs/FAST_EXECUTOR.md`](../docs/FAST_EXECUTOR.md).
 - **Amiga 500**: [`platform/amiga/README.md`](platform/amiga/README.md) (Copper/Blitter/Paula).
 - **RetroArch (libretro)**: core en [`retroarch/`](retroarch/README.md) (`nes_libretro.so`) con
   plugins de vídeo/audio; se carga desde RetroArch y transpila/ejecuta la ROM.

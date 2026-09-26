@@ -22,6 +22,14 @@
 #include "rom_loader.hpp"
 #include "sdl_host.hpp"
 
+// Host **codegen** (opcional): con `-DN2A_CODEGEN` se enlaza el transpilado de una
+// ROM (`build/codegen_rom.cpp`, generado por build-pc.ps1 -CodegenRom) y se ejecuta
+// con el motor `codegen` en vez del intérprete/rápido.
+#ifdef N2A_CODEGEN
+#define N2A_NO_HOST_MAIN
+#include "codegen_rom.cpp"
+#endif
+
 namespace {
 
 n2a::LoadedRom g_rom;   ///< ROM y mapper.
@@ -32,6 +40,32 @@ eng::u8 g_rgb[n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH * 3]; ///< Fra
 eng::s16 g_audio[1024]; ///< Búfer de audio por frame.
 int g_frames_limit = -1; ///< Nº de frames a ejecutar (-1 = infinito).
 int g_frame = 0;         ///< Frames ejecutados.
+
+#ifdef N2A_CODEGEN
+n2a::FastCpu g_gen_fast; ///< Fallback (RAM/saltos calculados) del motor codegen.
+
+/// Hook `FastRun` del motor codegen: ejecuta el bloque generado de `cpu.PC` y
+/// devuelve sus ciclos. Si no hay bloque (RAM/salto calculado), usa el ejecutor
+/// rápido (que decodifica RAM bajo demanda); si tampoco, devuelve 0 y `NesSystem`
+/// resuelve esa instrucción con el intérprete.
+int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int /*budget*/, int* n) {
+	const eng::u16 pc = cpu.PC;
+	if (dispatch_table[pc] == nullptr) {
+		const int c = n2a::FastCpu::step(&g_gen_fast, cpu, mem);
+		if (n != nullptr) {
+			*n = (c > 0) ? 1 : 0;
+		}
+		return c;
+	}
+	const eng::u32 before = cpu.cycles;
+	dispatch_table[pc](cpu);
+	if (n != nullptr) {
+		*n = 1;
+	}
+	const eng::u32 d = cpu.cycles - before;
+	return d > 0u ? static_cast<int>(d) : 1;
+}
+#endif
 
 /// Ejecuta un frame completo (entrada → emulación → vídeo/audio).
 /// \return `false` si hay que terminar (ventana cerrada o límite alcanzado).
@@ -86,8 +120,26 @@ int main(int argc, char** argv) {
 		g_nes.fast_step = &n2a::FastCpu::step;
 		g_nes.fast_run = &n2a::FastCpu::run_block;
 	}
+#ifdef N2A_CODEGEN
+	// Motor codegen: usa el transpilado enlazado (fallback a FastCpu/intérprete).
+	{
+		n2a::NESMemory probe;
+		probe.prg = g_rom.mapper.prg;
+		probe.prg_size = g_rom.mapper.prg_size;
+		g_gen_fast.build(g_rom.mapper.prg, g_rom.mapper.prg_size, probe.read16(0xFFFCu),
+				 probe.read16(0xFFFAu), probe.read16(0xFFFEu));
+		init_dispatch_table();
+		g_nes.fast_ctx = &g_gen_fast;
+		g_nes.fast_run = &gen_run;
+	}
+#endif
+#ifdef N2A_CODEGEN
+	const char* g_motor = "codegen";
+#else
+	const char* g_motor = g_nes.fast_run != nullptr ? "rapido(bloques)" : "interprete";
+#endif
 	std::printf("nes_sdl: mapper=%u PRG=%u CHR=%u motor=%s\n", g_rom.mapper_no, g_rom.prg_size,
-		    g_rom.chr_size, g_nes.fast_run != nullptr ? "rapido(bloques)" : "interprete");
+		    g_rom.chr_size, g_motor);
 
 	// Ajustes por ROM (opcional): "<rom>.n2a" con pack de tiles y/o paleta.
 	static n2a::enhance::AppliedProfile g_profile;

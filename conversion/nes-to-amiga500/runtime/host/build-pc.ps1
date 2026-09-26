@@ -3,6 +3,8 @@
 # Usa SDL3 descargado en external/SDL3 (devel MinGW) y eng/core de Amiga-Cpp.
 # Salida: runtime/host/build/nes_sdl.exe (+ SDL3.dll copiada al lado).
 
+param([string]$CodegenRom = '')   # opcional: ROM a transpilar y enlazar (motor codegen)
+
 $ErrorActionPreference = 'Stop'
 
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path          # .../runtime/host
@@ -32,12 +34,37 @@ $Inc = @(
 	"-I$(Join-Path $Here '..\..\tools\transpiler\src')",
 	"-I$(Join-Path $SDL3 'include')"
 )
+$Defs = @()
+$Out = Join-Path $Build 'nes_sdl.exe'
+
+if ($CodegenRom) {
+	# Transpila la ROM y la enlaza en el host (motor codegen).
+	$TpSrc = Join-Path $Here '..\..\tools\transpiler\src'
+	$TpBin = Join-Path $Build 'nes_transpiler.exe'
+	Write-Host "Transpilando '$CodegenRom' ..."
+	& $Cxx -std=gnu++23 -O2 -w -static "-I$(Join-Path $AmigaCpp 'engine\include')" "-I$TpSrc" `
+		(Join-Path $TpSrc 'main.cpp') -o $TpBin
+	if ($LASTEXITCODE -ne 0) { throw "no se pudo compilar el transpilador" }
+	& $TpBin $CodegenRom -o (Join-Path $Build 'codegen_rom.cpp')
+	if ($LASTEXITCODE -ne 0) { throw "no se pudo transpilar '$CodegenRom'" }
+	$Inc += "-I$Build"
+	$Defs += '-DN2A_CODEGEN'
+	$Out = Join-Path $Build 'nes_sdl_codegen.exe'
+}
 
 Write-Host "Compilando $(Join-Path $Here 'main.cpp') ..."
-& $Cxx -std=gnu++23 -O2 -Wall -Wextra @Inc `
+& $Cxx -std=gnu++23 -O2 -Wall -Wextra -static-libgcc -static-libstdc++ @Inc @Defs `
 	(Join-Path $Here 'main.cpp') (Join-Path $Here 'sdl_host.cpp') `
-	"-L$(Join-Path $SDL3 'lib')" -lSDL3 -o (Join-Path $Build 'nes_sdl.exe')
+	"-L$(Join-Path $SDL3 'lib')" -lSDL3 -o $Out
 if ($LASTEXITCODE -ne 0) { throw "la compilación falló (exit $LASTEXITCODE)" }
 
 Copy-Item -LiteralPath (Join-Path $SDL3 'bin\SDL3.dll') -Destination $Build -Force
-Write-Host "OK -> $Build\nes_sdl.exe"
+# Runtime de MinGW (pthread) junto al exe, para que arranque sin el PATH.
+$CxxDir = Split-Path -Parent $Cxx
+if ($CxxDir -and (Test-Path -LiteralPath $CxxDir)) {
+	foreach ($dll in @('libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll')) {
+		$p = Join-Path $CxxDir $dll
+		if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination $Build -Force }
+	}
+}
+Write-Host "OK -> $Out"
