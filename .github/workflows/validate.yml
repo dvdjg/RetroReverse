@@ -28,3 +28,13 @@ jobs:
           node-version: "20"
       - name: Validar codificación
         run: bash scripts/validate-encoding.sh
+
+  orchestrator:
+    name: Orquestador (adaptador libretro + core de prueba)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar y ejecutar el test del adaptador
+        run: make -C tools/orchestrator test
+      - name: Sintaxis de scripts de shell
+        run: for f in scripts/*.sh; do bash -n "$f" || exit 1; done

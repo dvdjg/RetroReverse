@@ -98,7 +98,7 @@ AMIGA = [
 ]
 
 # --- FBNeo: mismos títulos para la ruta FBNeo (sets propios) ---
-FBNEO = ["robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3", "blktiger"]
+FBNEO = ["robocop", "1943", "1944", "s1945", "rastan", "sf2", "sfiii", "sfiii3", "blktiger", "mslug", "mslug3"]
 FBNEO_BIOS = ["cps3", "neogeo"]  # BIOS compartidas (si existen en la colección)
 
 # Algunos sistemas están repartidos en varias carpetas de la colección.

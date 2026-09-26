@@ -39,6 +39,8 @@ Generado por [`scripts/select-roms.py`](../scripts/select-roms.py). El contenido
 | fbneo | `roms/fbneo/sfiii.zip` | `roms/fbneo/sfiii.zip` | `-` | 38868497 | `b4f3f8e1437c` |
 | fbneo | `roms/fbneo/sfiii3.zip` | `roms/fbneo/sfiii3.zip` | `-` | 70592155 | `09ac08c7e011` |
 | fbneo | `roms/fbneo/blktiger.zip` | `roms/fbneo/blktiger.zip` | `-` | 338722 | `e04695372653` |
+| fbneo | `roms/fbneo/mslug.zip` | `roms/fbneo/mslug.zip` | `-` | 15115413 | `b61d7c25636d` |
+| fbneo | `roms/fbneo/mslug3.zip` | `roms/fbneo/mslug3.zip` | `-` | 82406849 | `22899961df17` |
 | fbneo(bios) | `roms/fbneo/neogeo.zip` | `roms/fbneo/neogeo.zip` | `-` | 1950045 | `cdbde4e73d49` |
 | nes | `roms/nes/Super Mario Bros. (World).nes` | `roms/nes/Super Mario Bros. (World).zip` | `Super Mario Bros. (World).nes` | 40976 | `ea343f4e445a` |
 | nes | `roms/nes/Donkey Kong (World) (Rev A).nes` | `roms/nes/Donkey Kong (World) (Rev A).zip` | `Donkey Kong (World) (Rev A).nes` | 24592 | `d8dfacbfec34` |

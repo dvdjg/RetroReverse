@@ -41,6 +41,7 @@ platforms/**/extraction/screenshots/
 platforms/**/extraction/memory_dumps/
 platforms/**/extraction/dumps/
 platforms/**/extraction/re/
+platforms/**/extraction/fbneo/
 
 # --- Salidas generadas de reimpl (tests) ---
 platforms/computers/amiga500/demos/arte/reimplementation/reference/**/anim/
