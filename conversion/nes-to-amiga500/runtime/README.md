@@ -21,6 +21,18 @@ Amiga. Es la base de las fases F1/F3/F4 del [`ROADMAP`](../docs/ROADMAP.md).
 Todo es **header-only** sobre `eng/core`, sin STL, y compila igual en host y en `m68k`. El `.cpp`
 generado incluye `nes_runtime.hpp` y enlaza la PRG con `NESMemory::prg`/`prg_size`.
 
+## Plataformas de ejecución
+
+El núcleo es **agnóstico** y corre sobre la interfaz `Host` ([`platform/host.hpp`](platform/host.hpp)):
+
+- **SDL3** (PC y navegador): [`platform/sdl_host.hpp`](platform/sdl_host.hpp) +
+  [`host/main.cpp`](host/main.cpp). Build PC con [`host/build-pc.ps1`](host/build-pc.ps1) (MinGW) o
+  CMake; **navegador** con [`web/build_web.sh`](web/build_web.sh) (Emscripten, SDL3 como *port*).
+  SDL3 está en `external/SDL3/` (**3.4.16**).
+- **Amiga 500**: [`platform/amiga/README.md`](platform/amiga/README.md) (Copper/Blitter/Paula).
+
+Detalle y contrato: [`platform/README.md`](platform/README.md).
+
 ### Tests
 
 `bash test/run.sh` (WSL/Linux o MinGW): valida la CPU con `nestest` ($02=$03=0), el **conteo de

@@ -180,12 +180,19 @@ private:
 		}
 	}
 
-	/// Avanza la PPU `cpu_cycles*3` dots (341 dots por línea).
+	/// Avanza la PPU `cpu_cycles*3` dots (341 dots por línea). Al cambiar de
+	/// línea, **captura el scroll actual** para esa línea: así las escrituras a
+	/// `$2005` a mitad de frame (splits) afectan solo desde ese punto (scroll
+	/// mid-frame real, no el global de fin de frame).
 	void clock_ppu(int cpu_cycles) {
 		ppu_dot += cpu_cycles * 3;
 		while (ppu_dot >= 341) {
 			ppu_dot -= 341;
+			const eng::u16 before = ppu.scanline;
 			ppu.tick_scanline();
+			if (ppu.scanline != before) {
+				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
+			}
 		}
 	}
 

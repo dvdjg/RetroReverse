@@ -21,6 +21,13 @@ ejecutando el 6502 **transpilado a código nativo 68000/C++** en lugar de interp
    cae a un PPU/APU software. Ver [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y
    [`docs/HLE.md`](docs/HLE.md).
 
+## Plataformas de ejecución
+
+El núcleo (`runtime/`) es **agnóstico**: una interfaz `Host` abstrae vídeo/audio/entrada/tiempo, de
+modo que el mismo emulador corre sobre **Amiga 500** (Copper/Blitter/Paula) o sobre **SDL3** (PC y
+**navegador** vía Emscripten). SDL3 (3.4.16) está en `external/SDL3/`. Detalle:
+[`runtime/platform/README.md`](runtime/platform/README.md).
+
 ## Documentación
 
 | Documento | Contenido |

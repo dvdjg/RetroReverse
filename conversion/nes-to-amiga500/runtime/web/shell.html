@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES → SDL3 (web)</title>
+<style>
+	html, body { margin: 0; background: #111; color: #ddd; font-family: monospace; }
+	h1 { font-size: 14px; font-weight: normal; text-align: center; margin: 8px; }
+	#canvas { display: block; margin: 0 auto; image-rendering: pixelated; max-width: 100vw; }
+	#err { color: #f66; text-align: center; }
+</style>
+</head>
+<body>
+<h1>NES → SDL3 — arrastra una ROM .nes o pásala por <code>?rom=</code></h1>
+<div id="err"></div>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<script type="text/javascript">
+	var Module = {
+		canvas: (function () { return document.getElementById('canvas'); })(),
+		print: function (t) { console.log(t); },
+		printErr: function (t) { document.getElementById('err').textContent = t; console.error(t); }
+	};
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

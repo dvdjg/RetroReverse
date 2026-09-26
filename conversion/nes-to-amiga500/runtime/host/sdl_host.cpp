@@ -1,0 +1,129 @@
+// sdl_host.cpp — implementación de `SdlHost` sobre SDL3.
+//
+// Ventana + textura RGB (SDL_PIXELFORMAT_RGB24), stream de audio mono S16 y
+// teclado mapeado al mando NES. Portátil a Windows/Linux/macOS y a navegador
+// (Emscripten).
+
+#include "sdl_host.hpp"
+
+#include <SDL3/SDL.h>
+
+namespace n2a {
+
+/// Inicializa SDL3 (vídeo+audio+gamepad), crea la ventana, el renderer, la
+/// textura de streaming y el stream de audio. \return `true` si todo va bien.
+bool SdlHost::init(const char* title, int width, int height, int sample_rate) {
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
+		SDL_Log("SDL_Init: %s", SDL_GetError());
+		return false;
+	}
+	w = width;
+	h = height;
+	win = SDL_CreateWindow(title, width, height, 0);
+	if (win == nullptr) {
+		SDL_Log("SDL_CreateWindow: %s", SDL_GetError());
+		return false;
+	}
+	ren = SDL_CreateRenderer(win, nullptr);
+	if (ren == nullptr) {
+		SDL_Log("SDL_CreateRenderer: %s", SDL_GetError());
+		return false;
+	}
+	tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, width, height);
+	if (tex == nullptr) {
+		SDL_Log("SDL_CreateTexture: %s", SDL_GetError());
+		return false;
+	}
+	SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+
+	SDL_AudioSpec spec {};
+	spec.format = SDL_AUDIO_S16;
+	spec.channels = 1;
+	spec.freq = sample_rate;
+	stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+	if (stream != nullptr) {
+		SDL_ResumeAudioStreamDevice(stream);
+	}
+	return true;
+}
+
+/// Libera textura, renderer, ventana, audio y cierra SDL3.
+void SdlHost::shutdown() {
+	if (stream != nullptr) {
+		SDL_DestroyAudioStream(stream);
+		stream = nullptr;
+	}
+	if (tex != nullptr) {
+		SDL_DestroyTexture(tex);
+		tex = nullptr;
+	}
+	if (ren != nullptr) {
+		SDL_DestroyRenderer(ren);
+		ren = nullptr;
+	}
+	if (win != nullptr) {
+		SDL_DestroyWindow(win);
+		win = nullptr;
+	}
+	SDL_Quit();
+}
+
+/// Sube el frame RGB a la textura y lo dibuja escalado a la ventana.
+void SdlHost::present(const eng::u8* rgb) {
+	if (tex == nullptr || ren == nullptr) {
+		return;
+	}
+	SDL_UpdateTexture(tex, nullptr, rgb, w * 3);
+	SDL_RenderClear(ren);
+	SDL_RenderTexture(ren, tex, nullptr, nullptr);
+	SDL_RenderPresent(ren);
+}
+
+/// Encola muestras mono S16 en el stream de audio (sin bloquear).
+void SdlHost::audio_write(const eng::s16* frames, int count) {
+	if (stream == nullptr || count <= 0) {
+		return;
+	}
+	SDL_PutAudioStreamData(stream, frames, count * static_cast<int>(sizeof(eng::s16)));
+}
+
+/// Procesa eventos SDL y traduce teclado a mando NES.
+/// \return `false` si se cierra la ventana.
+bool SdlHost::poll(InputState& in) {
+	SDL_Event e;
+	while (SDL_PollEvent(&e)) {
+		if (e.type == SDL_EVENT_QUIT) {
+			return false;
+		}
+		if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
+			const bool down = (e.type == SDL_EVENT_KEY_DOWN);
+			switch (e.key.scancode) {
+			case SDL_SCANCODE_Z:
+			case SDL_SCANCODE_SPACE: in.a = down; break;
+			case SDL_SCANCODE_X: in.b = down; break;
+			case SDL_SCANCODE_RETURN: in.start = down; break;
+			case SDL_SCANCODE_BACKSPACE:
+			case SDL_SCANCODE_RSHIFT: in.select = down; break;
+			case SDL_SCANCODE_UP: in.up = down; break;
+			case SDL_SCANCODE_DOWN: in.down = down; break;
+			case SDL_SCANCODE_LEFT: in.left = down; break;
+			case SDL_SCANCODE_RIGHT: in.right = down; break;
+			case SDL_SCANCODE_ESCAPE: return false;
+			default: break;
+			}
+		}
+	}
+	return true;
+}
+
+/// Pausa el hilo `ms` milisegundos.
+void SdlHost::delay_ms(int ms) {
+	SDL_Delay(static_cast<Uint32>(ms));
+}
+
+/// \return Milisegundos desde que arrancó SDL.
+eng::u64 SdlHost::ticks_ms() {
+	return static_cast<eng::u64>(SDL_GetTicks());
+}
+
+} // namespace n2a
