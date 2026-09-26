@@ -24,6 +24,8 @@ struct SdlHost : Host {
 	SDL_AudioStream* stream = nullptr; ///< Stream de audio mono S16.
 	int w = 0;                         ///< Ancho del frame.
 	int h = 0;                         ///< Alto del frame.
+	bool quit_window = false;  ///< `poll` devolvió `false` por cierre de ventana.
+	bool escape_menu = false;  ///< `poll` devolvió `false` por `Esc` (volver al gestor).
 
 	bool init(const char* title, int width, int height, int sample_rate) override;
 	void shutdown() override;

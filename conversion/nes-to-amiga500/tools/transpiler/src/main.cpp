@@ -313,9 +313,10 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-bench-rom  <salida.nes>");
 	n2a::out_line("     --emit-cnrom-rom  <salida.nes>");
 	n2a::out_line("     --emit-ram-rom    <salida.nes>");
-	n2a::out_line("Uso (varias ROMs -> plugins .n2x):");
+	n2a::out_line("Uso (varias ROMs -> plugins <rom>.<plataforma>.n2x):");
 	n2a::out_line("     nes_transpiler <rom1.nes> [rom2.nes ...] --emit-lib --outdir <dir> \\");
-	n2a::out_line("         --entry <plugin_entry.cpp> --inc <dir> [--inc <dir> ...] [--cxx g++]");
+	n2a::out_line("         --entry <plugin_entry.cpp> --inc <dir> [--inc <dir> ...] \\");
+	n2a::out_line("         [--cxx g++] [--target x64nt|x64linux|a500|a1200|wasm]");
 }
 
 /// Extrae el nombre base (sin directorio ni extensión) de `path` en `out`.
@@ -374,8 +375,96 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	return true;
 }
 
+/// Escribe en `out` el directorio de `path` (sin el nombre del fichero final).
+void dir_name(const char* path, char* out, eng::usize cap) {
+	eng::usize cut = 0u;
+	for (eng::usize i = 0; path[i] != '\0'; ++i) {
+		if (path[i] == '/' || path[i] == '\\') {
+			cut = i;
+		}
+	}
+	eng::usize j = 0u;
+	for (eng::usize i = 0; i < cut && j + 1u < cap; ++i) {
+		out[j++] = path[i];
+	}
+	out[j] = '\0';
+}
+
+/// Datos de cabecera iNES útiles para el sidecar de metadatos.
+struct RomInfo {
+	int mapper = 0;     ///< Número de mapper iNES.
+	eng::u32 prg = 0u;  ///< Tamaño de PRG en bytes.
+	eng::u32 chr = 0u;  ///< Tamaño de CHR en bytes.
+};
+
+/// Lee la cabecera iNES de `path`. \return `false` si no es válida.
+bool rom_info(const char* path, RomInfo& out) {
+	ByteBuffer b;
+	if (!n2a::read_whole_file(path, b) || b.size() < 16u) {
+		return false;
+	}
+	out.prg = static_cast<eng::u32>(b[4]) * 16384u;
+	out.chr = static_cast<eng::u32>(b[5]) * 8192u;
+	out.mapper = static_cast<int>((b[6] >> 4u) | (b[7] & 0xF0u));
+	return true;
+}
+
+/// CRC32 (IEEE) del contenido de `path` (0 si no se pudo leer).
+eng::u32 crc32_file(const char* path) {
+	ByteBuffer b;
+	if (!n2a::read_whole_file(path, b)) {
+		return 0u;
+	}
+	eng::u32 crc = 0xFFFFFFFFu;
+	for (eng::usize i = 0; i < b.size(); ++i) {
+		crc ^= b[i];
+		for (int k = 0; k < 8; ++k) {
+			crc = (crc >> 1u) ^ (0xEDB88320u & (0u - (crc & 1u)));
+		}
+	}
+	return ~crc;
+}
+
+/// Lee `"rom_crc32":"0x........"` del sidecar JSON `path`.
+/// \return El CRC cacheado, o `0xFFFFFFFF` si no existe el fichero o el campo.
+eng::u32 read_cached_crc(const char* path) {
+	ByteBuffer b;
+	if (!n2a::read_whole_file(path, b)) {
+		return 0xFFFFFFFFu;
+	}
+	eng::util::StringView t(reinterpret_cast<const char*>(b.data()), b.size());
+	const eng::usize key = t.find(eng::util::StringView("rom_crc32"));
+	if (key == eng::util::StringView::npos) {
+		return 0xFFFFFFFFu;
+	}
+	eng::usize i = key;
+	for (; i < t.size() && t[i] != '0'; ++i) {
+	}
+	if (i + 1u >= t.size() || t[i] != '0' || (t[i + 1u] != 'x' && t[i + 1u] != 'X')) {
+		return 0xFFFFFFFFu;
+	}
+	i += 2u;
+	eng::u32 v = 0u;
+	for (; i < t.size(); ++i) {
+		const char c = t[i];
+		eng::u32 d;
+		if (c >= '0' && c <= '9') {
+			d = static_cast<eng::u32>(c - '0');
+		} else if (c >= 'a' && c <= 'f') {
+			d = static_cast<eng::u32>(c - 'a' + 10);
+		} else if (c >= 'A' && c <= 'F') {
+			d = static_cast<eng::u32>(c - 'A' + 10);
+		} else {
+			break;
+		}
+		v = (v << 4u) | d;
+	}
+	return v;
+}
+
 /// Compila el plugin `.n2x` a partir de `entry` (`plugin_entry.cpp`) y del
-/// transpilado `n2a_game_impl.cpp` que debe estar en `outdir`.
+/// transpilado `n2a_game_impl.cpp` que debe estar en `outdir`. Autodetecta los
+/// `-I` de runtime a partir de la ruta de `entry` (`<runtime>/plugin/...`).
 /// \return `true` si el compilador terminó con éxito.
 bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, const char* n2x,
 		      const eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc>& incs) {
@@ -393,6 +482,17 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 #endif
 	app(" -I");
 	app(outdir);
+	// Autodetección: `<entry_dir>/..` = runtime -> include y plugin.
+	char edir[1024];
+	dir_name(entry, edir, sizeof edir);
+	char rdir[1024];
+	dir_name(edir, rdir, sizeof rdir);
+	app(" -I");
+	app(rdir);
+	app("/include");
+	app(" -I");
+	app(rdir);
+	app("/plugin");
 	for (eng::usize k = 0; k < incs.size(); ++k) {
 		app(" -I");
 		app(incs[k].data());
@@ -425,6 +525,7 @@ int main(int argc, char** argv) {
 	const char* facts_path = nullptr;
 	const char* entry = nullptr;
 	const char* cxx = "g++";
+	const char* target = nullptr; // plataforma destino (etiqueta del nombre del .n2x)
 	bool emit_lib = false;
 	int emit = 0; // 0 = transpilar, 1..7 = ROMs de prueba
 	eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc> incs {};
@@ -478,6 +579,10 @@ int main(int argc, char** argv) {
 			(void)incs.push_back(eng::util::StringView(argv[++i]));
 			continue;
 		}
+		if (arg == "--target" && i + 1 < argc) {
+			target = argv[++i];
+			continue;
+		}
 		(void)inputs.push_back(arg);
 	}
 
@@ -510,16 +615,37 @@ int main(int argc, char** argv) {
 			n2a::err_line("error: --emit-lib requiere --entry <plugin_entry.cpp>");
 			return 1;
 		}
+#if defined(_WIN32)
+		const char* tag = target != nullptr ? target : "x64nt";
+#else
+		const char* tag = target != nullptr ? target : "x64linux";
+#endif
 		int rc = 0;
 		for (eng::usize k = 0; k < inputs.size(); ++k) {
 			char base[256];
 			base_name(inputs[k].data(), base, sizeof base);
+			char stem[320];
+			std::snprintf(stem, sizeof stem, "%s.%s", base, tag);
 			char cpp[1024];
 			join_path(outdir, base, ".cpp", cpp, sizeof cpp);
 			char impl[1024];
 			join_path(outdir, "n2a_game_impl", ".cpp", impl, sizeof impl);
 			char n2x[1024];
-			join_path(outdir, base, ".n2x", n2x, sizeof n2x);
+			join_path(outdir, stem, ".n2x", n2x, sizeof n2x);
+			char json[1024];
+			join_path(outdir, stem, ".n2x.json", json, sizeof json);
+
+			// Caché: si el plugin existe y el CRC de la ROM no cambió, no se rehace.
+			const eng::u32 crc = crc32_file(inputs[k].data());
+			ByteBuffer existing;
+			if (n2a::read_whole_file(n2x, existing) && read_cached_crc(json) == crc) {
+				Dyn s;
+				s.append("sin cambios, reutilizo ");
+				s.append(n2x);
+				n2a::out_line(s.view());
+				continue;
+			}
+
 			if (!transpile_rom(inputs[k].data(), cpp, facts_path)) {
 				rc = 1;
 				continue;
@@ -534,15 +660,37 @@ int main(int argc, char** argv) {
 				rc = 1;
 				continue;
 			}
-			if (build_plugin_lib(cxx, entry, outdir.data(), n2x, incs)) {
-				Dyn ok;
-				ok.append("plugin -> ");
-				ok.append(n2x);
-				n2a::out_line(ok.view());
-			} else {
+			if (!build_plugin_lib(cxx, entry, outdir.data(), n2x, incs)) {
 				n2a::err_line("error: la compilacion del plugin fallo (revisa --cxx/--inc)");
 				rc = 1;
+				continue;
 			}
+			// Sidecar de metadatos (título/arch/mapper/CRC) para el gestor.
+			RomInfo ri;
+			(void)rom_info(inputs[k].data(), ri);
+			Dyn js;
+			js.append("{\n  \"name\": \"");
+			js.append(base);
+			js.append("\",\n  \"arch\": \"");
+			js.append(tag);
+			js.append("\",\n  \"abi\": ");
+			js.append_s32(1);
+			js.append(",\n  \"mapper\": ");
+			js.append_s32(ri.mapper);
+			js.append(",\n  \"prg_size\": ");
+			js.append_u32(ri.prg);
+			js.append(",\n  \"chr_size\": ");
+			js.append_u32(ri.chr);
+			js.append(",\n  \"rom_crc32\": \"0x");
+			js.append_hex(crc, 8u, true);
+			js.append("\",\n  \"source\": \"");
+			js.append(inputs[k]);
+			js.append("\"\n}\n");
+			(void)n2a::write_whole_file(json, js.view());
+			Dyn ok;
+			ok.append("plugin -> ");
+			ok.append(n2x);
+			n2a::out_line(ok.view());
 		}
 		return rc;
 	}

@@ -110,10 +110,129 @@ static bool ends_with(const char* s, const char* suf) {
 static n2a::TranspiledGame g_game;
 static n2a::Mapper g_cart;
 
+// --- Gestor: selector nativo de `.n2x` (SDL_ShowOpenFileDialog) ---
+static char g_pick_path[1024];
+static bool g_pick_done = false;
+
+/// Callback del diálogo: guarda la ruta elegida (o cadena vacía si se cancela).
+static void pick_callback(void* /*userdata*/, const char* const* files, int /*filter*/) {
+	g_pick_done = true;
+	g_pick_path[0] = '\0';
+	if (files != nullptr && files[0] != nullptr) {
+		std::snprintf(g_pick_path, sizeof g_pick_path, "%s", files[0]);
+	}
+}
+
+/// Muestra el diálogo nativo para elegir un `.n2x` en `dir`.
+/// \return `true` si el usuario eligió un fichero (en `out`).
+static bool pick_n2x(SDL_Window* parent, const char* dir, char* out, eng::usize cap) {
+	SDL_DialogFileFilter filter {"Juegos transpilados", "n2x"};
+	g_pick_done = false;
+	g_pick_path[0] = '\0';
+	SDL_ShowOpenFileDialog(pick_callback, nullptr, parent, &filter, 1, dir, false);
+	// Espera al callback con tope (por si el backend no soporta diálogos).
+	const eng::u64 t0 = SDL_GetTicks();
+	while (!g_pick_done && SDL_GetTicks() - t0 < 120000u) {
+		SDL_PumpEvents();
+		SDL_Delay(10);
+	}
+	if (!g_pick_done || g_pick_path[0] == '\0') {
+		return false;
+	}
+	std::snprintf(out, cap, "%s", g_pick_path);
+	return true;
+}
+
+/// Verificación headless: ejecuta el plugin y el intérprete sobre la misma ROM y
+/// compara RAM y framebuffer. \return 0 si coinciden, 2 si no, 1 si error.
+static int verify_n2x(const char* path, int frames) {
+	n2a::TranspiledGame vg;
+	if (!vg.load(path)) {
+		std::printf("error: plugin '%s' invalido o ABI incompatible\n", path);
+		return 1;
+	}
+	n2a::Mapper cart;
+	vg.fill_mapper(cart);
+	n2a::NesSystem ref;
+	ref.load_mapper(cart);
+	ref.reset();
+	n2a::NesSystem gen;
+	gen.load_mapper(cart);
+	gen.reset();
+	gen.fast_ctx = &vg;
+	gen.fast_run = &n2a::TranspiledGame::fast_run;
+	for (int i = 0; i < frames; ++i) {
+		ref.run_frame();
+	}
+	for (int i = 0; i < frames; ++i) {
+		gen.run_frame();
+	}
+	int ram = 0;
+	for (unsigned i = 0; i < 0x800u; ++i) {
+		if (ref.mem.ram[i] != gen.mem.ram[i]) {
+			++ram;
+		}
+	}
+	int fb = 0;
+	const int fb_total = n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH;
+	for (int i = 0; i < fb_total; ++i) {
+		if (ref.ppu.fb[i] != gen.ppu.fb[i]) {
+			++fb;
+		}
+	}
+	std::printf("verify '%s' (%d frames): RAM %d/2048, pixeles %d/%d -> %s\n", path, frames, ram,
+		    fb, fb_total, (ram == 0 && fb == 0) ? "IDENTICO" : "DIVERGE");
+	return (ram == 0 && fb == 0) ? 0 : 2;
+}
+
 int main(int argc, char** argv) {
 	if (argc < 2) {
 		std::printf("uso: nes_sdl <rom.nes|juego.n2x> [frames]\n");
+		std::printf("     nes_sdl --verify  <juego.n2x> [frames]   (compara con el interprete)\n");
+		std::printf("     nes_sdl --manager <dir>                  (gestor de .n2x)\n");
 		return 1;
+	}
+	if (std::strcmp(argv[1], "--verify") == 0) {
+		if (argc < 3) {
+			std::printf("uso: nes_sdl --verify <juego.n2x> [frames]\n");
+			return 1;
+		}
+		return verify_n2x(argv[2], (argc > 3) ? std::atoi(argv[3]) : 60);
+	}
+	if (std::strcmp(argv[1], "--manager") == 0) {
+		const char* dir = (argc > 2) ? argv[2] : ".";
+		if (!g_host.init("NES transpilados (Esc: elegir otro)", n2a::NesSystem::kScreenW,
+				 n2a::NesSystem::kScreenH, 22050)) {
+			std::printf("error: no se pudo iniciar SDL3\n");
+			return 1;
+		}
+		for (;;) {
+			char path[1024];
+			if (!pick_n2x(g_host.win, dir, path, sizeof path)) {
+				break; // cancelado: salir
+			}
+			if (!g_game.load(path)) {
+				std::printf("error: plugin '%s' invalido o ABI incompatible\n", path);
+				continue;
+			}
+			g_game.fill_mapper(g_cart);
+			g_nes.load_mapper(g_cart);
+			g_nes.reset();
+			g_nes.fast_ctx = &g_game;
+			g_nes.fast_run = &n2a::TranspiledGame::fast_run;
+			std::printf("nes_sdl: '%s' motor=codegen (Esc: volver al gestor)\n", path);
+			g_frames_limit = -1;
+			g_host.quit_window = false;
+			g_host.escape_menu = false;
+			while (emu_tick_once() != 0) {
+				g_host.delay_ms(16);
+			}
+			if (g_host.quit_window) {
+				break; // ventana cerrada: salir del gestor
+			}
+		}
+		g_host.shutdown();
+		return 0;
 	}
 	const bool is_plugin = ends_with(argv[1], ".n2x");
 	if (is_plugin) {

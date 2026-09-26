@@ -28,7 +28,9 @@ namespace n2a {
 
 /// Arquitectura del host actual (`N2A_ARCH_*`), para validar el plugin.
 [[nodiscard]] inline int n2a_host_arch() noexcept {
-#if defined(__m68k__)
+#if defined(__wasm__)
+	return N2A_ARCH_WASM;
+#elif defined(__m68k__)
 	return N2A_ARCH_M68K;
 #elif defined(_WIN32)
 	return N2A_ARCH_X64_NT;

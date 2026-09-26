@@ -13,7 +13,9 @@
 #define N2A_NO_HOST_MAIN
 #include "n2a_game_impl.cpp" // -I <dir> con el fichero generado por nes_transpiler
 
-#if defined(__m68k__)
+#if defined(__wasm__)
+#define N2A_ARCH N2A_ARCH_WASM
+#elif defined(__m68k__)
 #define N2A_ARCH N2A_ARCH_M68K
 #elif defined(_WIN32)
 #define N2A_ARCH N2A_ARCH_X64_NT

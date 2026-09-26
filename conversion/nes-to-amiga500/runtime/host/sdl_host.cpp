@@ -93,6 +93,7 @@ bool SdlHost::poll(InputState& in) {
 	SDL_Event e;
 	while (SDL_PollEvent(&e)) {
 		if (e.type == SDL_EVENT_QUIT) {
+			quit_window = true;
 			return false;
 		}
 		if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
@@ -108,7 +109,11 @@ bool SdlHost::poll(InputState& in) {
 			case SDL_SCANCODE_DOWN: in.down = down; break;
 			case SDL_SCANCODE_LEFT: in.left = down; break;
 			case SDL_SCANCODE_RIGHT: in.right = down; break;
-			case SDL_SCANCODE_ESCAPE: return false;
+			case SDL_SCANCODE_ESCAPE:
+				if (down) {
+					escape_menu = true;
+				}
+				return false;
 			default: break;
 			}
 		}

@@ -37,16 +37,24 @@ int  n2a_block(void* cpu, void* mem, int* instrs);  // ciclos o 0 (sin bloque)
 ```bash
 nes_transpiler <rom1.nes> [rom2.nes ...] --emit-lib \
   --outdir <dir> --entry runtime/plugin/plugin_entry.cpp \
-  --inc <Amiga-Cpp/engine/include> --inc runtime/include --inc runtime/plugin \
-  [--cxx g++]
+  --inc <Amiga-Cpp/engine/include> [--cxx g++] [--target x64nt|x64linux|a500|a1200|wasm]
 ```
 
-Por cada ROM: escribe `<rom>.cpp` (fuente transpilada) y, si encuentra compilador, **invoca
-`g++ -shared`** para producir `<rom>.n2x`. `plugin_entry.cpp` incluye `n2a_game_impl.cpp` (el
-transpilado) y exporta la ABI. `build-pc.ps1`/`build-pc` no lo necesitan: es el transpilador quien
-compila la biblioteca.
+Por cada ROM: escribe `<rom>.cpp` (fuente) y, si encuentra compilador, **invoca `g++ -shared`** para
+producir el plugin. El nombre incluye la **plataforma** en la que se puede ejecutar:
+**`<rom>.<plataforma>.n2x`** (p. ej. `smb.x64nt.n2x`, y en el futuro `smb.a500.n2x`,
+`smb.a1200.n2x`, `smb.wasm.n2x`). `--target` elige la etiqueta (por defecto la del host).
+
+- **Autodetección de rutas**: de `--entry` (`<runtime>/plugin/...`) se derivan `-I<runtime>/include` y
+  `-I<runtime>/plugin`; normalmente solo hay que pasar `--inc` del engine.
+- **Sidecar de metadatos**: se escribe `<rom>.<plataforma>.n2x.json` (nombre, arch, abi, mapper,
+  tamaños PRG/CHR, **CRC32** de la ROM, origen).
+- **Caché por CRC**: si el `.n2x` ya existe y el CRC de la ROM no cambió, **no se recompila**
+  (`sin cambios, reutilizo ...`).
+- `plugin_entry.cpp` incluye `n2a_game_impl.cpp` (el transpilado) y exporta la ABI.
 
 > Si no hay compilador, se genera igualmente el `.cpp`; el `.n2x` se puede compilar luego a mano.
+> La compilación **en paralelo** de varias ROMs queda pendiente (hoy es secuencial).
 
 ## Cargar/ejecutar (host)
 
@@ -61,8 +69,15 @@ n2a::NesSystem sys; sys.load_mapper(cart); sys.reset();
 sys.fast_ctx = &game; sys.fast_run = &n2a::TranspiledGame::fast_run;  // fallback en el host
 ```
 
-En el host SDL3: `nes_sdl juego.n2x` lo carga y ejecuta (teclado: `Z`/`Espacio`=A, `X`=B,
-`Enter`=Start, flechas=cruceta, `Esc`=salir).
+En el host SDL3:
+
+- **Ejecutar**: `nes_sdl juego.x64nt.n2x` lo carga y ejecuta (teclado: `Z`/`Espacio`=A, `X`=B,
+  `Enter`=Start, flechas=cruceta, `Esc`=salir).
+- **Gestor GUI**: `nes_sdl --manager <dir>` abre el **selector nativo** de `.n2x` de esa carpeta
+  (SDL_ShowOpenFileDialog); al elegir uno lo ejecuta; `Esc` vuelve al selector para cargar otro;
+  cerrar la ventana sale.
+- **Verificar**: `nes_sdl --verify juego.x64nt.n2x [frames]` ejecuta el plugin y el intérprete sobre
+  la misma ROM y compara RAM/framebuffer (`IDENTICO`/`DIVERGE`), sin ventana.
 
 ## Verificación
 
@@ -79,9 +94,10 @@ Resultado con Super Mario Bros: `ABI v1/1`, `RAM 0/2048`, `pixeles 0/61440`, `~1
 
 ## Estado
 
-- **HECHO**: ABI + `plugin_entry.cpp`; `--emit-lib` multi-ROM con autodetección de compilador;
-  cartucho autocontenido (PRG+CHR+mapper); loader `dlopen`/`LoadLibrary` con validación; carga directa
-  en el host SDL3; verificación de equivalencia.
-- **PENDIENTE (gestor GUI)**: ventana de **gestión** (listar `.n2x` de una carpeta, cargar/descargar/
-  ejecutar, info del cartucho, aviso de seguridad de código nativo). Requiere UI (ImGui+SDL3 o un menú
-  mínimo con `SDL_ShowOpenFileDialog`). Diseño: `nes_sdl --manager <dir>`.
+- **HECHO**: ABI + `plugin_entry.cpp`; `--emit-lib` multi-ROM con autodetección de compilador; nombre
+  con **plataforma** (`<rom>.<arch>.n2x`); cartucho autocontenido (PRG+CHR+mapper); **sidecar JSON** y
+  **caché por CRC**; **autodetección de rutas** de `--entry`; loader `dlopen`/`LoadLibrary` con
+  validación; carga directa, **gestor** (`--manager`) y **verificación** (`--verify`) en el host SDL3.
+- **PENDIENTE**: gestor con lista/info en pantalla (hoy selector nativo); **compilación en paralelo**;
+  aviso explícito de seguridad (código nativo); soporte de `wasm`/`a500` aún sin toolchain integrado
+  (la etiqueta y la ABI ya lo contemplan).

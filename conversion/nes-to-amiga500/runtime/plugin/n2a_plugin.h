@@ -24,7 +24,8 @@
 /// Arquitecturas que identifica el plugin (el gestor solo carga la suya).
 #define N2A_ARCH_X64_NT 1    ///< Windows x86-64 (MinGW/MSVC).
 #define N2A_ARCH_X64_LINUX 2 ///< Linux x86-64.
-#define N2A_ARCH_M68K 3      ///< Amiga 68000.
+#define N2A_ARCH_M68K 3      ///< Amiga 68000 (A500/A1200...).
+#define N2A_ARCH_WASM 4      ///< WebAssembly (navegador/Emscripten).
 
 #ifdef __cplusplus
 extern "C" {
