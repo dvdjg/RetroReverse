@@ -135,6 +135,23 @@ Muestrear el NMI en la **fase 2 del último ciclo** de la instrucción que cruza
 Re-tag `oracle-v2.1`, regenerar `port_matrix.baseline` + `COMPATIBILITY.md` + snapshot, y retirar de
 `RISKS.md` el límite (pasa a "resuelto", con enlace a este roadmap).
 
+## Valoración del esfuerzo (2026)
+
+**El timing es lo ÚNICO que queda.** Verificado con trazas: los 6 juegos no-0 del oráculo
+(`ic` 92.2%, `galaga` 36.7%, `metalstorm` 14.2%, `jurassicpark` 13.7%, `pacman` 13.2%,
+`blastermaster` 9.1%) **todos** divergen en el **mismo bucle `LDA $2002/BPL` del arranque**
+(p. ej. blastermaster, `$F250`, idx 7828). El resto de la matriz (65/71) está a **0–3.6%**.
+
+- **Coste hasta ahora**: alto (~8 turnos) y **0 puntos de % ganados** (todo neutro o revertido).
+  El timing es genuinamente difícil: requiere el **lockstep completo** (frontera de frame
+  **sub-instrucción** + fase continua + IRQ MMC3 por ciclo), no un ajuste de fase/flag/dot.
+- **Lo ganado (indirecto pero real)**: el **tracer de fase** (permanente), el hallazgo de que la
+  **Fase 2 estaba incompleta** (`ppu.dot=0` incondicional), la **unificación** de los 6 juegos de
+  VBlank con los de raster MMC3 en **una sola causa**, y que el **no-snap es equivalencia-safe**.
+- **Perspectiva**: como **no queda nada más** en el oráculo, **sí merece la pena** perseguirlo —
+  pero como **tarea dedicada** (Fase 3), no mezclado con el trabajo de mappers (donde el % por
+  turno era muy superior: 38→71 ROMs en pocos turnos).
+
 ## Orden de valor / riesgo
 
 | Fase | Valor | Riesgo | Toca |
