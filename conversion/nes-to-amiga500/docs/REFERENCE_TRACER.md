@@ -83,25 +83,26 @@ sus conclusiones de timing inducen a error).
 | `warmup_frames` 2 → 0 | mesen no suprime VBlank en el frame 0 | bioniccommando deja de colgarse en el reset |
 | **+8 ciclos de reset** | `CPU.cpp:150` | offset de ciclos vs mesen −8 → **−1** |
 | máscara `$2002` en `(241,<3 dots)` | `PPU.cpp:281` | quirk correcto de hardware |
+| **frame 0 sin forzar frontera** | mesen arranca la PPU en la línea −1 (no salta líneas) | IC/SMB/bioniccommando pasan de divergir en idx 36-42 a idx ~7800-9100 (el VBlank real) |
+| **ejecutor rápido dot-exacto en `$2002`** | el intérprete reloja por acceso | `dbg_fast2`: 60000 pasos idénticos |
 
-Los bucles `LDA $2002/BPL` de **IC, SMB y bioniccommando** divergen todos en el mismo punto y por la
-misma causa (el instante del VBlank). Residuo actual: **±1 ciclo** (fase de muestreo sub-instrucción).
+Los bucles `LDA $2002/BPL` de **IC, SMB y bioniccommando** divergen todos en el mismo punto (el
+instante del VBlank). Residuo actual: **±1 ciclo** (fase de muestreo sub-instrucción): con el
+contador de reset a 8 sale **+1**, a 7 sale **−1**; ninguno cae en el ciclo exacto de mesen porque
+nuestro CPU es de granularidad de instrucción y mesen muestrea por ciclo.
 
-### Bloqueante conocido: frontera del frame 0
+### Resuelto: frontera del frame 0 + ejecutor rápido
 
-`run_frame` fuerza `ppu.scanline = 240` al empezar **cada** frame → el **primer VBlank se adelanta
-~27 000 ciclos** (la PPU arranca en la línea 0 y se salta las 0-239). Dejar que el frame 0 corra desde
-la línea 0 (**sin forzar**) alinea los tres juegos miles de instrucciones más (IC: idx 42 → 9132;
-SMB: 36 → 7828), **pero rompe la equivalencia intérprete↔ejecutor-rápido**.
+`run_frame` forzaba `scanline=240` en **cada** frame (incluido el 1º) → primer VBlank ~27000 ciclos
+antes. Ahora el **1er frame corre desde la línea 0** (`frames_done_`). Esto destapó un segundo bug:
+`FastCpu::run_block` reloja la PPU **al final del bloque**, así que una lectura de `$2002` dentro del
+bloque veía un VBlank obsoleto y divergía del intérprete (`dbg_fast2` step 16346, fast 12 ciclos
+atrás). Arreglado: el bloque se **corta antes de cualquier acceso a `$2000-$3FFF`** (`touches_ppu`) y
+lo ejecuta el intérprete (dot-exacto); además el presupuesto usa los ciclos reales de la siguiente
+instrucción. `dbg_fast2 bf.nes 60000` → **60000 pasos idénticos**; `equivalencia OK`.
 
-Divergencia exacta (`dbg_fast2 bf.nes`): **step 16346**, `cyc_i=57209` vs `cyc_f=57197` (**el rápido
-12 ciclos por detrás**), en `scan=241` (NMI). Primer byte distinto: **`$0019`** (interp 0x59 vs fast
-0x58). Causa: `FastCpu::run_block` corta el bloque con `total + 7 > budget` (peor caso de 7 ciclos)
-y **cruza la frontera de VBlank del frame 0** de forma distinta al intérprete. Es un bug del ejecutor
-por bloques que sólo se manifiesta cuando el frame 0 **no** es un frame limpio de 262 líneas.
-
-**Arreglo propuesto**: que `run_block` reciba el presupuesto hasta la frontera del frame (no sólo de
-scanline) y/o que use los ciclos reales de la siguiente instrucción en vez del peor caso de 7.
+**Pendiente**: el **±1 ciclo** del cruce del VBlank (causa del jam del frame 6 de bioniccommando).
+Para cerrarlo habría que muestrear el flag a resolución de ciclo (como mesen), no de instrucción.
 
 ## Estado
 
