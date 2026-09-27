@@ -168,6 +168,12 @@ de mesen (probablemente su `_ppuOffset`/`StartCpuCycle`). **No es el lockstep**:
   modelo de avance). Revertido.
 - **Reset-dot** (`N2A_RESET_DOT` = 25..30, +1..+6 dots) → mueve la primera divergencia de metalstorm
   de idx **16336 → 43443** (mejor) pero **no la elimina**. Es un ajuste parcial, no el cierre.
+- **Compensación +4 dots** (reset en dot 28, `_masterClock - _ppuOffset` de mesen) → **REGRESA
+  blastermaster** (0.0→9.1%); el dot **natural (24)** es el mejor. Revertido.
+→ Ningún ajuste de fase mejora **sin** regresar un juego ya a 0.0%. El dot natural (Fase 1+2) es el
+**óptimo actual**; el residuo es del **modelo exacto de sincronización** de mesen (sub-dot, no un
+offset global). Los 4 juegos (ic/galaga/metalstorm/pacman) quedan como límite de **fidelidad de
+estado**, no bloqueante.
 → El offset exacto requiere **replicar el modelo de reset/ciclo de mesen con precisión de sub-dot**
 (`_ppuOffset`/`StartCpuCycle`/`EndCpuCycle`), no un ajuste ciego. **No** se ha logrado cerrar del todo;
 los 4 juegos (ic/galaga/metalstorm/pacman) siguen.
