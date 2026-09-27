@@ -179,6 +179,24 @@ Amiga). En ambos casos, **nunca** se debe regresar un juego ya a 0.0%.
 > cambio del motor genérico. Debe quedar trazada (qué frame, qué hash del blob) y no mezclarse con el
 > oráculo genérico, cuyas cifras (`COMPATIBILITY.md`) se seguirán midiendo **sin** inyección.
 
+### Fiabilidad de la medición (matriz): varianza y frames planos (2026)
+
+La validación diferencial mide lo que la **herramienta** puede ejecutar y lo que el **frame** muestra;
+dos artefactos pueden dar cifras engañosas:
+
+- **Herramienta equivocada** (`nes_frame` stale): tenía su **propio** switch de mappers (solo
+  NROM↔MMC3) → devolvía frame vacío para MMC5/VRC6/AxROM/FME-7 y las cifras eran basura. **Arreglado**
+  (usa `load_ines`) + test `test/mapper_consistency_test.sh` que verifica `nes_frame == frame_probe`
+  por mapper. **Lección**: toda cifra depende de que el binario de medición soporte el caso.
+- **Frames planos** (pantalla de espera/intro sin *input*): si ambos frames son **monocromos** y
+  difieren en el color de fondo, la métrica de estructura cuenta **toda** la pantalla → `100%`
+  falso (Esper Dream 2, Gemfire a 60 frames). `diff_mesen` lo marca **`INCONCLUYENTE(pantalla-plan)`**
+  y `port_matrix` muestra **`flat`**; con *input-injection* (último recurso) se evitaría, pero no es
+  fiable si hay más anomalías antes del punto jugable.
+- **Varianza entre ejecuciones**: ROMs sensibles al límite de timing `$2002` (p. ej. **pacman**
+  0.3↔9.4%, **galaga** 0.9↔1.9%) fluctúan; la puerta `--gate` las **ignora** (`VARIANCE_RE`) para no
+  dar falsos rojos. Su diff pequeño es el límite de timing en estado, no un frame roto.
+
 ## Impacto de los arreglos en la versión Amiga
 
 Estos arreglos viven en el **oráculo/host** (PPU/APU software), no en el renderer Amiga (Copper/
