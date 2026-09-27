@@ -27,6 +27,7 @@ int main() {
 	ppu.chr = g_chr;
 	ppu.chr_size = sizeof g_chr;
 	ppu.ctrl = 0x00u;      // BG pattern base = 0, nametable = 0, NMI desactivado
+	ppu.mask = 0x1Eu;      // habilita BG+sprites (sin recorte de columna izquierda)
 	ppu.vram[0] = 0x00u;   // tile 0 en la celda (0,0)
 	ppu.palette[0] = 0x0Fu; // color universal (color 0)
 	ppu.palette[1] = 0x30u; // paleta 0, índice 1
@@ -64,6 +65,7 @@ int main() {
 	ppu.palette[0x11] = 0x16u;  // paleta de sprite 0, índice 1
 
 	ppu.ctrl = 0x00u;           // sprites 8×8, pattern base 0, NMI off
+	ppu.mask = 0x1Eu;           // habilita BG+sprites (sin recorte de columna izquierda)
 	ppu.oam[0] = 10u;           // Y
 	ppu.oam[1] = 1u;            // tile
 	ppu.oam[2] = 0x00u;         // atributo: paleta 0, delante

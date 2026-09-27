@@ -175,6 +175,8 @@ struct Ppu {
 	void render_background() {
 		const eng::u16 bg_base = (ctrl & 0x10u) ? 0x1000u : 0x0000u;
 		const eng::u8 universal = static_cast<eng::u8>(palette[0] & 0x3Fu);
+		const bool bg_on = (mask & 0x08u) != 0u;   ///< $2001 bit3: fondo habilitado.
+		const bool left_clip = (mask & 0x02u) == 0u; ///< $2001 bit1: recorta 8 px izq.
 		const int base_h = ctrl & 1;         ///< Nametable base horizontal ($2000 bit0).
 		const int base_v = (ctrl >> 1) & 1;  ///< Nametable base vertical ($2000 bit1).
 
@@ -185,6 +187,12 @@ struct Ppu {
 			const int fine_y = fy & 7;
 			const int cy = (fy >> 3) & 0x3Fu;       ///< Fila de tile 0..63
 			for (int px = 0; px < kPpuWidth; ++px) {
+				if (!bg_on || (left_clip && px < 8)) {
+					const int idx = py * kPpuWidth + px;
+					fb[idx] = universal;
+					bg_opaque[idx] = 0u;
+					continue;
+				}
 				const int fx = px + lx;
 				const int fine_x = fx & 7;
 				const int cx = (fx >> 3) & 0x3Fu;
@@ -237,6 +245,11 @@ struct Ppu {
 	/// el bit 6 de `status` (sprite-0 hit) cuando el sprite 0 opaco se solapa con
 	/// un píxel de fondo no transparente.
 	void render_sprites() {
+		const bool spr_on = (mask & 0x10u) != 0u;    ///< $2001 bit4: sprites habilitados.
+		const bool spr_left = (mask & 0x04u) != 0u;  ///< $2001 bit2: sprites en 8 px izq.
+		if (!spr_on) {
+			return;
+		}
 		const int height = (ctrl & 0x20u) ? 16 : 8;
 		for (int y = 0; y < kPpuHeight; ++y) {
 			int selected[8];
@@ -293,6 +306,9 @@ struct Ppu {
 					const int px = static_cast<int>(ox) + col;
 					if (px < 0 || px >= kPpuWidth) {
 						continue;
+					}
+					if (!spr_left && px < 8) {
+						continue; // recorte de la columna izquierda
 					}
 					const int bit = flip_h ? col : (7 - col);
 					eng::u8 color;

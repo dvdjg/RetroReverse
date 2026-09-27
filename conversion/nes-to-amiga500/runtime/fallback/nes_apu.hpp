@@ -87,12 +87,14 @@ struct Apu {
 		bool const_vol = false;   ///< Volumen constante (vs. envelope).
 		bool env_start = false;   ///< Reinicio del envelope.
 
-		/// Salida instantánea del canal (0..15).
+		/// Salida instantánea del canal (0..15). Usa el **envelope** (`env_decay`) si
+		/// no es volumen constante (`const_vol`), o `env_period` como volumen fijo.
 		[[nodiscard]] eng::u8 output() const {
 			if (!enabled || length == 0u) {
 				return 0u;
 			}
-			return kDuty[duty][seq] != 0u ? volume : 0u;
+			const eng::u8 vol = const_vol ? env_period : env_decay;
+			return kDuty[duty][seq] != 0u ? vol : 0u;
 		}
 	};
 
@@ -404,18 +406,41 @@ private:
 		}
 	}
 
-	/// Frame counter (4 pasos): decae los length counters (si no están en halt) y
-	/// reinicia el envelope de pulse. Aproximado; suficiente para la mezcla.
-	void clock_frame() {
-		if (!pulse1.length_halt && pulse1.length > 0u) --pulse1.length;
-		if (!pulse2.length_halt && pulse2.length > 0u) --pulse2.length;
-		if (!noise.length_halt && noise.length > 0u) --noise.length;
-		if (pulse1.env_start) {
-			pulse1.env_start = false;
-			pulse1.env_decay = 15u;
-			pulse1.env_div = pulse1.env_period;
-			if (!pulse1.const_vol) pulse1.volume = pulse1.env_decay;
+	/// Reloj del **envelope** de un pulse (arrranque y decaimiento). Se llama a
+	/// ~240 Hz desde `clock_frame`. Sin esto, los canales en modo envelope quedaban
+	/// mudos o sin decaer.
+	/// \param p Canal pulse a relojear.
+	static void clock_envelope(Pulse& p) {
+		if (p.env_start) {
+			p.env_start = false;
+			p.env_decay = 15u;
+			p.env_div = p.env_period;
+			return;
 		}
+		if (p.env_div == 0u) {
+			p.env_div = p.env_period;
+			if (p.env_decay > 0u) {
+				--p.env_decay;
+			} else if (p.length_halt) {
+				p.env_decay = 15u; // lazo del envelope
+			}
+		} else {
+			--p.env_div;
+		}
+	}
+
+	/// Frame counter (4 pasos): decae los length counters (si no están en halt,
+	/// ~120 Hz) y relojea el **envelope** de los dos pulses (~240 Hz). Aproximado;
+	/// suficiente para la mezcla.
+	void clock_frame() {
+		if ((frame_step & 1u) == 0u) {
+			if (!pulse1.length_halt && pulse1.length > 0u) --pulse1.length;
+			if (!pulse2.length_halt && pulse2.length > 0u) --pulse2.length;
+			if (!noise.length_halt && noise.length > 0u) --noise.length;
+			if (!triangle.length_halt && triangle.length > 0u) --triangle.length;
+		}
+		clock_envelope(pulse1);
+		clock_envelope(pulse2);
 		frame_step = static_cast<eng::u8>((frame_step + 1u) & 3u);
 	}
 
