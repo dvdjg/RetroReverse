@@ -15,9 +15,16 @@ sprite-0 hit, VBlank/NMI, `$2000-$2007`, OAM, DMA) y del APU (5 canales + frame 
 
 ## Alcance y pendientes
 
-- **PPU**: falta sprites (64, 8/línea), sprite-0 hit, scroll fino por línea (mid-frame) y la
-  conversión del framebuffer a bitplanes Amiga.
-- **APU**: falta DMC, mezcla no lineal exacta y el volcado real a Paula.
+- **PPU**: implementados fondo (nametables con **mirroring** y envoltura de 30 filas), sprites
+  (flips, prioridad, 8/línea + overflow), **sprite-0 hit por scanline** (el flag de `$2002` se
+  activa al alcanzar la línea del hit y se limpia en la pre-render, como el PPU real), scroll,
+  VBlank/NMI y `$2000-$2007`, incluido el reparto correcto del espacio de direcciones de VRAM:
+  `$0000-$1FFF` = pattern tables (CHR-ROM: escrituras ignoradas), `$2000-$3EFF` = nametables (con
+  espejo de `$3000-$3EFF`) y `$3F00-$3FFF` = paleta con **espejo** `$3F10→$3F00`, etc.
+  Pendiente: timing dot-exacto (sprite-0 y splits mid-frame finos), evaluación de sprites por
+  línea exacta y la conversión del framebuffer a bitplanes Amiga.
+- **APU**: falta el **sweep** de los pulse y la **envolvente del noise** (el DMC ya lee sus
+  muestras de la PRG y la envolvente de los pulse funciona); pendiente el volcado real a Paula.
 - **Validación diferencial**: comparación frame a frame del framebuffer y del audio contra `mesen`
   (ver [`../../docs/VALIDATION.md`](../../docs/VALIDATION.md)).
 

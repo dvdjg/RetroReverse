@@ -47,6 +47,10 @@ struct Ppu {
 	const enhance::ITileProvider* tile_provider = nullptr;
 	/// Paleta extendida opcional (hasta 256 colores `0x0RGB`) para packs de >2 bpp.
 	const eng::u16* ext_palette = nullptr;
+	/// Hook de **diagnóstico** opcional: si no es `nullptr`, se llama con la
+	/// dirección `v` y el valor de cada escritura a `$2007` (nametable o paleta)
+	/// para trazar cómo el juego carga la VRAM. No afecta al comportamiento.
+	void (*write_trace)(eng::u16 v_addr, eng::u8 value) = nullptr;
 
 	// --- Dirección/scroll ---
 	eng::u16 v = 0;          ///< Dirección de VRAM ($2006) o dirección temporal.
@@ -73,6 +77,10 @@ struct Ppu {
 	// --- Tiempo ---
 	eng::u16 scanline = 0;   ///< Línea actual (0..261 en NTSC).
 	bool nmi_occurred = false; ///< Se puso el flag de VBlank (NMI si `ctrl & 0x80`).
+	/// Scanline en la que ocurre el **sprite-0 hit** (calculada al renderizar); el
+	/// flag de `$2002` se pone al llegar a esa línea (así el CPU lo ve ponerse y
+	/// borrarse dentro del frame, como el PPU real). `0xFFFF` = no hay hit.
+	eng::u16 sprite0_line = 0xFFFFu;
 
 	/// Framebuffer de índices de color NES (0..63), fila a fila (256×240).
 	eng::u8 fb[kPpuWidth * kPpuHeight] {};
@@ -95,10 +103,16 @@ struct Ppu {
 			return oam[oam_addr];
 		case 7u: {  // PPUDATA
 			eng::u8 r;
+			const int ni = nametable_index(v);
 			if ((v & 0x3F00u) == 0x3F00u) {
-				r = static_cast<eng::u8>(palette[v & 0x1Fu] & 0x3Fu);
+				r = static_cast<eng::u8>(palette[palette_index(v)] & 0x3Fu);
+			} else if (ni >= 0) {
+				r = vram[static_cast<eng::usize>(ni)];
+			} else if (chr != nullptr && chr_size != 0u) {
+				// $0000-$1FFF: pattern tables (CHR-ROM), legibles por $2007.
+				r = chr[static_cast<eng::usize>((v & 0x1FFFu) % chr_size)];
 			} else {
-				r = vram[vram_index(v)];
+				r = 0u;
 			}
 			v = static_cast<eng::u16>(v + ((ctrl & 0x04u) ? 32u : 1u));
 			return r;
@@ -144,10 +158,19 @@ struct Ppu {
 			write_toggle = !write_toggle;
 			break;
 		case 7u:  // PPUDATA
+			if (write_trace != nullptr) {
+				write_trace(v, value);
+			}
 			if ((v & 0x3F00u) == 0x3F00u) {
-				palette[v & 0x1Fu] = static_cast<eng::u8>(value & 0x3Fu);
+				palette[palette_index(v)] = static_cast<eng::u8>(value & 0x3Fu);
 			} else {
-				vram[vram_index(v)] = value;
+				// Solo nametables ($2000-$3EFF, con espejo). Las escrituras a
+				// $0000-$1FFF son a las pattern tables: en CHR-ROM se ignoran
+				// (aquí), y en CHR-RAM habría que guardarlas en memoria de CHR.
+				const int ni = nametable_index(v);
+				if (ni >= 0) {
+					vram[static_cast<eng::usize>(ni)] = value;
+				}
 			}
 			v = static_cast<eng::u16>(v + ((ctrl & 0x04u) ? 32u : 1u));
 			break;
@@ -161,12 +184,21 @@ struct Ppu {
 	/// aún el timing exacto de dots ni el sprite-0 hit.
 	void tick_scanline() {
 		++scanline;
+		if (scanline == sprite0_line) {
+			// Sprite-0 hit: se pone en la línea en la que el sprite 0 solapa el
+			// fondo (calculada en el último `render_sprites`), de modo que el CPU
+			// observa ponerse y borrarse el flag dentro del mismo frame.
+			status = static_cast<eng::u8>(status | 0x40u);
+		}
 		if (scanline == 241u) {
 			status = static_cast<eng::u8>(status | 0x80u);
 			nmi_occurred = (ctrl & 0x80u) != 0u;
 		} else if (scanline == 261u) {
 			scanline = 0u;
-			status = static_cast<eng::u8>(status & ~0x80u);
+			// Fin de VBlank: se borran VBlank, sprite-0 y overflow (el PPU real
+			// limpia sprite-0/overflow en la pre-render). Sin esto, el bit de
+			// sprite-0 quedaba pegado y SMB se colgaba en su bucle de espera.
+			status = static_cast<eng::u8>(status & ~0xE0u);
 		}
 	}
 
@@ -248,6 +280,7 @@ struct Ppu {
 	/// el bit 6 de `status` (sprite-0 hit) cuando el sprite 0 opaco se solapa con
 	/// un píxel de fondo no transparente.
 	void render_sprites() {
+		sprite0_line = 0xFFFFu; ///< Se recalcula: sin sprites, no hay sprite-0 hit.
 		const bool spr_on = (mask & 0x10u) != 0u;    ///< $2001 bit4: sprites habilitados.
 		const bool spr_left = (mask & 0x04u) != 0u;  ///< $2001 bit2: sprites en 8 px izq.
 		if (!spr_on) {
@@ -332,8 +365,10 @@ struct Ppu {
 						continue;
 					}
 					const int idx = y * kPpuWidth + px;
-					if (i == 0 && bg_opaque[idx] != 0u) {
-						status = static_cast<eng::u8>(status | 0x40u);  // sprite 0 hit
+					if (i == 0 && bg_opaque[idx] != 0u && sprite0_line == 0xFFFFu) {
+						// Guarda la primera línea con hit; `tick_scanline` pondrá
+						// el flag de `$2002` al alcanzarla en el siguiente frame.
+						sprite0_line = static_cast<eng::u16>(y);
 					}
 					const bool behind = (attr & 0x20u) != 0u;
 					if (behind && bg_opaque[idx] != 0u) {
@@ -382,6 +417,39 @@ private:
 		const int nt_h = (addr >> 10) & 1;
 		const int nt_v = (addr >> 11) & 1;
 		return static_cast<eng::u16>(nt_bank(nt_h, nt_v) * 0x400 + (addr & 0x3FFu));
+	}
+
+	/// Índice (0..31) dentro de `palette` para una dirección de `$3F00-$3FFF`,
+	/// aplicando el **espejo** de la paleta: `$3F10/$14/$18/$1C` son el mismo
+	/// registro que `$3F00/$04/$08/$0C` (el color de fondo "universal"). Sin esto,
+	/// las escrituras del juego a `$3F10` (paleta de sprites 0) no actualizaban el
+	/// backdrop y el fondo quedaba en negro (bug del cielo de SMB).
+	/// \param addr Dirección de PPU (la `v` fijada por `$2006`).
+	/// \return Índice en `palette` en `[0,31]`.
+	[[nodiscard]] static eng::u8 palette_index(eng::u16 addr) noexcept {
+		eng::u8 idx = static_cast<eng::u8>(addr & 0x1Fu);
+		if ((idx & 0x13u) == 0x10u) {
+			idx = static_cast<eng::u8>(idx & ~0x10u);
+		}
+		return idx;
+	}
+
+	/// Si `addr` cae en el espacio de **nametables** `$2000-$3EFF` (incluido el
+	/// espejo de `$3000-$3EFF` sobre `$2000-$2FFF`), devuelve su índice en `vram`.
+	/// Para `$0000-$1FFF` (pattern tables) o paleta devuelve `-1`. Sin esto, las
+	/// escrituras de `$2007` al espacio de pattern (p. ej. la "limpieza" genérica
+	/// de VRAM de SMB, que en NROM es CHR-ROM y debe ignorarse) se **aliasaban**
+	/// dentro de la VRAM de nametables y corrompían el fondo.
+	/// \param addr Dirección de PPU (la `v` fijada por `$2006`).
+	/// \return Índice en `vram` en `[0,0x7FF]`, o `-1` si no es nametable.
+	[[nodiscard]] int nametable_index(eng::u16 addr) const noexcept {
+		if (addr >= 0x2000u && addr < 0x3000u) {
+			return static_cast<int>(vram_index(addr));
+		}
+		if (addr >= 0x3000u && addr < 0x3F00u) {
+			return static_cast<int>(vram_index(static_cast<eng::u16>(addr - 0x1000u)));
+		}
+		return -1;
 	}
 
 	/// Atributo (paleta 0..3) del tile en la nametable `nt_base`, coordenadas

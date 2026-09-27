@@ -54,6 +54,7 @@ struct NesSystem {
 	eng::u8 shift1 = 0;  ///< Desplazamiento del mando 1.
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
 	int ppu_dot = 0;     ///< Dots acumulados en la línea actual.
+	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
 	NesSystem() : interp(cpu, mem) {
@@ -294,6 +295,7 @@ private:
 
 	/// Toma una NMI: apila PC y estado y salta al vector `$FFFA`.
 	void trigger_nmi() {
+		++nmi_count;
 		eng::u8 p = 0x20u;
 		if (cpu.N) p = static_cast<eng::u8>(p | 0x80u);
 		if (cpu.V) p = static_cast<eng::u8>(p | 0x40u);

@@ -25,6 +25,9 @@ fi
 command -v python3 >/dev/null 2>&1 || { echo "diff_mesen: sin python3; se omite."; exit 0; }
 
 mkdir -p "$ROOT/build/mesen"
+# Limpia capturas previas: si no, `find | sort | tail -1` puede elegir un frame
+# de una ejecución anterior (otra ROM o otro nº de frames) como referencia.
+rm -f "$ROOT/build/mesen/screenshots"/*.ppm
 echo "diff_mesen: ROM=$(basename "$ROM") frames=$FRAMES"
 "$CXX" -std=gnu++23 -O2 -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" \
 	"$ROOT/tools/nes_frame.cpp" -o "$ROOT/build/nes_frame"

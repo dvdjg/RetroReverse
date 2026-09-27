@@ -71,12 +71,18 @@ int main() {
 	ppu.oam[2] = 0x00u;         // atributo: paleta 0, delante
 	ppu.oam[3] = 5u;            // X
 	ppu.status = 0u;
+	ppu.scanline = 0;
 	ppu.render_background();
 	ppu.render_sprites();
 	const int sp_y = 11;        // el sprite se dibuja desde Y+1
 	if (ppu.fb[sp_y * 256 + 5] != 0x16u) {
 		std::printf("  sprite delante no dibujado (fb=%02X)\n", ppu.fb[sp_y * 256 + 5]);
 		++fail;
+	}
+	// El flag de sprite-0 se activa cuando la PPU **alcanza** la línea del hit
+	// (no se deja pegado todo el frame): avanzamos scanlines hasta esa línea.
+	for (int s = 0; s < sp_y; ++s) {
+		ppu.tick_scanline();
 	}
 	if ((ppu.status & 0x40u) == 0u) {
 		std::printf("  sprite-0 hit no activado\n");
