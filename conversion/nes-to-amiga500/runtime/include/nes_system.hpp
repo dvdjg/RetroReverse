@@ -372,8 +372,10 @@ private:
 			ppu.tick_scanline();
 			if (ppu.scanline != before) {
 				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
-				if (ppu.scanline < 240u) {
-					mapper.on_scanline(); // MMC3: contador de scanlines (IRQ por raster)
+				if (ppu.scanline < 240u && (ppu.mask & 0x18u) != 0u) {
+					// MMC3: el contador IRQ avanza con los flancos de A12, que solo
+					// ocurren con el render activo (BG o sprites).
+					mapper.on_scanline();
 				}
 				if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot < ppu.dot) {
 					ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);

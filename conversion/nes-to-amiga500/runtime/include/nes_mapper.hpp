@@ -114,6 +114,11 @@ struct Mapper {
 				const eng::u32 base = (static_cast<eng::u32>(mmc1_prg & 0x0Eu)) * 0x4000u;
 				return prg_at(base + off);
 			}
+			// NOTA: el modo 2 "correcto" de MAME ($8000 banco 0 / $C000 conmutable)
+			// REGRESA Metroid (que usa modo 3 y pasa por modo 2). Hay un factor no
+			// resuelto (probablemente el latch compartido / filtro de escritura de 1
+			// ciclo). Se mantiene el modo ≥2 = `$8000` conmutable / `$C000` último,
+			// que hace funcionar Metroid. MMC1 = parcial (ver COMPATIBILITY.md).
 			if (addr >= 0xC000u) {
 				return prg_at((prg_size >= 0x4000u ? prg_size - 0x4000u : 0u) + (addr - 0xC000u));
 			}
