@@ -60,7 +60,6 @@ struct NesSystem {
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
 	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
 	bool cycle_exact_ = true; ///< Reloj de bus por acceso activo (ver `set_cycle_exact`).
-	int warmup_frames = 0;    ///< Frames de warm-up del PPU restantes (sin VBlank; ya no se usa: mesen no suprime el flag).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
 	NesSystem() : interp(cpu, mem) {
@@ -109,7 +108,7 @@ struct NesSystem {
 		ppu.chr_ram = mapper.chr_ram;
 		ppu.mirror_h = mapper.mirror_h;
 		ppu.scanline = 0;
-		warmup_frames = 0; // sin supresión de VBlank: mesen activa el flag en (241,1) desde el frame 0 (fceumm `ppudead` era un hack para Knight Rider)
+		ppu.vblank_suppress = false; // mesen activa el flag en (241,1) desde el frame 0
 		interp.jammed = false;
 		// La CPU tarda 8 ciclos en empezar a ejecutar tras el reset (mesen CPU.cpp:150:
 		// "the CPU takes 8 cycles before it starts executing the ROM's code"); durante
@@ -219,12 +218,10 @@ struct NesSystem {
 	/// PPU (incluido VBlank) hasta que la PPU vuelve a la línea 0. Así el juego ve
 	/// el flag de VBlank y ejecuta su rutina de actualización.
 	void run_frame() {
-		// Warm-up del PPU: los primeros 2 frames tras el reset no levantan VBlank
-		// (como fceumm); alineado con la referencia para los bucles de espera.
-		ppu.vblank_suppress = (warmup_frames > 0);
-		if (warmup_frames > 0) {
-			--warmup_frames;
-		}
+		// Sin supresión de VBlank: mesen levanta el flag en (241,1) desde el frame 0
+		// (el antiguo `ppudead=2` de fceumm era un hack para Knight Rider y desalineaba
+		// los bucles de espera del reset).
+		ppu.vblank_suppress = false;
 		ppu.mirror_h = mapper.mirror_h; // la MMC3 cambia el mirroring en runtime
 		// Frontera de frame nítida en la **pre-VBlank** (scanline 240): el bucle del juego
 		// que espera el VBlank de la línea 241 converge en la misma frontera. Con `scanline
