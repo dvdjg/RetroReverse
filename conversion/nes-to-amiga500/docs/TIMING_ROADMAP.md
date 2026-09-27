@@ -1,5 +1,16 @@
 # Roadmap: sincronismo PPU/CPU por ciclo (event-driven)
 
+> **ESTADO (2026): óptimo alcanzado con Fase 1+2.**
+> - **Fase 1 (PPU dot a dot) + Fase 2 (fase continua)** implementadas: **jurassicpark y
+>   blastermaster 13.7%/9.1% → 0.0%**; el primer bucle de VBlank alinea; sin regresiones.
+> - Tras ello la **fase del PPU es CONSTANTE** (no deriva); el residuo es un **offset sub-dot**
+>   (~+4 dots) del **modelo exacto de sincronización de mesen** (`_masterClock - _ppuOffset`,
+>   `StartCpuCycle`/`EndCpuCycle`). Ningún ajuste global de fase mejora **sin** regresar un juego
+>   ya a 0.0% → el dot natural de Fase 1+2 es el **óptimo**.
+> - **4 juegos** (`ic` 92.2%, `galaga` 36.7%, `metalstorm` 14.2%, `pacman` 12.9%) quedan como
+>   **límite de fidelidad de estado** (no bloqueante; el render es correcto).
+> - El andamiaje experimental (`kFrameSnap`) se **retiró**; Fase 2 es el comportamiento por defecto.
+
 **Objetivo.** Que los **efectos observables** de la PPU (flag de VBlank en `$2002`, NMI, sprite-0,
 overflow, IRQ de mapper A12/por-ciclo, fin de frame) ocurran en el **ciclo exacto** respecto a la
 CPU, con **fase continua** entre frames, para que el oráculo coincida con mesen también en los

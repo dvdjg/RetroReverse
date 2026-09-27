@@ -62,7 +62,6 @@ struct NesSystem {
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
 	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
 	bool cycle_exact_ = true; ///< Reloj de bus por acceso activo (ver `set_cycle_exact`).
-	int frames_done_ = 0;     ///< Frames completados: el 1º no fuerza la frontera (PPU desde línea 0).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
 	NesSystem() : interp(cpu, mem) {
@@ -132,7 +131,6 @@ struct NesSystem {
 		ppu.nt_single = mapper.mirror_single;
 		ppu.scanline = 0;
 		ppu.vblank_suppress = false; // mesen activa el flag en (241,1) desde el frame 0
-		frames_done_ = 0;
 		interp.jammed = false;
 		// La CPU tarda 8 ciclos en empezar a ejecutar tras el reset (mesen CPU.cpp:150:
 		// "the CPU takes 8 cycles before it starts executing the ROM's code"); durante
@@ -245,21 +243,11 @@ struct NesSystem {
 	}
 
 	/// Ejecuta un frame completo: corre la CPU a lo largo de las 262 líneas de la
-	/// PPU (incluido VBlank) hasta que la PPU vuelve a la línea 0. Así el juego ve
-	/// el flag de VBlank y ejecuta su rutina de actualización.
-	///
-	/// EXPERIMENTO Fase 0 (`docs/TIMING_ROADMAP.md`): con `kFrameSnap=false` el *snap*
-	/// de la frontera de frame se desactiva (para diagnosticar por qué rompe la
-	/// equivalencia intérprete↔codegen). Debe quedar en `true` salvo para el diagnóstico.
-#ifdef N2A_FRAME_SNAP
-	static constexpr bool kFrameSnap = true;
-#else
-	static constexpr bool kFrameSnap = false; // Fase 2: frontera continua (sin snap)
-#endif
+	/// PPU (incluido VBlank) hasta que la PPU vuelve a la **pre-VBlank (scanline 240)**.
+	/// La **fase del PPU es continua** entre frames (no se resetea la scanline ni el dot;
+	/// ver `docs/TIMING_ROADMAP.md`, Fase 2). El VBlank no se suprime (mesen lo levanta
+	/// desde el frame 0; el antiguo `ppudead=2` de fceumm era un hack para Knight Rider).
 	void run_frame() {
-		// Sin supresión de VBlank: mesen levanta el flag en (241,1) desde el frame 0
-		// (el antiguo `ppudead=2` de fceumm era un hack para Knight Rider y desalineaba
-		// los bucles de espera del reset).
 		ppu.vblank_suppress = false;
 		ppu.mirror_h = mapper.mirror_h; // la MMC3/MMC1 cambian el mirroring en runtime
 		ppu.nt_single = mapper.mirror_single;
@@ -274,20 +262,6 @@ struct NesSystem {
 		} else {
 			ppu.nt_map_on = false;
 		}
-		// Frontera de frame en la pre-VBlank (scanline 240). El PRIMER frame **no** se fuerza:
-		// la PPU arranca en la línea 0 y llega a la 241 por sí sola (forzar la 240 aquí
-		// saltaría las líneas 0-239 y adelantaría el primer VBlank ~27000 ciclos, haciendo
-		// que el bucle `LDA $2002/BPL` del reset salga de inmediato). Desde el 2º frame la
-		// PPU ya está en la 240 y se fija una frontera nítida.
-		// Fase 2 (docs/TIMING_ROADMAP.md): con `kFrameSnap` se fijan scanline Y dot a
-		// (240,0) al inicio de frame; sin él NO se resetean (fase del PPU continua).
-		if (kFrameSnap) {
-			if (frames_done_ > 0) {
-				ppu.scanline = 240u;
-			}
-			ppu.dot = 0u;
-		}
-		++frames_done_;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
 		// LÍMITE (ver docs/RISKS.md): el frame se cierra en la **frontera de instrucción**
