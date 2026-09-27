@@ -50,6 +50,16 @@ Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-
 | tinytoonadventures.nes | 4 | 4b838964cfde9dfd | **0.0%** |
 | xevious.nes | 0 | 13048012ca91d263 | 3.6% |
 
+## Juegos nuevos (mappers ampliados: VRC6 / MMC5 / AxROM / FME-7)
+
+| ROM | mapper | estructura vs mesen |
+|---|---:|---:|
+| esperdream2.nes (Esper Dream 2) | 26 (VRC6b) | **4.6%** |
+| mrgimmick.nes (Mr. Gimmick) | 69 (FME-7) | **5.0%** |
+| battletoads.nes (Battletoads) | 7 (AxROM) | **6.2%** |
+| cv3.nes (Castlevania III USA) | 5 (MMC5) | **9.2%** |
+| akumajou.nes (Akumajou Densetsu) | 24 (VRC6) | **9.5%** |
+
 ## Lectura
 
 - **23 juegos a 0.0%**: geometría/tiles idénticos a `mesen`; lo que queda es solo paleta.
