@@ -49,6 +49,21 @@ else
 	echo "AVISO: sin ROM en roms/nes; se omite el test del sistema."
 fi
 
+echo "[extra] primitivas HLE de raster (VBlank/sprite-0/retardo)"
+"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" \
+	"$ROOT/test/hle_raster_test.cpp" -o "$ROOT/build/hle_raster_test"
+"$ROOT/build/hle_raster_test"
+
+echo "[extra] presupuesto y cobertura HLE (puerta: ratio HLE >= 80%)"
+if [ -n "$ROM_NES" ] && [ -f "$ROM_NES" ]; then
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \
+		"$ROOT/tools/bench_hle.cpp" -o "$ROOT/build/bench_hle"
+	"$ROOT/build/bench_hle" "$ROM_NES" 120 | awk \
+		'{print} /HLE PPU/ { v=$4; gsub(/%/,"",v); if (v+0 < 80.0) { print "  PUERTA FALLO: ratio HLE " v "% < 80%"; exit 1 } }'
+else
+	echo "AVISO: sin ROM en roms/nes; se omite el presupuesto HLE."
+fi
+
 echo "[extra] ajustes por ROM (pack 4 bpp sin afectar a la emulacion)"
 if [ -n "$ROM_NES" ] && [ -f "$ROM_NES" ]; then
 	"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \
