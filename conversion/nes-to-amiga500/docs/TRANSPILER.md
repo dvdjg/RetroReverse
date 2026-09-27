@@ -176,7 +176,10 @@ nes_transpiler juego.nes -o generated/game.cpp
 
 ## Limitaciones del prototipo (a cerrar en F2/F9)
 
-- Solo mapper 0 (NROM) al principio; el resto llega en F9.
+- Solo mapper 0 (NROM) al principio; el resto llega en F9. Misma raíz que el ejecutor rápido
+  (`FastCpu` decodifica la PRG asumiendo mapeo fijo): ver
+  [`FAST_EXECUTOR.md`](FAST_EXECUTOR.md) §"Mappers (CNROM)" — el *banking* exige bloques por banco
+  **y** reloj de PPU por acceso para conservar la equivalencia.
 - No detecta todavía **código automodificable** complejo ni todos los saltos indirectos → fallback.
 - `JSR/RTS` requieren un modelo de pila real en el runtime (push/pop de retorno).
 - Los ciclos se cuentan por bloque (aproximado) para alimentar PPU/APU.

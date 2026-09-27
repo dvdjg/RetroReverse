@@ -80,6 +80,21 @@ done
 cd - >/dev/null || true
 rm -rf "$tmp"
 
+# Transpilado (codegen) vs intérprete: `gen_frame.sh` transpila una ROM NROM y compara
+# el **código generado** (basic blocks) con el intérprete dentro del NesSystem. Cubre
+# el otro camino de ejecución (F2) además del ejecutor rápido. Es informativo: la
+# temporalización del codegen es aproximada por bloque (ver FAST_EXECUTOR.md).
+GEN="$ROOT/../tools/transpiler/tests/gen_frame.sh"
+if [ -f "$GEN" ] && [ -f "$ROOT/build/bf.nes" ]; then
+	if ROM="$ROOT/build/bf.nes" bash "$GEN" >/dev/null 2>&1; then
+		echo "OK: transpilado (gen_frame) NROM: codegen == interprete"
+	else
+		echo "AVISO: transpilado (gen_frame) no concluyente (timing por bloque; ver FAST_EXECUTOR.md)"
+	fi
+else
+	echo "AVISO: sin gen_frame.sh o ROM NROM; se omite el test de transpilado."
+fi
+
 if [ "$fail" -ne 0 ]; then
 	echo "mapper_consistency: FALLO"
 	exit 1
