@@ -190,6 +190,15 @@ gestiona el mapper del runtime). `--emit-cnrom-rom` genera una CNROM sintética;
 (píxeles idénticos, RAM 3 B). **UxROM (2)/MMC1 (1)** conmutan bancos de PRG y no se pueden decodificar
 estáticamente todavía (pendiente).
 
+> **Límite confirmado 2026 (`FastCpu` sin banking).** `FastCpu` decodifica la PRG con
+> `prg[off]` **lineal** (`host/fastcpu.hpp`), sin el mapeo del mapper. Por eso, además de UxROM/MMC1,
+> **diverge del intérprete en MMC3 (4), MMC5 (5), AxROM (7), VRC6 (24/26) y FME-7 (69)**: p. ej.
+> metroid (MMC1, 60 frames) → `equivalencia FALLO (ram_diff=453 fb_diff=61440)`. Sólo NROM (0) y
+> CNROM (3) coinciden. El test `test/mapper_consistency_test.sh` lo verifica por mapper (AVISO).
+> **No afecta al oráculo** (`nes_frame`/`frame_probe`/matriz usan el **intérprete**, que sí conmuta
+> bancos); es una limitación del **camino rápido** hasta que se implemente el *banking* en el
+> ejecutor de bloques (F2/F9).
+
 El **framebuffer es idéntico**. La diferencia residual (12 bytes de RAM, 0.05 % de ciclos) procede de
 que la NMI se inyecta a **granularidad de bloque**: un bloque que cruza la línea 241 retrasa la NMI
 hasta su fin, mientras el intérprete la inyecta tras la instrucción exacta. La cesión

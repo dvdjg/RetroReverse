@@ -23,6 +23,8 @@ fi
 	"$ROOT/tools/nes_frame.cpp" -o "$ROOT/build/nes_frame" || exit 1
 "$CXX" -std=gnu++23 -O2 -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \
 	"$ROOT/tools/frame_probe.cpp" -o "$ROOT/build/frame_probe" || exit 1
+"$CXX" -std=gnu++23 -O2 -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" -I"$ROOT/host" \
+	"$ROOT/tools/bench_engine.cpp" -o "$ROOT/build/bench_engine" || exit 1
 
 # Una ROM por mapper (nombre en build/).
 declare -A CANDIDATES=(
@@ -58,7 +60,15 @@ for m in 0 1 2 3 4 5 7 24 26 69; do
 		echo "FALLO: mapper $m ($(basename "$rom")): nes_frame != frame_probe (framebuffers distintos)"
 		fail=1
 	else
-		echo "OK: mapper $m ($(basename "$rom")): nes_frame == frame_probe"
+		# Equivalencia intérprete ↔ ejecutor rápido/transpilado (mismo mapper).
+		# LÍMITE CONOCIDO: `FastCpu` decodifica la PRG **lineal** (sin banking), así
+		# que diverge en mappers ≠ NROM/CNROM (ver docs/FAST_EXECUTOR.md). Es un
+		# AVISO, no un fallo: el oráculo (nes_frame/frame_probe) usa el intérprete.
+		if "$ROOT/build/bench_engine" "$rom" 60 2>/dev/null | grep -q 'equivalencia : OK'; then
+			echo "OK: mapper $m ($(basename "$rom")): nes_frame == frame_probe, interp == fast"
+		else
+			echo "AVISO: mapper $m ($(basename "$rom")): interp != fast (FastCpu sin banking; ver FAST_EXECUTOR.md)"
+		fi
 		checked=$((checked + 1))
 	fi
 	rm -f nf.ppm frame_probe.ppm
