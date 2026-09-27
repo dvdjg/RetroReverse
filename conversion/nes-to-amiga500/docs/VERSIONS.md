@@ -10,22 +10,26 @@ port. Regla: si un cambio altera lo **observable** (framebuffer, estado de RAM, 
 | **ABI de plugin** | `N2A_ABI_VERSION` (`runtime/plugin/n2a_plugin.h`) | **1** | Contrato `.n2x`  gestor |
 | **Codegen** | `kCodegenVersion` (`tools/transpiler/src/main.cpp`) | **2** | Invalida la caché de `.n2x` por CRC/gen |
 
-Tags: `oracle-v1` (congelado inicial), `oracle-v1.1` (CHR-RAM, MMC3 + PRG-RAM, IRQ de CPU),
-**`oracle-v2`** (timing del VBlank alineado con mesen).
+Tags: `oracle-v1` (kOracleVersion 1), `oracle-v1.1` (kOracleVersion 2), **`oracle-v2`**
+(kOracleVersion **3**; ver abajo).
 
-## Cambios v2 → v3 (timing del VBlank alineado con mesen)
+## Cambios v2 → v3 (etiqueta `oracle-v2`)
 
 Referencia cambiada a **mesen** (cycle-accurate) tras corregir el diff de trazas (leía 6/8 B en vez
 de 10/12 B). Cambios observables:
 
-- **Sin supresión de VBlank**: `warmup_frames` eliminado (mesen levanta el flag en `(241,1)` desde el
-  frame 0; el `ppudead=2` de fceumm era un hack).
-- **+8 ciclos de reset** modelados (`mesen CPU.cpp:150`).
-- **Frame 0 sin forzar la frontera**: la PPU arranca en la línea 0; el primer VBlank cae en su sitio
-  (antes se adelantaba ~27000 ciclos).
-- **Ejecutor rápido dot-exacto en `$2002`**: los bloques se cortan antes de acceso a `$2000-$3FFF`.
-- Efecto: IC/SMB/bioniccommando pasan de divergir en idx 36-42 a idx ~7800-9100 (el VBlank real).
-  Residuo: **±1 ciclo** sub-instrucción en el cruce del VBlank.
+- **MMC1 completo**: PRG modes 2/3, CHR 4K/8K **conmutada** (chr0/chr1), WRAM `$6000-$7FFF` + disable
+  (`$E000` bit4), filtro de 2 ciclos, mirroring de 1 pantalla (modos 0/1). → megaman2/metroid 0.0%,
+  zelda 0.4%, bioniccommando 0.0%.
+- **Render con la CHR conmutada del mapper** (no la ROM lineal): era un bug de fondo que daba
+  geometría equivocada. → smb3 0.4%, megaman3 0.0%, ninjagaiden 1.2%, megaman5 0.0%, etc.
+- **Timing del VBlank alineado con mesen**: sin supresión de VBlank (`warmup_frames` fuera), +8
+  ciclos de reset (`mesen CPU.cpp:150`), frame 0 sin forzar la frontera, ejecutor rápido dot-exacto
+  en `$2002`, `$2002` limpia el NMI, skip de 1 dot en la pre-render de frames impares (NTSC).
+- **Captura de `$2000`/`$2001` por línea** (splits mid-frame tipo HUD de SMB3).
+- Resultado: **23 ROMs a 0.0%**, 9 ≤3.6%, y **6 con un único límite conocido** (sincronización
+  PPU/NMI por instrucción; detalle y **solución** en [`RISKS.md`](RISKS.md)). No es congelado "final":
+  el límite está documentado y acotado.
 
 ## Cambios v1 → v1.1
 
