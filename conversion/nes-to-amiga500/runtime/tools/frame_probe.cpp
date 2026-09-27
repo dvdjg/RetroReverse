@@ -32,7 +32,11 @@ void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
 	if (c.Z) p |= 0x02u;
 	if (c.C) p |= 0x01u;
 	const eng::u32 cyc = (g_sys != nullptr) ? g_sys->interp.cycles : 0u;
-	const unsigned char b[12] = {static_cast<unsigned char>(pc & 0xFFu),
+	// Posición del PPU (scanline*341 + dot) para comparar la FASE con la referencia.
+	const eng::u32 ppu = (g_sys != nullptr)
+				     ? static_cast<eng::u32>(g_sys->ppu.scanline) * 341u + g_sys->ppu.dot
+				     : 0u;
+	const unsigned char b[16] = {static_cast<unsigned char>(pc & 0xFFu),
 				     static_cast<unsigned char>(pc >> 8u),
 				     op,
 				     c.A,
@@ -43,8 +47,12 @@ void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
 				     static_cast<unsigned char>(cyc & 0xFFu),
 				     static_cast<unsigned char>((cyc >> 8u) & 0xFFu),
 				     static_cast<unsigned char>((cyc >> 16u) & 0xFFu),
-				     static_cast<unsigned char>((cyc >> 24u) & 0xFFu)};
-	std::fwrite(b, 1, 12, g_cpu);
+				     static_cast<unsigned char>((cyc >> 24u) & 0xFFu),
+				     static_cast<unsigned char>(ppu & 0xFFu),
+				     static_cast<unsigned char>((ppu >> 8u) & 0xFFu),
+				     static_cast<unsigned char>((ppu >> 16u) & 0xFFu),
+				     static_cast<unsigned char>((ppu >> 24u) & 0xFFu)};
+	std::fwrite(b, 1, 16, g_cpu);
 	++g_cpu_n;
 }
 

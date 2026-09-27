@@ -29,6 +29,20 @@ la frontera de frame (su `budget` es a fin de *scanline*), así que intérprete 
 número de instrucciones distinto en el frame. **Entregable**: informe de la causa con `dbg_fast2`.
 *Criterio de avance*: causa confirmada (no especulada).
 
+### Fase 0bis — Tracer de **fase del PPU** (hecho)
+Se añadió la **posición del PPU** a ambas trazas (`frame_probe` = `scanline*341+dot`, mesen =
+`GetFrameCycle()`), y `trace_diff` la muestra como columna **dPPU** (referencia − nuestra).
+Hallazgo (metalstorm):
+- En el **mismo ciclo de CPU**, la posición del PPU difiere en un offset **constante** dentro de un
+  frame (**369 dots raw ≈ 28 dots alineados** por la base de una línea; mesen va por delante).
+- El **flag** de mesen está a ~1 dot del nuestro, pero la **lectura** de `$2002` cae ~27 dots antes
+  del flag en nosotros y ~16 después en mesen → **nuestra lectura sale antes del flag**.
+- Entre frames el offset **deriva ~1 línea/frame** (las fronteras de frame no coinciden), lo que
+  apunta a la Fase 2 (residuo de fase).
+Conclusión: el desfase no es "1 ciclo" arbitrario; es una **relación lectura↔flag** (fase
+CPU↔PPU) que solo se corrige prediciendo el **ciclo exacto del acceso** (Fase 3/4), no moviendo el
+flag (adelantarlo "a lo bruto" rompe el arranque: lo probamos).
+
 ### Fase 1 — PPU **dot a dot**
 Sustituir el avance en bloque (`ppu.dot = end; while (dot>=341)`) por un lazo que llame
 `tick_dot()` **una vez por dot** (3 por ciclo de CPU), resolviendo en ese punto: VBlank en `(241,1)`
