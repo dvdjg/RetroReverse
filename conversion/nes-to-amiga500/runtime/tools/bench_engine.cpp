@@ -73,14 +73,16 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	// Decodifica la PRG una vez para el camino rápido. **Sólo** si el mapper tiene
-	// PRG de mapeo fijo (NROM/CNROM): `FastCpu` decodifica la PRG lineal sin
-	// consultar el mapper, así que con bancos conmutables (MMC1/MMC3/MMC5/VRC6/…)
-	// daría una decodificación equivocada. En esos casos se compara intérprete
-	// contra intérprete (equivalencia trivial) y se avisa.
+	// Decodifica la PRG una vez para el camino rápido. `FastCpu` decodifica la PRG
+	// (bajo demanda, a través del mapper) pero **no reloja la PPU por acceso**, así
+	// que su equivalencia con el intérprete solo se sostiene cuando el juego no
+	// depende del timing sub-bloque (en la práctica: PRG fija NROM/CNROM). Con
+	// mappers bancados + timing sensible diverge (`ram_diff` grande). Por eso se
+	// instala **sólo** con PRG de mapeo fijo; en el resto se compara intérprete vs
+	// intérprete. El hook `fast_invalidate` (bankswitching) queda disponible para
+	// cuando el ejecutor reloje la PPU por acceso.
 	n2a::FastCpu fast;
-	const bool fast_ok = rom_b.mapper.has_fixed_prg();
-	if (fast_ok) {
+	if (rom_b.mapper.has_fixed_prg()) {
 		n2a::NESMemory probe;
 		probe.prg = rom_b.mapper.prg;
 		probe.prg_size = rom_b.mapper.prg_size;
@@ -92,6 +94,7 @@ int main(int argc, char** argv) {
 		fast_sys.fast_ctx = &fast;
 		fast_sys.fast_step = &n2a::FastCpu::step;
 		fast_sys.fast_run = &n2a::FastCpu::run_block;
+		fast_sys.fast_invalidate = [](void* ctx) { static_cast<n2a::FastCpu*>(ctx)->invalidate(); };
 	} else {
 		std::printf("aviso: mapper sin PRG fija; el ejecutor rapido no aplica (se compara el interprete)\n");
 	}

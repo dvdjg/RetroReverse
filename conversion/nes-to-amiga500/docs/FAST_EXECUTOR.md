@@ -190,16 +190,24 @@ gestiona el mapper del runtime). `--emit-cnrom-rom` genera una CNROM sintética;
 (píxeles idénticos, RAM 3 B). **UxROM (2)/MMC1 (1)** conmutan bancos de PRG y no se pueden decodificar
 estáticamente todavía (pendiente).
 
-> **Límite confirmado y protegido 2026 (`FastCpu` sin banking).** `FastCpu` decodifica la PRG con
-> `prg[off]` **lineal** (`host/fastcpu.hpp`), sin el mapeo del mapper. Por eso, además de UxROM/MMC1,
-> **divergía del intérprete en MMC3 (4), MMC5 (5), AxROM (7), VRC6 (24/26) y FME-7 (69)**: p. ej.
-> metroid (MMC1, 60 frames) → `equivalencia FALLO (ram_diff=453 fb_diff=61440)`. **Arreglado**: se
-> añadió `Mapper::has_fixed_prg()` (sólo NROM/CNROM) y **`bench_engine`/`dbg_fast2` sólo instalan el
-> ejecutor rápido si la PRG es fija**; en el resto se avisa y se usa el intérprete (equivalencia
-> trivial). El test `test/mapper_consistency_test.sh` lo verifica por mapper.
+> **Límite confirmado y protegido 2026 (`FastCpu` sin banking ni PPU por acceso).** `FastCpu`
+> decodifica la PRG con `prg[off]` **lineal** (`host/fastcpu.hpp`), sin el mapeo del mapper, y —más
+> importante— **no reloja la PPU por acceso de bus** (lo hace al final del bloque). Por eso **no es
+> equivalente al intérprete** en mappers bancados con timing sensible: p. ej. metroid (MMC1) →
+> `equivalencia FALLO (ram_diff=453 fb_diff=61440)`. **Arreglo aplicado**: `Mapper::has_fixed_prg()`
+> (sólo NROM/CNROM) y **`bench_engine`/`dbg_fast2` sólo instalan el ejecutor rápido si la PRG es
+> fija**; en el resto se avisa y se usa el intérprete. El test `test/mapper_consistency_test.sh` lo
+> verifica por mapper.
+>
+> **Intento de banking (2026), con resultado.** Se añadió la **infraestructura** (`FastCpu::invalidate()`
+> + hook `NesSystem::fast_invalidate` al escribir `$8000-$FFFF` + decodificación bajo demanda a través
+> de `mem`). **No basta**: aun con banking correcto, el ejecutor **sigue sin relojear la PPU por
+> acceso**, así que diverge igual (`ram_diff=839`). La equivalencia real del camino rápido exige
+> **relojear la PPU por acceso de bus** (como el intérprete) — coste de rendimiento aún por evaluar.
+> La infraestructura queda lista para ese paso.
+>
 > **No afecta al oráculo** (`nes_frame`/`frame_probe`/matriz usan el **intérprete**, que sí conmuta
-> bancos). Para usar el camino rápido con mappers bancados habría que implementar el *banking* en el
-> ejecutor de bloques (F2/F9).
+> bancos y reloja por acceso).
 
 El **framebuffer es idéntico**. La diferencia residual (12 bytes de RAM, 0.05 % de ciclos) procede de
 que la NMI se inyecta a **granularidad de bloque**: un bloque que cruza la línea 241 retrasa la NMI

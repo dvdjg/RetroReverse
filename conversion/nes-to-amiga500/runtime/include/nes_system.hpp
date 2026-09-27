@@ -54,6 +54,11 @@ struct NesSystem {
 	void* fast_ctx = nullptr;       ///< Contexto del ejecutor rápido.
 	FastStep fast_step = nullptr;   ///< Ejecutor rápido de una instrucción (o `nullptr`).
 	FastRun fast_run = nullptr;     ///< Ejecutor rápido por bloques (o `nullptr`).
+	/// Hook opcional: se llama cuando el mapper **conmuta bancos de PRG** (escritura a
+	/// `$8000-$FFFF`) para que el ejecutor rápido **invalide su decodificación**
+	/// (`FastCpu::invalidate`) y la rehaga bajo demanda leyendo a través del mapper.
+	/// Sin él, el ejecutor rápido solo es correcto con PRG de mapeo fijo.
+	void (*fast_invalidate)(void* ctx) = nullptr;
 
 	eng::u8 pad1 = 0;    ///< Estado del mando 1 (bit por botón).
 	eng::u8 pad2 = 0;    ///< Estado del mando 2.
@@ -456,6 +461,11 @@ private:
 			mapper.cpu_cycle = interp.cycles;
 			mapper.cur_scan = ppu.scanline;
 			mapper.cpu_write(a, v);
+			// Conmutación de bancos de PRG ($8000-$FFFF): invalida la decodificación
+			// del ejecutor rápido (si lo hay) para que se rehaga a través del mapper.
+			if (a >= 0x8000u && fast_invalidate != nullptr) {
+				fast_invalidate(fast_ctx);
+			}
 			return;
 		}
 	}

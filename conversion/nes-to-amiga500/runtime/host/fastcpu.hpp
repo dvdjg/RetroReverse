@@ -115,6 +115,19 @@ struct FastCpu {
 		}
 	}
 
+	/// Invalida la caché de decodificación (pone `has[]` a 0). Necesario cuando el
+	/// mapper **conmuta bancos de PRG** en runtime: el contenido de `$8000-$FFFF`
+	/// cambia y los `dec[]`/`has[]` previos quedan obsoletos. Tras invalidar, el
+	/// siguiente `run_block` **re-decodifica bajo demanda** leyendo a través del
+	/// mapper (`mem.read`), con lo que el ejecutor rápido soporta bankswitching.
+	void invalidate() {
+		if (has != nullptr) {
+			for (unsigned a = 0; a < 0x10000u; ++a) {
+				has[a] = 0u;
+			}
+		}
+	}
+
 	/// Decodifica la PRG desde los vectores de reset/NMI/IRQ.
 	/// \return `true` si se pudo reservar y decodificar algo.
 	bool build(const eng::u8* prg, eng::u32 prg_size, eng::u16 reset, eng::u16 nmi, eng::u16 irq) {
