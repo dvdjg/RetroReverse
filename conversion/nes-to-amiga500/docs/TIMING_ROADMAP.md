@@ -95,14 +95,19 @@ frame. El `budget` del ejecutor rápido pasa de "hasta fin de scanline" a "hasta
 
 ### Fase 4 — Lectura cycle-exacta de `$2002`
 
-> **Resultado negativo 2026 (descarta la fase).** Con **Fase 2** ya activa (no-snap), probamos
-> adelantar la **fase del PPU en el reset** (`-DN2A_PPU_PHASE=0/5/7/9/10/12` ciclos): **neutro total**
-> (misma divergencia en idx 43447). Motivo: la **lectura** y el **flag** son ambos función de la fase
-> del PPU, así que **cualquier desplazamiento de fase mueve los dos por igual** y la relación
-> lectura↔flag queda **invariante**. → El desfase **no es de fase**, sino de **cómo muestrea la
-> lectura** (instante del acceso de datos). Esto **acota el arreglo** al punto exacto: el instante en
-> que `rd()` lee `$2002` respecto al ciclo (hoy `mem.tick()` **antes** de `mem.read()` → ve el dot
-> del ciclo siguiente). El fix debe actuar **ahí**, no en el flag ni en la fase.
+> **Resultados negativos 2026 (acotan el problema).**
+> 1. **La fase es neutra.** Con Fase 2 activa (no-snap), adelantar la **fase del PPU en el reset**
+>    (`-DN2A_PPU_PHASE=0/5/7/9/10/12`) es **neutro total** (idx 43447): la lectura y el flag son
+>    función de la fase → cualquier desplazamiento mueve los dos por igual → la relación
+>    lectura↔flag es **invariante a la fase**.
+> 2. **Leer `$2002` antes del tick** (`-DN2A_VBL_READ_BEFORE_TICK`, muestrea 3 dots antes) también es
+>    **neutro**: el cambio es de −3 dots y la lectura está **~11 dots antes del flag** (línea 240
+>    dot ~330 vs flag en 241 dot 0).
+> 3. El **adelanto del flag** (lookahead 3/6/16) es neutro o **rompe el arranque**.
+> **Conclusión**: el fix exige desplazar la **lectura respecto al flag** (+~11 dots), no la fase ni
+> el flag; y debe hacerse de forma que **no rompa el arranque** (los bucles de espera del reset).
+> El mecanismo exacto (por qué el hardware/mesen muestrea ahí) requiere modelar el **instante del
+> acceso de datos** con precisión — es el núcleo de Fase 3+4.
 
 En el intérprete, para la instrucción que **lee `$2002`** (según su *addressing mode*), calcular el
 **ciclo exacto del acceso de datos** y evaluar el flag con la PPU en **ese** dot (no en el
