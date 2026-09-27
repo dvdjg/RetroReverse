@@ -90,8 +90,8 @@ struct Mapper {
 
 	// --- MMC5 (mapper 5) ---
 	// Subconjunto: PRG (modos 0-3), CHR (modos 0-3), PRG-RAM $6000-$7FFF, ExRAM
-	// $5C00-$5FFF, fill-mode. PENDIENTE: nametables por ExRAM ($5104/$5105), split
-	// vertical ($5200-$5205), IRQ por detección de scanline, multiplicador, audio.
+	// $5C00-$5FFF, fill-mode, nametables por ExRAM ($5104/$5105), split vertical
+	// ($5200-$5202) e IRQ por detección de scanline. PENDIENTE: audio (expansión).
 	eng::u8 mmc5_prg_mode = 3;          ///< $5100: modo PRG (0-3).
 	eng::u8 mmc5_prg_banks[5] = {0};    ///< $5113-$5117: bancos PRG/PRG-RAM.
 	eng::u8 mmc5_chr_mode = 0;          ///< $5101: modo CHR (0-3).
@@ -110,11 +110,11 @@ struct Mapper {
 	bool mmc5_in_frame = false;         ///< La PPU está renderizando (para el contador).
 	eng::u8 mmc5_mult1 = 0;             ///< $5205: multiplicador (operando 1).
 	eng::u8 mmc5_mult2 = 0;             ///< $5206: multiplicador (operando 2).
-	// Split vertical ($5200-$5202). PENDIENTE: el render del split (nametable desde
-	// ExRAM por columnas + patrón del banco) no está implementado; se almacenan los regs.
+	// Split vertical ($5200-$5202): en la región delimitada el render lee la
+	// nametable desde ExRAM (ver `nes_ppu.hpp`, `split_ctrl`/`split_scroll`).
 	eng::u8 mmc5_split_ctrl = 0;        ///< $5200: enable(bit7) + lado(bit6) + delimiter(0-4).
-	eng::u8 mmc5_split_scroll = 0;      ///< $5201: scroll del split.
-	eng::u8 mmc5_split_bank = 0;        ///< $5202: banco de CHR del split.
+	eng::u8 mmc5_split_scroll = 0;      ///< $5201: scroll del split (índice en ExRAM).
+	eng::u8 mmc5_split_bank = 0;        ///< $5202: banco de CHR del split (no usado aún).
 
 	// --- FME-7 / Sunsoft 5B (mapper 69) ---
 	eng::u8 fme7_command = 0;        ///< $8000: comando (0-15).
@@ -731,9 +731,9 @@ private:
 		}
 	}
 
-	/// Escrituras de registro de la MMC5. Subconjunto: PRG/CHR, ExRAM, fill-mode.
-	/// PENDIENTE (ver `MMC5` arriba): nametables por ExRAM ($5104/$5105), split vertical
-	/// ($5200-$5205), IRQ, multiplicador y audio.
+	/// Escrituras de registro de la MMC5. Subconjunto: PRG/CHR, ExRAM, fill-mode,
+	/// nametables ($5105), split vertical ($5200-$5202), IRQ y multiplicador.
+	/// PENDIENTE (ver `MMC5` arriba): audio (expansión).
 	/// \param addr Dirección. \param value Byte.
 	void mmc5_write(eng::u16 addr, eng::u8 value) {
 		if (addr >= 0x5113u && addr <= 0x5117u) {

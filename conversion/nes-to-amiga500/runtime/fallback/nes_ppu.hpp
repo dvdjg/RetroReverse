@@ -56,6 +56,12 @@ struct Ppu {
 	eng::u8* nt_exram = nullptr;      ///< Fuente 2 (ExRAM de la MMC5, 1 KB R/W).
 	const eng::u8* nt_fill = nullptr; ///< Fuente 3 (nametable de relleno, 1 KB sólo lectura).
 	bool nt_map_on = false;           ///< Usar `nt_map` en vez del mirroring.
+	/// **Split vertical de la MMC5** ($5200): `bit7` = activo, `bit6` = lado derecho,
+	/// `bits0-4` = tile delimitador. En la región del split la nametable se lee de
+	/// `split_exram` con el scroll del split (`$5201`).
+	eng::u8 split_ctrl = 0;
+	eng::u8 split_scroll = 0;
+	const eng::u8* split_exram = nullptr;
 	/// Proveedor de tiles opcional (**ajustes por ROM**: otro grupo de tiles o
 	/// mayor profundidad, 3/4 bpp). Si es `nullptr`, se usa la CHR 2 bpp normal.
 	/// Lectura de CHR **con la conmutación de bancos del mapper** (MMC1/MMC3). Lo fija
@@ -347,9 +353,21 @@ struct Ppu {
 				const eng::u16 nt_off = static_cast<eng::u16>(nt_base + (cy & 31) * 32 + (cx & 31));
 				// Mapeo por cartucho (MMC5): CIRAM/ExRAM/fill según `nt_map`.
 				const int nt = nt_h | (nt_v << 1);
+				// Split vertical de la MMC5 ($5200-$5202): dentro de su región la nametable
+				// se sustituye por ExRAM, indexada por el scroll del split. `bit6` = lado
+				// derecho; `bits0-4` = tile delimitador.
+				const int tc = cx & 31;
+				const bool split_col =
+					split_exram != nullptr && (split_ctrl & 0x80u) != 0u &&
+					(((split_ctrl & 0x40u) != 0u) ? (tc >= (split_ctrl & 0x1Fu))
+								     : (tc < (split_ctrl & 0x1Fu)));
 				const eng::u8 tile =
-					nt_map_on ? nt_src_byte(nt, static_cast<eng::u16>((cy & 31) * 32 + (cx & 31)))
-						  : vram[nt_off & 0x7FFu];
+					split_col
+						? split_exram[((static_cast<int>(split_scroll & 0xF8u) << 2) |
+							      tc) & 0x3FF]
+						: (nt_map_on
+								  ? nt_src_byte(nt, static_cast<eng::u16>((cy & 31) * 32 + (cx & 31)))
+								  : vram[nt_off & 0x7FFu]);
 				const eng::u8 attr = attr_bits(nt_base, cx, cy);
 
 				const eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
