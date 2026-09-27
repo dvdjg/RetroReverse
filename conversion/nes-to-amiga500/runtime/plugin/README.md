@@ -102,6 +102,13 @@ g++ -std=gnu++23 -O2 -static -I<eng> -Iruntime/include -Iruntime/host -Iruntime/
 
 Resultado con Super Mario Bros: `ABI v1/1`, `RAM 0/2048`, `pixeles 0/61440`, `~1.26x` vs intérprete.
 
+**Verificación de los 13 `.n2x`** (`nes_sdl --verify <n2x> 60`): 5 coinciden (RAM `0/2048`) y 8
+difieren en **2–13 bytes de RAM** con el **framebuffer idéntico** (`pixeles 0/61440`). La causa es
+la **granularidad de bloques** del codegen: el plugin ejecuta un bloque hasta la frontera de
+scanline y solo entonces comprueba el NMI, mientras el intérprete lo hace instrucción a instrucción;
+los juegos con temporizadores sensibles al raster divergen unos bytes. Es divergencia de *estado*,
+no de imagen (ver `docs/RISKS.md` → "Impacto de los arreglos en la versión Amiga").
+
 ## Estado
 
 - **HECHO**: ABI + `plugin_entry.cpp`; `--emit-lib` multi-ROM con autodetección de compilador; nombre

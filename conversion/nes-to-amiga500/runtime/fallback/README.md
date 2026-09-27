@@ -16,15 +16,19 @@ sprite-0 hit, VBlank/NMI, `$2000-$2007`, OAM, DMA) y del APU (5 canales + frame 
 ## Alcance y pendientes
 
 - **PPU**: implementados fondo (nametables con **mirroring** y envoltura de 30 filas), sprites
-  (flips, prioridad, 8/línea + overflow), **sprite-0 hit por scanline** (el flag de `$2002` se
-  activa al alcanzar la línea del hit y se limpia en la pre-render, como el PPU real), scroll,
-  VBlank/NMI y `$2000-$2007`, incluido el reparto correcto del espacio de direcciones de VRAM:
-  `$0000-$1FFF` = pattern tables (CHR-ROM: escrituras ignoradas), `$2000-$3EFF` = nametables (con
-  espejo de `$3000-$3EFF`) y `$3F00-$3FFF` = paleta con **espejo** `$3F10→$3F00`, etc.
-  Pendiente: timing dot-exacto (sprite-0 y splits mid-frame finos), evaluación de sprites por
-  línea exacta y la conversión del framebuffer a bitplanes Amiga.
-- **APU**: falta el **sweep** de los pulse y la **envolvente del noise** (el DMC ya lee sus
-  muestras de la PRG y la envolvente de los pulse funciona); pendiente el volcado real a Paula.
+  (flips, prioridad, 8/línea + overflow), **sprite-0 hit dot-exacto** (`sprite0_line`/`sprite0_dot`:
+  el flag de `$2002` se activa al alcanzar la **columna** del primer píxel del hit y se limpia en
+  la pre-render), scroll, VBlank/NMI y `$2000-$2007`, incluido el reparto correcto del espacio de
+  direcciones de VRAM: `$0000-$1FFF` = pattern tables (CHR-ROM: escrituras ignoradas; lecturas de
+  CHR), `$2000-$3EFF` = nametables (con espejo de `$3000-$3EFF`) y `$3F00-$3FFF` = paleta con
+  **espejo** `$3F10→$3F00`, etc. El avance del PPU es por dot (`tick_dot`), pero el sprite-0 se
+  resuelve **O(1)** por tramo (sin iterar) para no penalizar el ejecutor rápido.
+  Pendiente: sincronismo **dot-exacto del 6502** (sub-instrucción; causa la deriva de estado, ver
+  `docs/RISKS.md`), evaluación de sprites por línea exacta y conversión del framebuffer a bitplanes.
+- **APU**: implementados pulse ×2 (con **envelope** y **sweep**, incl. el `+1` del pulse1 y el
+  muteo fuera de rango), triangle, **noise con envolvente** y **DMC** (lee sus muestras de la PRG),
+  con mezcla no lineal. Referencia auditiva: `tools/apu_dump.cpp` genera un WAV (sweep + envelopes).
+  Pendiente: volcado real a Paula.
 - **Validación diferencial**: comparación frame a frame del framebuffer y del audio contra `mesen`
   (ver [`../../docs/VALIDATION.md`](../../docs/VALIDATION.md)).
 

@@ -76,11 +76,17 @@ struct Ppu {
 
 	// --- Tiempo ---
 	eng::u16 scanline = 0;   ///< Línea actual (0..261 en NTSC).
+	eng::u16 dot = 0;        ///< Dot dentro de la línea (0..340; 341 dots/línea).
 	bool nmi_occurred = false; ///< Se puso el flag de VBlank (NMI si `ctrl & 0x80`).
 	/// Scanline en la que ocurre el **sprite-0 hit** (calculada al renderizar); el
 	/// flag de `$2002` se pone al llegar a esa línea (así el CPU lo ve ponerse y
 	/// borrarse dentro del frame, como el PPU real). `0xFFFF` = no hay hit.
 	eng::u16 sprite0_line = 0xFFFFu;
+	/// Columna (dot ≈ píxel 0..255) del primer píxel del sprite-0 hit. El flag se
+	/// activa al **alcanzar ese dot** de `sprite0_line`, no al inicio de la línea:
+	/// así los juegos que usan sprite-0 como temporizador de raster ven el flanco
+	/// en el mismo punto que el PPU real.
+	eng::u16 sprite0_dot = 0;
 
 	/// Framebuffer de índices de color NES (0..63), fila a fila (256×240).
 	eng::u8 fb[kPpuWidth * kPpuHeight] {};
@@ -179,17 +185,24 @@ struct Ppu {
 		}
 	}
 
-	/// Avanza una scanline y, al llegar a la 241, levanta VBlank (y `nmi_occurred`
-	/// si `ctrl` lo habilita). En la pre-render (261) reinicia el flag. No modela
-	/// aún el timing exacto de dots ni el sprite-0 hit.
-	void tick_scanline() {
-		++scanline;
-		if (scanline == sprite0_line) {
-			// Sprite-0 hit: se pone en la línea en la que el sprite 0 solapa el
-			// fondo (calculada en el último `render_sprites`), de modo que el CPU
-			// observa ponerse y borrarse el flag dentro del mismo frame.
+	/// Avanza **un dot** (341 por línea). Activa el sprite-0 hit en su dot exacto
+	/// (`sprite0_line`, `sprite0_dot`) y, al completar la línea, avanza de scanline.
+	/// Es la unidad de avance del PPU: `NesSystem::clock_ppu` lo llama `3*ciclos`
+	/// veces por instrucción/bloque.
+	void tick_dot() {
+		if (scanline == sprite0_line && dot == sprite0_dot) {
 			status = static_cast<eng::u8>(status | 0x40u);
 		}
+		if (++dot >= 341u) {
+			dot = 0u;
+			tick_scanline();
+		}
+	}
+
+	/// Avanza una scanline y, al llegar a la 241, levanta VBlank (y `nmi_occurred`
+	/// si `ctrl` lo habilita). En la pre-render (261) reinicia el flag.
+	void tick_scanline() {
+		++scanline;
 		if (scanline == 241u) {
 			status = static_cast<eng::u8>(status | 0x80u);
 			nmi_occurred = (ctrl & 0x80u) != 0u;
@@ -366,9 +379,10 @@ struct Ppu {
 					}
 					const int idx = y * kPpuWidth + px;
 					if (i == 0 && bg_opaque[idx] != 0u && sprite0_line == 0xFFFFu) {
-						// Guarda la primera línea con hit; `tick_scanline` pondrá
-						// el flag de `$2002` al alcanzarla en el siguiente frame.
+						// Guarda la primera línea/columna con hit; `clock_ppu`
+						// pondrá el flag de `$2002` al alcanzar ese dot.
 						sprite0_line = static_cast<eng::u16>(y);
+						sprite0_dot = static_cast<eng::u16>(px);
 					}
 					const bool behind = (attr & 0x20u) != 0u;
 					if (behind && bg_opaque[idx] != 0u) {

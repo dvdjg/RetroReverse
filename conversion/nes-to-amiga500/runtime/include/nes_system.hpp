@@ -53,7 +53,6 @@ struct NesSystem {
 	bool strobe = false; ///< Strobe de `$4016`.
 	eng::u8 shift1 = 0;  ///< Desplazamiento del mando 1.
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
-	int ppu_dot = 0;     ///< Dots acumulados en la línea actual.
 	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
@@ -152,7 +151,7 @@ struct NesSystem {
 		ppu.scanline = 0;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
-		ppu_dot = 0;
+		ppu.dot = 0u;
 		bool seen_vblank = false;
 		int guard = 0;
 		for (;;) {
@@ -269,11 +268,11 @@ private:
 	}
 
 	/// Máximo de ciclos de CPU que caben antes de cruzar la frontera de scanline
-	/// (341 dots, 3 por ciclo). `ppu_dot` está en `[0, 340]`; devolver 0 fuerza
+	/// (341 dots, 3 por ciclo). `ppu.dot` está en `[0, 340]`; devolver 0 fuerza
 	/// que el siguiente bloque ejecute una sola instrucción (puede cruzar).
 	/// \return Ciclos hasta el próximo límite de scanline.
 	[[nodiscard]] int cycles_to_scanline() const {
-		const int b = (340 - ppu_dot) / 3;
+		const int b = (340 - static_cast<int>(ppu.dot)) / 3;
 		return b < 0 ? 0 : b;
 	}
 
@@ -282,13 +281,26 @@ private:
 	/// `$2005` a mitad de frame (splits) afectan solo desde ese punto (scroll
 	/// mid-frame real, no el global de fin de frame).
 	void clock_ppu(int cpu_cycles) {
-		ppu_dot += cpu_cycles * 3;
-		while (ppu_dot >= 341) {
-			ppu_dot -= 341;
+		const int dots = cpu_cycles * 3;
+		const eng::u16 start = ppu.dot;
+		const eng::u16 end = static_cast<eng::u16>(start + static_cast<eng::u16>(dots));
+		// Sprite-0 **dot-exacto** sin iterar dot a dot: si el dot del hit cae dentro
+		// de este tramo de la línea actual, se activa el flag. Los bloques del
+		// ejecutor rápido terminan (o cruzan) en frontera de scanline, así que cada
+		// llamada abarca como mucho una línea; el cruce se resuelve tras el `while`.
+		if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot >= start && ppu.sprite0_dot < end) {
+			ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
+		}
+		ppu.dot = end;
+		while (ppu.dot >= 341u) {
+			ppu.dot = static_cast<eng::u16>(ppu.dot - 341u);
 			const eng::u16 before = ppu.scanline;
 			ppu.tick_scanline();
 			if (ppu.scanline != before) {
 				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
+				if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot < ppu.dot) {
+					ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
+				}
 			}
 		}
 	}

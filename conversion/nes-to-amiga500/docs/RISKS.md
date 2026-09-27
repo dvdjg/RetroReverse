@@ -30,14 +30,44 @@ limitaciones honestas y cómo se mitigan.
 
 ### Evidencia: deriva de timing y el residual de SMB (2026)
 
-El sprite-0 y el NMI se toman en **frontera de instrucción** (no en el dot exacto), así que el
-estado del juego puede divergir del de `mesen` en unos ciclos por frame. Medido en SMB a 60
-frames: la RAM del juego difiere en 16 bytes ya desde el frame 10 (incluye `$0000` y la pila
-`$01F8`), con el acumulador de scroll `$07A7-$07AD` desplazado un bit (la rutina `SEC;ROR $07A7,X`
-de `$8131`). Consecuencia: el logo del título ("SUPER"/recuadro) asienta ~2 filas más bajo que en
-`mesen`, lo que explica el 3.1% de diff **estructural** restante (el resto, "MARIO BROS.", menú,
-suelo, ya coincide). **No es un bug del renderer**: es precisión de timing CPU/PPU (NMI y
-sprite-0) y queda como límite conocido hasta que se aborde el sincronismo dot-exacto.
+**Método.** El orquestador (`vertical_slice --dump-ram`) vuelca la RAM de `mesen`; `frame_probe`
+vuelca la nuestra. Comparando frame a frame se localiza la divergencia con precisión.
+
+**SMB.** La RAM difiere de `mesen` desde el frame 4 y **se estabiliza en 8 bytes** a partir del
+frame 14: `$0000`, `$0001`, `$0778` y 5 bytes de la base de la pila (`$01F8-$01FC`). El
+acumulador de scroll `$07A7-$07AD` (rutina `SEC;ROR $07A7,X` de `$8131`) aparece desplazado un bit
+en algunos frames. No es un offset de 1 frame (comparar con `mesen` `f+1` empeora). Consecuencia:
+el logo del título ("SUPER"/recuadro) asienta ~2 filas más bajo que en `mesen` → el **3.1%** de
+diff **estructural** restante ("MARIO BROS.", menú y suelo ya coinciden).
+
+**Qué se probó.** (a) Se hizo **dot-exacto** el sprite-0 (`sprite0_line`/`sprite0_dot`; el flag se
+activa al alcanzar la columna del primer píxel del hit) — *no cambió* el 3.1%: el sprite-0 no es
+la causa principal. (b) El offset de 1 frame se descartó. (c) Con los headers previos al cambio de
+timing, `dk`/`galaga` divergen igual → **no es una regresión** de estos arreglos.
+
+**Causa.** Es la **granularidad de eventos**: el 6502 se ejecuta por instrucciones/bloques y la
+PPU se sincroniza a esa frontera, mientras `mesen` es dot-exacto. Los pocos ciclos de diferencia en
+NMI/VBlank y en la secuencia de arranque hacen que un contador de init del juego difiera y no se
+recupere. Se necesitaría un **sincronismo dot-exacto del 6502** (sub-instrucción) para cerrarlo.
+
+**Impacto en el codegen.** El mismo efecto aparece entre el **plugin** (bloques) y el **intérprete**
+(instrucción a instrucción): al verificar los 13 `.n2x`, 5 coinciden (RAM 0/2048) y 8 difieren en
+**2–13 bytes de RAM con el framebuffer idéntico** (0/61440 píxeles). Es decir, es una limitación de
+*fidelidad de estado*, no de imagen; relevante para el Amiga porque usa el camino **codegen**.
+
+## Impacto de los arreglos en la versión Amiga
+
+Estos arreglos viven en el **oráculo/host** (PPU/APU software), no en el renderer Amiga (Copper/
+Blitter/Paula). Su impacto en el port es indirecto pero real:
+
+| Arreglo (host) | Impacto en el Amiga |
+|---|---|
+| `$2007` al espacio de **pattern** (`$0000-$1FFF`) se ignora (CHR-ROM) / se lee de CHR | El HLE/Copper que gestione la VRAM debe **descartar** esas escrituras; antes el oráculo daba un estado irreal y las trazas/savestates de partida eran incorrectos |
+| **Espejo de paleta** `$3F10-$3F1C → $3F00-$3F0C` | El HLE que siga los cambios de paleta por Copper debe aplicar el mismo espejo; de lo contrario el fondo sale mal en títulos como SMB |
+| **Sprite-0 por scanline + dot** | El `WAIT` del Copper (temporizador de raster) debe usar la misma línea/columna del hit; mejora los juegos que parten la pantalla con sprite-0 |
+| **APU sweep + envolvente de noise** | La síntesis a Paula (1 canal por software) debe implementar sweep (incl. el `+1` del pulse1 y el muteo) y la envolvente del noise; el WAV del host es la referencia de validación |
+| **Timing por frontera de bloque** (deriva) | Afecta al **codegen**, que es lo que corre en el Amiga: partidas con temporizadores dependientes del raster pueden desviarse unos bytes respecto al intérprete. Se mitiga con el mismo sincronismo fino (pendiente) |
+| Nada de esto añade coste al Amiga | El PPU/APU del host no se ejecutan en el Amiga; el clock dot-exacto se optimizó a O(1) (sin coste de host) |
 
 ## Riesgos de proyecto
 

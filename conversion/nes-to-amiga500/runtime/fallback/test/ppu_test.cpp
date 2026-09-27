@@ -79,14 +79,22 @@ int main() {
 		std::printf("  sprite delante no dibujado (fb=%02X)\n", ppu.fb[sp_y * 256 + 5]);
 		++fail;
 	}
-	// El flag de sprite-0 se activa cuando la PPU **alcanza** la línea del hit
-	// (no se deja pegado todo el frame): avanzamos scanlines hasta esa línea.
-	for (int s = 0; s < sp_y; ++s) {
-		ppu.tick_scanline();
-	}
-	if ((ppu.status & 0x40u) == 0u) {
-		std::printf("  sprite-0 hit no activado\n");
+	// El flag de sprite-0 se activa al alcanzar el **dot exacto** del hit (no al
+	// inicio de la línea ni pegado todo el frame): el render guarda línea y dot.
+	if (ppu.sprite0_line == 0xFFFFu) {
+		std::printf("  sprite-0 hit no detectado al renderizar\n");
 		++fail;
+	} else {
+		ppu.status = 0u;
+		ppu.scanline = ppu.sprite0_line;
+		ppu.dot = ppu.sprite0_dot;
+		ppu.tick_dot(); // al avanzar ese dot, se activa el flag
+		if ((ppu.status & 0x40u) == 0u) {
+			std::printf("  sprite-0 hit no activado en su dot (line=%u dot=%u)\n",
+				    static_cast<unsigned>(ppu.sprite0_line),
+				    static_cast<unsigned>(ppu.sprite0_dot));
+			++fail;
+		}
 	}
 
 	// Sprite detrás del fondo: el fondo (opaco) debe taparlo.
@@ -193,6 +201,17 @@ int main() {
 	ppu.write_reg(0x2006u, 0x00u);         // lee $3F00: debe reflejar el espejo
 	if (ppu.read_reg(0x2007u) != 0x22u) {
 		std::printf("  lectura del backdrop tras $3F10 no refleja el espejo\n");
+		++fail;
+	}
+
+	// Regresión: espejo de nametables `$3000-$3EFF` -> `$2000-$2FFF`.
+	ppu.write_reg(0x2006u, 0x20u);
+	ppu.write_reg(0x2006u, 0x07u);         // v = $2007
+	ppu.write_reg(0x2007u, 0x77u);
+	ppu.write_reg(0x2006u, 0x30u);
+	ppu.write_reg(0x2006u, 0x07u);         // v = $3007 (espejo de $2007)
+	if (ppu.read_reg(0x2007u) != 0x77u) {
+		std::printf("  espejo de nametable $3000-$3EFF no aplicado\n");
 		++fail;
 	}
 

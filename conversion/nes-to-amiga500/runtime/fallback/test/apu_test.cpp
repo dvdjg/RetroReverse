@@ -99,6 +99,28 @@ int main() {
 		}
 	}
 
+	// --- Sweep negate: el periodo decrece y el canal se mutea al bajar de 8 ----
+	{
+		n2a::Apu sw;
+		sw.sample_rate = 22050u;
+		sw.write_reg(0x4015u, 0x01u);
+		sw.write_reg(0x4000u, 0xBFu);
+		sw.write_reg(0x4002u, 0x80u);  // periodo bajo = $80
+		sw.write_reg(0x4003u, 0x00u);  // periodo = 128
+		sw.write_reg(0x4001u, 0x89u);  // sweep: E=1, negar (N=1), shift=1
+		eng::s16 sbuf[4000] = {};
+		sw.generate_samples(eng::Span<eng::s16> {sbuf, 4000u});
+		if (sw.pulse1.period >= 128u) {
+			std::printf("  sweep negate no decrecio el periodo (%u)\n", sw.pulse1.period);
+			++fail;
+		}
+		if (!sw.pulse1.sweep_muted()) {
+			std::printf("  sweep fuera de rango no muteo el canal (periodo=%u)\n",
+				    sw.pulse1.period);
+			++fail;
+		}
+	}
+
 	// --- Envolvente del noise ----------------------------------------------
 	{
 		n2a::Apu nz;
