@@ -73,6 +73,9 @@ struct Ppu {
 	/// línea `y` usa `line_sx[y]`/`line_sy[y]` en lugar del scroll global.
 	eng::u8 line_sx[kPpuHeight] {};
 	eng::u8 line_sy[kPpuHeight] {};
+	/// `$2000` por línea (para splits que cambian la **nametable base** o la base de
+	/// BG a mitad de frame, como el HUD de SMB3). Si no hay split, se usa el `ctrl` final.
+	eng::u8 line_ctrl[kPpuHeight] {};
 	bool line_scroll = false;
 
 	/// Fija el scroll de la línea `y` (splits mid-frame). \param y Línea; \param sx
@@ -81,6 +84,7 @@ struct Ppu {
 		if (y >= 0 && y < kPpuHeight) {
 			line_sx[y] = sx;
 			line_sy[y] = sy;
+			line_ctrl[y] = ctrl; // captura la nametable base de $2000 en esta línea
 			line_scroll = true;
 		}
 	}
@@ -250,14 +254,17 @@ struct Ppu {
 	/// Dibuja el **fondo** completo en `fb` (sin sprites) aplicando scroll y
 	/// attribute tables. Usa `chr` como pattern tables.
 	void render_background() {
-		const eng::u16 bg_base = (ctrl & 0x10u) ? 0x1000u : 0x0000u;
 		const eng::u8 universal = static_cast<eng::u8>(palette[0] & 0x3Fu);
 		const bool bg_on = (mask & 0x08u) != 0u;   ///< $2001 bit3: fondo habilitado.
 		const bool left_clip = (mask & 0x02u) == 0u; ///< $2001 bit1: recorta 8 px izq.
-		const int base_h = ctrl & 1;         ///< Nametable base horizontal ($2000 bit0).
-		const int base_v = (ctrl >> 1) & 1;  ///< Nametable base vertical ($2000 bit1).
 
 		for (int py = 0; py < kPpuHeight; ++py) {
+			// `$2000` por línea: los splits (HUD tipo SMB3) cambian la nametable base
+			// mid-frame; sin esto el render usa la base final para todo el frame.
+			const eng::u8 c = line_scroll ? line_ctrl[py] : ctrl;
+			const eng::u16 bg_base = (c & 0x10u) ? 0x1000u : 0x0000u;
+			const int base_h = c & 1;         ///< Nametable base horizontal ($2000 bit0).
+			const int base_v = (c >> 1) & 1;  ///< Nametable base vertical ($2000 bit1).
 			const int ly = line_scroll ? line_sy[py] : scroll_y;
 			const int lx = line_scroll ? line_sx[py] : scroll_x;
 			const int fy = py + ly;                 ///< 0..510 (9 bits, cruza nametable)

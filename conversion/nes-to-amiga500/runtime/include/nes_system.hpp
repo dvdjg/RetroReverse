@@ -406,7 +406,7 @@ private:
 		// antes). Es el flanco dominante con el render activo.
 		if (mapper.kind == MapperKind::Mmc3 && ppu.scanline < 240u && (ppu.mask & 0x18u) != 0u &&
 		    kA12Dot >= start && kA12Dot < end) {
-			mapper.on_scanline();
+			mapper.on_scanline(ppu.scanline);
 		}
 		ppu.dot = end;
 		while (ppu.dot >= 341u) {

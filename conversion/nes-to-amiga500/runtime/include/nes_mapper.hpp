@@ -65,6 +65,8 @@ struct Mapper {
 	bool mmc3_irq_reload = false;   ///< Recargar el contador en el próximo scanline.
 	bool mmc3_irq_enable = false;   ///< IRQ habilitada ($E001/$E000).
 	bool mmc3_irq_pending = false;  ///< IRQ pedida (se limpia al escribir $E000).
+	eng::u16 mmc3_irq_scan = 0xFFFFu; ///< Scanline del primer IRQ pedido (diagnóstico).
+	eng::u32 mmc3_irq_count = 0;     ///< Nº de IRQs pedidos (diagnóstico).
 
 	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
 	[[nodiscard]] bool irq_line() const noexcept {
@@ -73,7 +75,7 @@ struct Mapper {
 
 	/// Reloj de **una scanline** (lo llama el sistema durante el render). La MMC3
 	/// decrementa su contador y pide IRQ al llegar a 0.
-	void on_scanline() {
+	void on_scanline(eng::u16 scan) {
 		if (kind != MapperKind::Mmc3) {
 			return;
 		}
@@ -85,6 +87,10 @@ struct Mapper {
 		}
 		if (mmc3_irq_counter == 0u && mmc3_irq_enable) {
 			mmc3_irq_pending = true;
+			if (mmc3_irq_scan == 0xFFFFu) {
+				mmc3_irq_scan = scan;
+			}
+			++mmc3_irq_count;
 		}
 	}
 
