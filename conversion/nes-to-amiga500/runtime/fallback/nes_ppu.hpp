@@ -59,6 +59,13 @@ struct Ppu {
 	eng::u8* nt_exram = nullptr;      ///< Fuente 2 (ExRAM de la MMC5, 1 KB R/W).
 	const eng::u8* nt_fill = nullptr; ///< Fuente 3 (nametable de relleno, 1 KB sólo lectura).
 	bool nt_map_on = false;           ///< Usar `nt_map` en vez del mirroring.
+	/// **Modo atributo extendido de la MMC5** (`$5104` = 1): el **atributo** de cada
+	/// tile (paleta 6-7 y selección de banco CHR 0-5) se lee de la ExRAM en el offset
+	/// de la nametable, en vez de la attribute table. `ext_attr_upper` = `$5130`
+	/// (bits altos del banco, mesen `_chrUpperBits`). mesen `MMC5MemoryHandler`.
+	bool ext_attr_mode = false;
+	const eng::u8* ext_attr_ram = nullptr; ///< ExRAM (1 KB) para el modo extendido.
+	eng::u8 ext_attr_upper = 0;            ///< `$5130` (bits 6-7 del banco CHR).
 	/// **Split vertical de la MMC5** ($5200): `bit7` = activo, `bit6` = lado derecho,
 	/// `bits0-4` = tile delimitador. En la región del split la nametable se lee de
 	/// `split_exram` con el scroll del split (`$5201`).
@@ -372,9 +379,21 @@ struct Ppu {
 							  static_cast<eng::u16>((cy & 31) * 32 + (cx & 31)));
 				(void)nt;
 				(void)nt_off;
-				const eng::u8 attr = attr_bits(nt_base, cx, cy);
-
-				const eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
+				eng::u8 attr = attr_bits(nt_base, cx, cy);
+				eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
+				// Modo atributo extendido de la MMC5 ($5104 = 1): el atributo (paleta
+				// en bits 6-7) y el banco CHR (bits 0-5, 4 KB) salen de la ExRAM en el
+				// offset de la nametable. No se aplica dentro del tile del split vertical
+				// (mesen: `_splitTileNumber < 32 || >= 40`). mesen `MMC5MemoryHandler`.
+				if (ext_attr_mode && ext_attr_ram != nullptr && !split_col) {
+					const eng::u16 eoff =
+						static_cast<eng::u16>((cy & 31) * 32 + (cx & 31));
+					const eng::u8 ex = ext_attr_ram[eoff & 0x3FFu];
+					attr = static_cast<eng::u8>((ex & 0xC0u) >> 6u);
+					const eng::u16 bank4k = static_cast<eng::u16>(
+						((ex & 0x3Fu) | (static_cast<eng::u16>(ext_attr_upper) << 6u)));
+					pat = static_cast<eng::u16>((bank4k << 12u) | (pat & 0x0FFFu));
+				}
 				const int bit = 7 - fine_x;
 				eng::u8 color;
 				eng::u8 value;

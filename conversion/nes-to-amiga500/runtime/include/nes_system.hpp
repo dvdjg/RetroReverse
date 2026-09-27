@@ -259,6 +259,10 @@ struct NesSystem {
 			ppu.nt_exram = mapper.mmc5_exram;
 			ppu.nt_fill = mapper.mmc5_fill;
 			ppu.nt_map_on = true;
+			// Modo atributo extendido ($5104 = 1): atributo y banco CHR desde ExRAM.
+			ppu.ext_attr_mode = (mapper.mmc5_exram_mode == 1u);
+			ppu.ext_attr_ram = mapper.mmc5_exram;
+			ppu.ext_attr_upper = mapper.mmc5_chr_upper;
 			// Split vertical ($5200-$5202): el render lee la nametable desde ExRAM.
 			ppu.split_ctrl = mapper.mmc5_split_ctrl;
 			ppu.split_scroll = mapper.mmc5_split_scroll;
@@ -272,9 +276,13 @@ struct NesSystem {
 			}
 			ppu.nt_map_on = true;
 			ppu.split_exram = nullptr;
+			ppu.ext_attr_mode = false;
+			ppu.ext_attr_ram = nullptr;
 		} else {
 			ppu.nt_map_on = false;
 			ppu.split_exram = nullptr;
+			ppu.ext_attr_mode = false;
+			ppu.ext_attr_ram = nullptr;
 		}
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;

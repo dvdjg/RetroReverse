@@ -138,10 +138,13 @@ Pendientes reales (2026, tras la matriz corregida):
   por completitud, aunque **ninguna ROM del catálogo las usa** (Esper Dream 2 tiene `bit4=0`); sin
   regresión en Akumajou (2.7% estructura).
 - **MMC5 (5)**: **Uncharted Waters 45.8%** (60/120 frames igual): a diferencia de Esper/Mouryou,
-  **sí renderiza** (4 colores vs 3 de `mesen`) pero con **luminancia muy distinta** (51.8 vs 2.8) →
-  diferencia real de CHR/paleta en pantalla de título, no pantalla plana. ROM MMC5 con **PRG 512 KB /
-  CHR 128 KB** (la mayor del catálogo MMC5); a investigar (¿numeración de bancos CHR > 255 / PRG-RAM).
-  Gemfire, Laser Invasion, Nobunaga's y CV3 ya están a 0.0–3.1%.
+  **sí renderiza** (4 colores vs 3 de `mesen`) pero con **luminancia muy distinta** (51.8 vs 2.8).
+  Investigado 2026: usa el **modo atributo extendido de ExRAM** (`$5104`=1; 60 bytes de ExRAM
+  distintos de cero; Gemfire tiene 0). **Implementado** el modo extendido (atributo paleta 6-7 +
+  banco CHR 4 KB desde ExRAM; `nes_ppu.hpp::render_background`) pero el diff **persiste** → la causa
+  es **otra** (probable paleta de fondo u otra ruta de render); pendiente. ROM con PRG 512 KB /
+  CHR 128 KB (la mayor del catálogo MMC5). Gemfire, Laser Invasion, Nobunaga's y CV3 siguen a
+  0.0–3.1% (sin regresión con el cambio).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).
 - **Timing `$2002`**: ic 92.2%, metalstorm 14.2%, gradius 3.3%, smb 3.1% (ver
