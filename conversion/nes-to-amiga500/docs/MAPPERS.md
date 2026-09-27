@@ -123,10 +123,12 @@ con bancos PRG/CHR, más el parseo de iNES/**NES 2.0** en
 | — | CHR-RAM | soportado (patrones por `$2007`) |
 
 La matriz por juego (71 ROMs, 67 a **0.0%** estructural vs `mesen`) está en
-[`COMPATIBILITY.md`](COMPATIBILITY.md). Ninguna ROM **MMC5** llega a 0.0% todavía (4.6%–9.2%): el
-código implementa los registros, pero el **resultado diverge** — investigación pendiente (ver
-`COMPATIBILITY.md` §Lectura). El transpilador sigue siendo **NROM-only**; el *banking* con
-**tablas de despacho por banco** es lo pendiente (F2/F9).
+[`COMPATIBILITY.md`](COMPATIBILITY.md). Ninguna ROM **MMC5** llega a 0.0% todavía (4.6%–9.2%), pero
+**NO es un bug de mapper** (verificado con traza vs `mesen`): divergen en el **mismo bucle
+`BIT $2002 / BPL` del arranque** que el límite de timing general (resolución sub-instrucción del
+`$2002`; ver [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md)). El mapper está implementado correctamente. El
+transpilador sigue siendo **NROM-only**; el *banking* con **tablas de despacho por banco** es lo
+pendiente (F2/F9).
 
 ## Cierre (F9)
 

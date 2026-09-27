@@ -87,6 +87,14 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
   (PPU dot a dot + fase continua; ver [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md)). Lo que queda es la
   **deriva entre frames** (frontera de frame sub-instrucción). Detalle y solución en
   [`RISKS.md`](RISKS.md).
+- **Las 5 ROMs MMC5 (4.6–9.2%) NO son un bug de mapper** (2026, verificado con traza vs `mesen`):
+  divergen en el **mismo bucle `BIT $2002 / BPL` del arranque** que los 4 juegos de arriba. Con
+  `trace_diff` sobre **Gemfire**, la primera divergencia real (tras ~8 frames de resyncs benignos en
+  ese bucle) es nuestra iteración **de más** en la espera de VBlank. Es decir: el mapper MMC5 es
+  correcto; lo que falla es el **mismo límite de timing** `$2002` (resolución sub-instrucción). VRC6,
+  AxROM y FME-7 (4.6–9.5%) están, con la misma probabilidad, en el mismo caso (por confirmar con
+  traza). **Implicación**: el `.0%` de la matriz completa está acotado por **un solo** límite, no por
+  bugs de mappers.
 
 ## Mappers soportados
 
@@ -107,8 +115,8 @@ Juegos nuevos que arrancan y renderizan (estructura vs mesen, 60 frames):
 
 Pendientes reales: en **MMC5** solo el **audio de expansión** (`$5000-$5015`) y el **banco CHR del
 split** (`$5202`); y en el **transpilador**, el *banking* (sigue **NROM-only**). AxROM (7) y FME-7
-(69) ya están implementados ([`MAPPERS.md`](MAPPERS.md)). Las ROMs MMC5 no llegan a 0.0%: el código
-soporta los registros, pero el **resultado diverge** — causa por investigar (ver §Lectura).
+(69) ya están implementados ([`MAPPERS.md`](MAPPERS.md)). Las ROMs MMC5 no llegan a 0.0% **por el
+límite de timing `$2002`, no por el mapper** (verificado con traza; ver §Lectura).
 
 ## Notas de método
 
