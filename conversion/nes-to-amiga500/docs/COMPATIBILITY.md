@@ -42,6 +42,34 @@ El framebuffer sale de **un solo color** (fondo): la **paleta no se carga** (a 6
   lo que apunta a una **divergencia de estado/CPU en el arranque** (misma familia que SMB), no a un
   bug del PPU. Pendiente: traza de PC comparada para localizar el desvío.
 
+## Set ampliado (mappers MMC1/UxROM/CNROM + CHR-RAM)
+
+Se añadió soporte de **CHR-RAM** (`nes_ppu.hpp`: `chr_ram`; los cartuchos con 0K CHR cargan los
+patrones por `$2007`). Resultados a 60 frames (`structura` vs mesen):
+
+| ROM | mapper | CHR | estructura | notas |
+|---|---:|---|---:|---|
+| contra | 2 | ROM | **0.0%** | OK |
+| bioniccommando | 1 | RAM | 1.3% | OK |
+| castlevania | 2 | RAM | **0.0%** | OK (color 26.8%) |
+| ducktales | 2 | RAM | **0.0%** | OK (color 96.6%) |
+| megaman | 2 | RAM | **0.0%** | OK |
+| gradius | 3 | ROM | 5.4% | OK |
+| megaman2 | 1 | RAM | 10.5% | parcial |
+| metroid | 1 | RAM | 12.9% | parcial (deriva) |
+| legendofzeldathe | 1 | RAM | 80.9% | **atascado** (render nunca habilitado) |
+| blastermaster | 1 | RAM | 100% | **atascado** |
+| ninjagaiden | 1 | RAM | 99.2% | **`jam` (opcode ilegal)** |
+
+CHR-RAM desbloquea muchos; los fallos restantes son de **MMC1** (banking parcial: Zelda/Blaster
+Master/Ninja Gaiden se quedan en un bucle antes de habilitar render) y un **opcode** no cubierto
+(Ninja Gaiden `jam=1`). Siguiente: completar MMC1 (PRG banking 16/32 KB y CHR mode) y luego MMC3.
+
+## Juegos "difíciles" para Mega Drive
+
+Ver [`HARD_GAMES.md`](HARD_GAMES.md): inventario de los 28 juegos traídos de `F:\roms\nes` (MMC3=4,
+MMC5=5, AxROM=7, VRC6=24/26, FME-7=69) y por qué la MD los sufre.
+
 ## Por qué esta matriz importa para el Amiga
 
 Es la **referencia congelada** (tag `oracle-v1`) contra la que se validará el backend Amiga sin

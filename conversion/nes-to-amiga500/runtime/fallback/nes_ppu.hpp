@@ -37,6 +37,9 @@ struct Ppu {
 	eng::u8 palette[0x20] {};     ///< 32 B de paleta ($3F00-$3F1F): índices de color NES.
 	const eng::u8* chr = nullptr; ///< Pattern tables (CHR-ROM), no propietario.
 	eng::u32 chr_size = 0;        ///< Tamaño de CHR en bytes.
+	/// **CHR-RAM** escribible (8 KB) cuando el cartucho no trae CHR-ROM (`chr ==
+	/// nullptr`). La carga el juego por `$2007` en `$0000-$1FFF`.
+	eng::u8* chr_ram = nullptr;
 	/// **Mirroring de nametables**: `true` = horizontal (según el header iNES;
 	/// las dos nametables se apilan en vertical, típico de scroll vertical como
 	/// Xevious). `false` = vertical (lado a lado, típico de scroll horizontal como
@@ -118,11 +121,9 @@ struct Ppu {
 				r = static_cast<eng::u8>(palette[palette_index(v)] & 0x3Fu);
 			} else if (ni >= 0) {
 				r = vram[static_cast<eng::usize>(ni)];
-			} else if (chr != nullptr && chr_size != 0u) {
-				// $0000-$1FFF: pattern tables (CHR-ROM), legibles por $2007.
-				r = chr[static_cast<eng::usize>((v & 0x1FFFu) % chr_size)];
 			} else {
-				r = 0u;
+				// $0000-$1FFF: pattern tables (CHR-ROM o CHR-RAM).
+				r = chr_byte(v);
 			}
 			v = static_cast<eng::u16>(v + ((ctrl & 0x04u) ? 32u : 1u));
 			return r;
@@ -177,12 +178,13 @@ struct Ppu {
 			if ((v & 0x3F00u) == 0x3F00u) {
 				palette[palette_index(v)] = static_cast<eng::u8>(value & 0x3Fu);
 			} else {
-				// Solo nametables ($2000-$3EFF, con espejo). Las escrituras a
-				// $0000-$1FFF son a las pattern tables: en CHR-ROM se ignoran
-				// (aquí), y en CHR-RAM habría que guardarlas en memoria de CHR.
 				const int ni = nametable_index(v);
 				if (ni >= 0) {
-					vram[static_cast<eng::usize>(ni)] = value;
+					vram[static_cast<eng::usize>(ni)] = value; // nametables ($2000-$3EFF)
+				} else if (chr_ram != nullptr && v < 0x2000u) {
+					// $0000-$1FFF: carga de **CHR-RAM** (los cartuchos con CHR-ROM,
+					// `chr != nullptr`, la ignoran).
+					chr_ram[v & 0x1FFFu] = value;
 				}
 			}
 			v = static_cast<eng::u16>(v + ((ctrl & 0x04u) ? 32u : 1u));
@@ -416,12 +418,16 @@ struct Ppu {
 	}
 
 private:
-	/// Lee un byte de la pattern table (0 si no hay CHR).
+	/// Lee un byte de la pattern table: de CHR-ROM si `chr` está puesto, o de
+	/// CHR-RAM si el cartucho la usa. \param off Offset en la CHR. \return El byte.
 	eng::u8 chr_byte(eng::u16 off) const {
-		if (chr == nullptr || chr_size == 0u) {
-			return 0u;
+		if (chr != nullptr && chr_size != 0u) {
+			return chr[off % chr_size];
 		}
-		return chr[off % chr_size];
+		if (chr_ram != nullptr) {
+			return chr_ram[off & 0x1FFFu];
+		}
+		return 0u;
 	}
 
 	/// Attribute table: 2 bits de paleta por bloque 16×16 (4×4 tiles).

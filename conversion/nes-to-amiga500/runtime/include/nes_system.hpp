@@ -78,6 +78,7 @@ struct NesSystem {
 		mapper = m;
 		ppu.chr = m.chr;
 		ppu.chr_size = m.chr_size;
+		ppu.chr_ram = m.chr_ram;
 		ppu.mirror_h = m.mirror_h;
 		mem.prg = m.prg;
 		mem.prg_size = m.prg_size;
@@ -104,6 +105,7 @@ struct NesSystem {
 		ppu = Ppu {};
 		ppu.chr = mapper.chr;
 		ppu.chr_size = mapper.chr_size;
+		ppu.chr_ram = mapper.chr_ram;
 		ppu.mirror_h = mapper.mirror_h;
 		ppu.scanline = 0;
 		interp.jammed = false;
