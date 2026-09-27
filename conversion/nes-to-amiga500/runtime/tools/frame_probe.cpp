@@ -15,6 +15,26 @@ n2a::LoadedRom g_rom;
 std::FILE* g_wt = nullptr;  ///< Volcado de escrituras a `$2007` (addr lo/hi + valor).
 std::FILE* g_reg = nullptr;   ///< Volcado de escrituras a registros PPU (reg + valor).
 std::FILE* g_mmc1 = nullptr;  ///< Volcado de commits MMC1 (reg + valor).
+std::FILE* g_cpu = nullptr;   ///< Traza de CPU (pc lo/hi, op, A, X, Y, P, SP).
+unsigned long long g_cpu_n = 0; ///< Instrucciones trazadas.
+
+/// Callback de traza de CPU: escribe 8 bytes por instrucción.
+void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
+	if (g_cpu == nullptr || g_cpu_n > 4000000ULL) {
+		return;
+	}
+	eng::u8 p = 0x20u;
+	if (c.N) p |= 0x80u;
+	if (c.V) p |= 0x40u;
+	if (c.D) p |= 0x08u;
+	if (c.I) p |= 0x04u;
+	if (c.Z) p |= 0x02u;
+	if (c.C) p |= 0x01u;
+	const unsigned char b[8] = {static_cast<unsigned char>(pc & 0xFFu),
+				    static_cast<unsigned char>(pc >> 8u), op, c.A, c.X, c.Y, p, c.SP};
+	std::fwrite(b, 1, 8, g_cpu);
+	++g_cpu_n;
+}
 
 /// Callback de commits MMC1: escribe `(reg, value)`.
 void trace_mmc1(eng::u8 reg, eng::u8 value) {
@@ -49,9 +69,13 @@ int main(int argc, char** argv) {
 	}
 	const int frames = (argc > 2) ? std::atoi(argv[2]) : 120;
 	bool cycle_exact = true;
+	bool trace = false;
 	for (int i = 1; i < argc; ++i) {
 		if (std::strcmp(argv[i], "--fast-timing") == 0) {
 			cycle_exact = false; // desactiva el reloj de bus por acceso
+		}
+		if (std::strcmp(argv[i], "--trace") == 0) {
+			trace = true; // vuelca la traza de CPU a frame_probe.cpu
 		}
 	}
 	n2a::NesSystem sys;
@@ -68,6 +92,10 @@ int main(int argc, char** argv) {
 	sys.ppu.write_trace = &trace_ppu_write; // tras reset(): este hace `ppu = Ppu{}`
 	sys.ppu.reg_trace = &trace_ppu_reg;
 	sys.mapper.write_trace = &trace_mmc1;
+	if (trace) {
+		g_cpu = std::fopen("frame_probe.cpu", "wb");
+		sys.interp.trace = &trace_cpu;
+	}
 	std::printf("mapper=%u prg=%u chr=%u mirror_h=%d\n", g_rom.mapper_no, g_rom.prg_size,
 		    g_rom.chr_size, static_cast<int>(g_rom.mapper.mirror_h));
 	for (int f = 0; f < frames; ++f) {
@@ -133,6 +161,9 @@ int main(int argc, char** argv) {
 	}
 	if (g_mmc1 != nullptr) {
 		std::fclose(g_mmc1);
+	}
+	if (g_cpu != nullptr) {
+		std::fclose(g_cpu);
 	}
 	std::printf("escrito frame_probe.[ppm|chr|nt|ram|wt]\n");
 	return 0;

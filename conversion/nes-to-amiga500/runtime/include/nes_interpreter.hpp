@@ -39,6 +39,11 @@ struct Interpreter {
 	///         por cruce de página en lecturas indexadas y por ramas tomadas).
 	int step();
 
+	/// Hook de **diagnóstico**: se llama antes de cada instrucción con el PC, el
+	/// opcode en `PC` y los registros (para trazar el flujo). `nullptr` = sin traza.
+	void (*trace)(void* user, eng::u16 pc, eng::u8 op, const CPU& regs) = nullptr;
+	void* trace_user = nullptr; ///< Cookie de `trace`.
+
 	/// Ciclos **base** de un opcode (tabla estándar del 6502, sin penalizaciones).
 	/// Expuesto para que el sistema pueda situar la PPU en el ciclo del acceso a
 	/// datos antes de ejecutar (`NesSystem::ppu_pre_cycles`).
@@ -209,6 +214,9 @@ inline int Interpreter::step() {
 	if (jammed) {
 		mem.tick(1);
 		return 1;
+	}
+	if (trace != nullptr) {
+		trace(trace_user, cpu.PC, mem.read(cpu.PC), cpu);
 	}
 	page_crossed_ = false;
 	branch_taken_ = false;
