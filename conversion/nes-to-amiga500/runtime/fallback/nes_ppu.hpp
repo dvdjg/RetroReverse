@@ -101,6 +101,10 @@ struct Ppu {
 	// --- Tiempo ---
 	eng::u16 scanline = 0;   ///< Línea actual (0..261 en NTSC).
 	eng::u16 dot = 0;        ///< Dot dentro de la línea (0..340; 341 dots/línea).
+	/// Paridad de frame para el **skip de 1 dot** de la pre-render en NTSC (frames
+	/// impares: 340 dots en vez de 341). Afecta al largo del frame (~1 dot) y al
+	/// instante del NMI respecto al bucle del juego (mesen `PPU.cpp:1316`).
+	bool odd_frame = false;
 	/// **Warm-up del PPU**: durante los primeros frames tras el reset el PPU no
 	/// levanta el flag de VBlank (como fceumm, `ppudead=2`). Necesario para que el
 	/// bucle de espera de VBlank del juego coincida con la referencia.
@@ -237,7 +241,12 @@ struct Ppu {
 		if (scanline == sprite0_line && dot == sprite0_dot) {
 			status = static_cast<eng::u8>(status | 0x40u);
 		}
-		if (++dot >= 341u) {
+		// NTSC: en frames **impares** el PPU salta el último dot de la pre-render
+		// (línea 261): 340 dots en vez de 341, así el frame es 1 dot más corto
+		// (mesen `PPU.cpp:1316`, `_frameCount & 1`). Sin esto el frame es ~1 ciclo
+		// más largo por frame y el NMI deriva respecto al bucle del juego.
+		const eng::u16 wrap = (scanline == 261u && odd_frame) ? 340u : 341u;
+		if (++dot >= wrap) {
 			dot = 0u;
 			tick_scanline();
 		}
@@ -259,8 +268,10 @@ struct Ppu {
 			// y SMB se colgaba en su bucle de espera.
 			status = static_cast<eng::u8>(status & ~0xE0u);
 		} else if (scanline == 262u) {
-			// Fin de frame: la línea 261 ya contó sus 341 dots. Volver a la 0.
+			// Fin de frame: la línea 261 ya contó sus 341 dots (340 en frames impares).
+			// Volver a la 0 y alternar la paridad (skip NTSC de la pre-render).
 			scanline = 0u;
+			odd_frame = !odd_frame;
 		}
 	}
 
