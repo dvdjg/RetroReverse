@@ -226,6 +226,40 @@ visibles** del original se reproducen, no se "arreglan".
   genérico), PGO cruzado, extracción dirigida por trazas de qué direcciones se leen y **generar el
   ejecutor desde el grafo de basic blocks** (portable a `m68k`).
 
+## Flags del transpilador para Amiga/68000 (medidos)
+
+Cuando el destino **no** emula la PPU software ciclo a ciclo (Amiga con render nativo), se puede
+recortar el código generado. Flags añadidos a `nes_transpiler`:
+
+| Flag | Qué hace | Efecto medido (Donkey Kong, m68k `-O2 -m68000`) |
+|---|---|---|
+| `--no-cycles` | No emite `cpu.cycles += N` ni las penalizaciones de página/rama | `.text` 234 856 → **182 136 B (−22 %)** y una operación menos por instrucción |
+| `--fast-ram` | Acceso directo `cpu.mem->ram[...]` en zero-page | +0.3 % de `.text`; **marginal** porque el compilador ya pliega el chequeo de región con dirección constante (queda opt-in) |
+| `--release` | Agrega las optimizaciones seguras (hoy = `--no-cycles`) | — |
+
+`--no-cycles` es seguro **siempre que no se emule la PPU software** para esa ROM: los ciclos solo sirven
+para avanzar la PPU/NMI ciclo a ciclo. En Amiga se usa un **modelo de frame** (un VBlank por frame).
+
+Compilación m68k recomendada: `-O2/-O3 -m68000` (o `-m68020` en A1200) `-mshort -fomit-frame-pointer
+-fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-stack-protector -fno-common -flto`; **sin `float`**
+(`-msoft-float` es carísimo). Medir `-O2` vs `-Os` (sin caché, el I-fetch pesa).
+
+### ¿Hace falta mantener el PC?
+
+Dentro de un bloque (código recto) el PC **no se toca** hoy. Entre bloques sí, porque el despachador
+(`dispatch_table[cpu.PC]`) selecciona el bloque. El PC **sigue siendo necesario** para: **saltos
+indirectos/computados**, **subrutinas** (salvo que se usen llamadas nativas), **NMI/IRQ**, y el
+**fallback al intérprete** para **código en RAM/automodificado** (estado completo, incluido PC).
+
+### `--flat` (evaluado, no implementado)
+
+La idea era eliminar el despachador con **una función + `goto`** (destinos estáticos) y
+`computed goto` para indirectos. Problema: el `computed goto` necesita una **tabla de etiquetas por
+dirección** (0x10000 × 4 B = **256 KB**, demasiado para la pila/BSS del A500), y los juegos con
+**saltos indirectos** (frecuentes: `JMP (ind)`, tablas) lo rompen. Conclusión: **no es viable como
+opción general**; el despachador por dirección se mantiene. El beneficio real está en `--no-cycles` y
+en los flags de compilación.
+
 ## Referencias
 
 - C++23 `[[assume]]` (P1774) · GCC `__attribute__((assume))` · Clang `__builtin_assume` · MSVC `__assume`.

@@ -424,6 +424,17 @@ public:
 	/// \param f Hecho a añadir (se copia).
 	void add_fact(const Fact& f) { (void)facts_.push_back(f); }
 
+	/// Con `true`, **no** se emite la contabilidad de ciclos (`cpu.cycles += N`) ni
+	/// las penalizaciones de página/rama. Para destinos sin PPU ciclo-exacta
+	/// (Amiga/`--release`), donde los ciclos solo agobian al 68000.
+	/// \param b `true` para desactivar los ciclos.
+	void set_no_cycles(bool b) noexcept { no_cycles_ = b; }
+
+	/// Con `true`, las instrucciones de **zero-page** se emiten con acceso directo a
+	/// `cpu.mem->ram[...]` (sin el método/`switch` de región). Ganancia en 68000.
+	/// \param b `true` para activar el acceso directo a RAM de página cero.
+	void set_fast_ram(bool b) noexcept { fast_ram_ = b; }
+
 	/// Número de mapper iNES de la ROM cargada (siempre 0 en esta versión).
 	[[nodiscard]] int mapper() const noexcept { return mapper_; }
 	/// Tamaño de la PRG-ROM en bytes.
@@ -471,6 +482,8 @@ private:
 	eng::usize count_ = 0;       ///< Instrucciones decodificadas.
 	eng::usize unknown_ = 0;     ///< Opcodes desconocidos encontrados.
 	eng::usize block_count_ = 0; ///< Bloques detectados.
+	bool no_cycles_ = false;     ///< Si `true`, no emitir ciclos (ver `set_no_cycles`).
+	bool fast_ram_ = false;      ///< Si `true`, zero-page con acceso directo (ver `set_fast_ram`).
 
 	// --- Utilidades internas ---
 
@@ -774,6 +787,60 @@ private:
 		out.append(";\n\n");
 	}
 
+	/// Con `--fast-ram`, emite la instrucción de **zero-page** con acceso directo a
+	/// `cpu.mem->ram[...]` (sin la llamada al método ni el `switch` de región de
+	/// `mem->read`), que en 68000 es notablemente más rápido. Solo cubre los
+	/// opcodes de carga/almacén/ALU/CMP en modo `Zp` (dirección `$00-$FF`).
+	/// \param out Salida.
+	/// \param in Instrucción (modo `Zp`).
+	/// \return `true` si se emitió en línea; `false` para usar el método normal.
+	[[nodiscard]] bool emit_zp_inline(Dyn& out, const Instruction& in) const {
+		const char* m = kOpcodeTable[in.opcode].mnemonic;
+		// Código de operación (0 = no soportado).
+		int op = -1;
+		if (sv_equal(m, "LDA")) op = 0;
+		else if (sv_equal(m, "LDX")) op = 1;
+		else if (sv_equal(m, "LDY")) op = 2;
+		else if (sv_equal(m, "STA")) op = 3;
+		else if (sv_equal(m, "STX")) op = 4;
+		else if (sv_equal(m, "STY")) op = 5;
+		else if (sv_equal(m, "ADC")) op = 6;
+		else if (sv_equal(m, "SBC")) op = 7;
+		else if (sv_equal(m, "AND")) op = 8;
+		else if (sv_equal(m, "ORA")) op = 9;
+		else if (sv_equal(m, "EOR")) op = 10;
+		else if (sv_equal(m, "CMP")) op = 11;
+		else if (sv_equal(m, "CPX")) op = 12;
+		else if (sv_equal(m, "CPY")) op = 13;
+		if (op < 0) {
+			return false;
+		}
+		const eng::u8 a = static_cast<eng::u8>(in.operand);
+		auto ram = [&]() {
+			out.append("cpu.mem->ram[0x");
+			out.append_hex(a, 2u, true);
+			out.append(']');
+		};
+		out.append("    ");
+		switch (op) {
+		case 0: out.append("cpu.A = "); ram(); out.append("; cpu.set_nz(cpu.A);"); break;
+		case 1: out.append("cpu.X = "); ram(); out.append("; cpu.set_nz(cpu.X);"); break;
+		case 2: out.append("cpu.Y = "); ram(); out.append("; cpu.set_nz(cpu.Y);"); break;
+		case 3: ram(); out.append(" = cpu.A;"); break;
+		case 4: ram(); out.append(" = cpu.X;"); break;
+		case 5: ram(); out.append(" = cpu.Y;"); break;
+		case 6: out.append("cpu.ADC_impl("); ram(); out.append(");"); break;
+		case 7: out.append("cpu.SBC_impl("); ram(); out.append(");"); break;
+		case 8: out.append("cpu.AND_impl("); ram(); out.append(");"); break;
+		case 9: out.append("cpu.ORA_impl("); ram(); out.append(");"); break;
+		case 10: out.append("cpu.EOR_impl("); ram(); out.append(");"); break;
+		case 11: out.append("cpu.CMP_impl(cpu.A, "); ram(); out.append(");"); break;
+		case 12: out.append("cpu.CMP_impl(cpu.X, "); ram(); out.append(");"); break;
+		default: out.append("cpu.CMP_impl(cpu.Y, "); ram(); out.append(");"); break;
+		}
+		return true;
+	}
+
 	/// Traduce una instrucción a una o varias líneas de C++.
 	///
 	/// Casos especiales:
@@ -798,7 +865,12 @@ private:
 		(void)block_start;
 		// Coste exacto en `cpu.cycles`: base + penalización de página/rama, igual
 		// que el intérprete del runtime. El runtime lee el delta por bloque.
+		// Con `--no-cycles` (Amiga, sin PPU ciclo-exacta) **no se emite nada**: ahorra
+		// una operación por instrucción (clave en 68000).
 		auto emit_base = [&]() {
+			if (no_cycles_) {
+				return;
+			}
 			out.append("    cpu.cycles += ");
 			out.append_u32(op_base_cycles(in.opcode));
 			out.append("u;\n");
@@ -811,10 +883,13 @@ private:
 			emit_base();
 			out.append("    if (");
 			out.append(branch_cond(m));
-			out.append(") { cpu.cycles += 1u;");
-			// Cruce de página de la rama: `pc+2` vs destino (estático).
-			if (((in.addr + 2u) & 0xFF00u) != (in.target & 0xFF00u)) {
+			out.append(") {");
+			if (!no_cycles_) {
 				out.append(" cpu.cycles += 1u;");
+				// Cruce de página de la rama: `pc+2` vs destino (estático).
+				if (((in.addr + 2u) & 0xFF00u) != (in.target & 0xFF00u)) {
+					out.append(" cpu.cycles += 1u;");
+				}
 			}
 			out.append(" cpu.PC = 0x");
 			out.append_hex(in.target, 4u, true);
@@ -868,7 +943,7 @@ private:
 		// Instrucción corriente: ciclos (+ penalización si lectura indexada) y
 		// llamada al método de CPU con su comentario.
 		emit_base();
-		if (op_read_indexed_penalty(in.opcode)) {
+		if (!no_cycles_ && op_read_indexed_penalty(in.opcode)) {
 			if (info.mode == AddrMode::AbsX) {
 				out.append("    if (((0x");
 				out.append_hex(static_cast<eng::u16>(in.operand & 0xFFu), 2u, true);
@@ -885,14 +960,20 @@ private:
 				out.append(")) << 8u)); if (((p & 0xFFu) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; } }\n");
 			}
 		}
-		out.append("    cpu.");
-		append_method_name(out, info);
-		out.append('(');
-		if (has_operand(in)) {
-			append_arg(out, in, info);
+		bool handled = false;
+		if (fast_ram_ && info.mode == AddrMode::Zp && has_operand(in)) {
+			handled = emit_zp_inline(out, in); // acceso directo a zero-page
 		}
-		out.append(')');
-		out.append(';');
+		if (!handled) {
+			out.append("    cpu.");
+			append_method_name(out, info);
+			out.append('(');
+			if (has_operand(in)) {
+				append_arg(out, in, info);
+			}
+			out.append(')');
+			out.append(';');
+		}
 		append_comment(out, in, info);
 		out.append('\n');
 	}

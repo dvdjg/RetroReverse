@@ -322,6 +322,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("         --entry <plugin_entry.cpp> --inc <dir> [--inc <dir> ...] \\");
 	n2a::out_line("         [--cxx g++] [--target x64nt|x64linux|a500|a1200|wasm]");
 	n2a::out_line("         [--7z <7zr.exe>] [--no-7z] [--bundle <nombre>]");
+	n2a::out_line("         [--no-cycles] [--fast-ram] [--release]  (rendimiento Amiga)");
 	n2a::out_line("   (la entrada tambien admite .7z con varias .nes dentro)");
 }
 
@@ -387,6 +388,10 @@ bool extract_7z(const char* sevenzip, const std::string& archive, const std::str
 	return std::system(cmd.c_str()) == 0;
 }
 
+/// Opciones de codegen fijadas por los flags (ver `main`).
+bool g_no_cycles = false;
+bool g_fast_ram = false;
+
 /// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
 bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	ByteBuffer bytes;
@@ -399,6 +404,8 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 		n2a::err_line("error: ROM no valida (iNES NROM/CNROM, PRG fija)");
 		return false;
 	}
+	tp.set_no_cycles(g_no_cycles);
+	tp.set_fast_ram(g_fast_ram);
 	tp.disassemble();
 	tp.build_basic_blocks();
 	if (facts != nullptr && !load_facts(facts, tp)) {
@@ -670,6 +677,18 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--bundle" && i + 1 < argc) {
 			bundle = argv[++i];
+			continue;
+		}
+		if (arg == "--no-cycles") {
+			g_no_cycles = true;
+			continue;
+		}
+		if (arg == "--fast-ram") {
+			g_fast_ram = true;
+			continue;
+		}
+		if (arg == "--release") { // optimizaciones seguras para Amiga/68000
+			g_no_cycles = true; // --fast-ram queda opt-in (ganancia marginal, ver docs)
 			continue;
 		}
 		(void)inputs.push_back(arg);
