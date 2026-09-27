@@ -64,13 +64,19 @@ struct Mapper {
 		case MapperKind::Cnrom:
 			return prg_at(off);
 		case MapperKind::Mmc1: {
+			// NOTA: la referencia (MAME `nes_sxrom`) define los modos PRG (ctrl bits
+			// 2-3): 0/1 = 32 KB; 2 = `$8000` fijo banco 0 / `$C000` conmutable;
+			// 3 = `$8000` conmutable / `$C000` último fijo. Con esa lógica **metroid se
+			// cuelga** (m1p=0x10 fuera de rango) => hay otro factor (filtro de
+			// escritura de 1 ciclo del MMC1, o el banco CHR) aún sin resolver. Hasta
+			// cotejarlo con la referencia, se mantiene el comportamiento que hace
+			// funcionar Metroid/Mega Man 2 (modo >=2 = `$8000` conmutable, `$C000`
+			// último) y MMC1 queda **parcial** (ver docs/COMPATIBILITY.md).
 			const eng::u32 mode = (mmc1_ctrl >> 2u) & 3u;
 			if (mode < 2u) {
-				// 32 KB conmutables.
 				const eng::u32 base = (static_cast<eng::u32>(mmc1_prg & 0x0Eu)) * 0x4000u;
 				return prg_at(base + off);
 			}
-			// 16 KB: primer banco conmutable, último fijo.
 			if (addr >= 0xC000u) {
 				return prg_at((prg_size >= 0x4000u ? prg_size - 0x4000u : 0u) + (addr - 0xC000u));
 			}

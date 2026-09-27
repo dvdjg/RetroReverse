@@ -65,12 +65,19 @@ CHR-RAM desbloquea muchos; los fallos restantes son de **MMC1** (banking parcial
 Diagnóstico añadido: `NesInterpreter::jam_op`/`jam_pc` (frame_probe lo imprime `op=XX@YYYY`).
 - **Ninja Gaiden**: el `jam` es un **KIL (`$22`) en `$A4D4`** → el CPU ejecuta **datos** (banking
   MMC1 erróneo), no un opcode desconocido.
-- Se **probó** una corrección del **modo PRG 3** ($8000=primer banco, $C000=conmutable): **regresó**
-  Metroid (12.9→82.8%) y Mega Man 2 (10.5→100%), así que se **revirtió**. El comportamiento actual
-  (modo ≥2 = `$8000`=banco conmutable, `$C000`=último) es el que funciona para esos títulos; MMC1
-  sigue **parcial** y necesita cotejo con una referencia (no ir a ciegas).
+- **Referencia encontrada**: las fuentes de los cores que ya tenemos contienen MMC1 real —
+  `external/libretro-mame/src/devices/bus/nes/mmc1.cpp` (`nes_sxrom`) y
+  `external/libretro-fceumm/src/boards/asic_mmc1.c`. Según MAME, los modos PRG (ctrl bits 2-3) son:
+  `0/1`=32 KB; `2`=`$8000` **fijo banco 0** / `$C000` conmutable; `3`=`$8000` conmutable / `$C000`
+  **último fijo**. El latch es **compartido** entre los 4 registros y el desplazamiento es
+  **LSB-first** (nuestro código ya coincide en esto). MAME filtra además escrituras consecutivas de
+  1 ciclo (`m_reg_write_enable`), que **no** implementamos.
+- Se implementó el modo 2 correcto y **regresó** Metroid (`m1p=0x10` fuera de rango; jam). Se
+  **revirtió**: el comportamiento actual (modo ≥2 = `$8000`=banco conmutable, `$C000`=último) es el
+  que hace funcionar Metroid/Mega Man 2. MMC1 sigue **parcial**; falta cotejar con el filtro de
+  escritura / CHR mode (no ir a ciegas: dos intentos, dos regresiones).
 
-Siguiente: completar MMC1 con una referencia fiable y luego MMC3 (reutiliza el IRQ de CPU ya hecho).
+Siguiente: cerrar MMC1 con la referencia (filtro de 1 ciclo + modo CHR) antes de MMC3.
 
 ## Juegos "difíciles" para Mega Drive
 

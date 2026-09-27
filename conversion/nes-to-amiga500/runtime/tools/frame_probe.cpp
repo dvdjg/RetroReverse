@@ -69,9 +69,10 @@ int main(int argc, char** argv) {
 		for (unsigned i = 0; i < n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH; ++i) {
 			fb = (fb ^ sys.ppu.fb[i]) * 16777619u;
 		}
-		std::printf("f=%3d PC=%04X nmi=%u ram=%08X fb=%08X ctrl=%02X mask=%02X st=%02X jam=%d op=%02X@%04X\n",
+		std::printf("f=%3d PC=%04X nmi=%u ram=%08X fb=%08X ctrl=%02X mask=%02X st=%02X jam=%d op=%02X@%04X m1c=%02X m1p=%02X\n",
 			    f, sys.cpu.PC, sys.nmi_count, h, fb, sys.ppu.ctrl, sys.ppu.mask, sys.ppu.status,
-			    static_cast<int>(sys.interp.jammed), sys.interp.jam_op, sys.interp.jam_pc);
+			    static_cast<int>(sys.interp.jammed), sys.interp.jam_op, sys.interp.jam_pc,
+			    sys.mapper.mmc1_ctrl, sys.mapper.mmc1_prg);
 	}
 	// Resumen del último frame: colores distintos y volcado del framebuffer a PPM
 	// (índices de paleta -> RGB NES) para inspección visual.
