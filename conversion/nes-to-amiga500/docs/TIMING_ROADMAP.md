@@ -1,0 +1,101 @@
+# Roadmap: sincronismo PPU/CPU por ciclo (event-driven)
+
+**Objetivo.** Que los **efectos observables** de la PPU (flag de VBlank en `$2002`, NMI, sprite-0,
+overflow, IRQ de mapper A12/por-ciclo, fin de frame) ocurran en el **ciclo exacto** respecto a la
+CPU, con **fase continua** entre frames, para que el oráculo coincida con mesen también en los
+juegos sensibles al timing (los 6 del límite en [`RISKS.md`](RISKS.md)). **El render puede seguir
+siendo *lazy*** (dibujar el frame al final): no hace falta una PPU pixel a pixel.
+
+**Principio rector.** *Seguir la estructura de los emuladores que ya funcionan* (mesen, nestopia):
+avance de PPU por ciclo/dot con resolución de eventos por dot, y un contador absoluto de ciclos.
+mesen procesa la PPU **dot a dot** (`PPU::Exec`, `_cycle++`) y engancha los eventos ahí; nosotros
+hoy avanzamos **en bloque** y resolvemos por rangos + un *snap* de frame. Este roadmap cierra esa
+diferencia por fases, **verificando contra mesen en cada una**.
+
+## Invariantes a conservar en TODO el roadmap
+
+- **Equivalencia intérprete ↔ codegen** (`ram_diff=0` en `bench_engine`): ambos caminos deben usar
+  el **mismo** modelo temporal. Es el invariante más frágil → se comprueba en cada fase.
+- **Sin regresiones** en los **30+ juegos a 0%** (`port_matrix --gate`).
+- **Determinismo** del oráculo.
+- **Sin datos por juego** (nada de tablas): todo genérico.
+
+## Fases
+
+### Fase 0 — Diagnóstico del *snap* (por qué rompe la equivalencia)
+Quitar el `ppu.scanline=240; ppu.dot=0` de `run_frame` rompe `equivalencia` (`ram_diff=5`). Antes de
+tocar nada hay que **entender exactamente por qué**: hipótesis = el ejecutor por bloques no corta en
+la frontera de frame (su `budget` es a fin de *scanline*), así que intérprete y codegen ejecutan un
+número de instrucciones distinto en el frame. **Entregable**: informe de la causa con `dbg_fast2`.
+*Criterio de avance*: causa confirmada (no especulada).
+
+### Fase 1 — PPU **dot a dot**
+Sustituir el avance en bloque (`ppu.dot = end; while (dot>=341)`) por un lazo que llame
+`tick_dot()` **una vez por dot** (3 por ciclo de CPU), resolviendo en ese punto: VBlank en `(241,1)`
+(no al entrar en la línea), sprite-0 en su dot, clear en `(261,1)`, y —vía callback del sistema—
+`set_line_scroll` y el reloj A12/scanline del mapper. **Ya no hay rangos**. Contador
+`total_dots` absoluto.
+*Verificación*: `RUNTIME OK`, `equivalencia OK`, `gate OK`; y `trace_diff` de metalstorm debe
+**mover** la primera divergencia (objetivo: idx 7828 → más adelante).
+
+> **Experimento 2026 (hecho y revertido).** Se implementó Fase 1 (avance dot a dot). Resultado:
+> **equivalencia OK** (`ram_diff=0`) pero **neutra en corrección** (la divergencia de metalstorm
+> sigue en idx 7828) y **con coste**: el ejecutor rápido pasó de ~4353 a ~2422 fps (**aceleración
+> 1.00×** — el bucle por-dot se come la ventaja del codegen). **Conclusión**: Fase 1 **por sí sola
+> es un net negativo** (más lenta, sin ganancia); debe hacerse **junto con Fase 3** (scheduler), que
+> baja a dot **solo** cerca de un evento y preserva el rendimiento. Se revirtió.
+
+*Coste*: hacerla sin el scheduler multiplica por ~3 el coste del PPU (≈90k `tick_dot`/frame).
+*Criterio de aborto*: si no mueve la divergencia **y** cuesta rendimiento, revertir (lo que se hizo).
+
+### Fase 2 — Frontera de frame **exacta** (residuo de fase)
+`run_frame` deja de hacer *snap* a `(240,0)` en frontera de instrucción: corta en el **dot exacto**
+(`89342` dots ≈ `29780⅔` ciclos, ± el skip de 1 dot en frames impares) y **arrastra el residuo** al
+frame siguiente (contador absoluto). El ejecutor por bloques debe **respetar el mismo residuo**
+(Fase 0). 
+*Verificación*: `equivalencia ram_diff=0` **con el snap fuera**; la deriva de frame desaparece
+(`cyc`/frame ≈ alternando 29780/29781).
+
+### Fase 3 — Scheduler de eventos (presupuesto de bloque)
+Exponer `next_event_cycle` = mínimo de: VBlank set/clear, sprite-0, overflow, IRQ de mapper, fin de
+frame. El `budget` del ejecutor rápido pasa de "hasta fin de scanline" a "hasta el próximo evento"
+(0 si el evento cae dentro del bloque → cae a intérprete/instrucción y este a **ciclo/bus**).
+*Verificación*: equivalencia + `gate`; `trace_diff` de los 6 juegos.
+
+### Fase 4 — Lectura cycle-exacta de `$2002`
+En el intérprete, para la instrucción que **lee `$2002`** (según su *addressing mode*), calcular el
+**ciclo exacto del acceso de datos** y evaluar el flag con la PPU en **ese** dot (no en el
+siguiente). Es el punto que hoy desplaza el bucle `LDA $2002; BPL`.
+*Verificación*: `trace_diff` de los 6 juegos → la primera divergencia debe desaparecer del bucle de
+VBlank; `gate` sin regresiones.
+
+### Fase 5 — NMI con modelo *half-cycle*
+Muestrear el NMI en la **fase 2 del último ciclo** de la instrucción que cruza el dot 1 de la 241
+(modelo que usan los emuladores que pasan `vbl_nmi_timing`), en vez de "al final de instrucción".
+*Verificación*: los 6 juegos bajan de % (idealmente a ~0) en `port_matrix`.
+
+### Fase 6 — Cierre
+Re-tag `oracle-v2.1`, regenerar `port_matrix.baseline` + `COMPATIBILITY.md` + snapshot, y retirar de
+`RISKS.md` el límite (pasa a "resuelto", con enlace a este roadmap).
+
+## Orden de valor / riesgo
+
+| Fase | Valor | Riesgo | Toca |
+|---|---|---|---|
+| 0 (diag) | alto (desbloquea) | nulo | `dbg_fast2` |
+| 1 (dot a dot) | alto | medio | `nes_ppu.hpp`, `clock_ppu` |
+| 2 (frontera+residuo) | alto | **alto** | `run_frame`, fast executor |
+| 3 (scheduler) | alto | alto | `step_block`, fast executor |
+| 4 (`$2002` exacto) | **muy alto** (los 6 juegos) | medio | `nes_interpreter.hpp` |
+| 5 (NMI half-cycle) | medio | bajo | `nes_system.hpp` |
+
+**Estrategia sugerida (revisada tras el experimento de Fase 1)**: 0 → **4** (mayor valor directo:
+los 6 juegos) → **1+3 juntas** (dot a dot **con** el scheduler, para no perder rendimiento) → 2 → 5 →
+6. Cada fase es un commit con `gate` verde; si una fase no mueve la aguja sin regresiones, se revierte
+y se anota (como con Fase 1 sola).
+
+## Relación con el port Amiga
+
+El runtime Amiga usa **hardware** (Copper/Blitter/Paula), no este sincronismo. El roadmap mejora la
+**fidelidad del oráculo** (referencia fiable para validar el port), no el runtime Amiga en sí. Es la
+condición para poder validar juegos sensibles al timing contra el port.
