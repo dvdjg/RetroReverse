@@ -41,6 +41,8 @@ inline bool parse_ines(eng::usize size, LoadedRom& out) {
 			    (flags6 >> 4u);
 	}
 	const eng::usize trainer = (flags6 & 0x04u) ? 512u : 0u;
+	// Bit0 del flags6: 0 = horizontal mirroring, 1 = vertical.
+	out.mapper.mirror_h = (flags6 & 0x01u) == 0u;
 	const eng::usize prg_off = 16u + trainer;
 	const eng::u32 prg_size = static_cast<eng::u32>(out.rom[4]) * 0x4000u;
 	const eng::usize chr_off = prg_off + prg_size;

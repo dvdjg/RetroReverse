@@ -37,6 +37,11 @@ struct Ppu {
 	eng::u8 palette[0x20] {};     ///< 32 B de paleta ($3F00-$3F1F): índices de color NES.
 	const eng::u8* chr = nullptr; ///< Pattern tables (CHR-ROM), no propietario.
 	eng::u32 chr_size = 0;        ///< Tamaño de CHR en bytes.
+	/// **Mirroring de nametables**: `true` = horizontal (según el header iNES;
+	/// las dos nametables se apilan en vertical, típico de scroll vertical como
+	/// Xevious). `false` = vertical (lado a lado, típico de scroll horizontal como
+	/// SMB). Determina qué bit de la dirección NN selecciona la mitad de los 2 KB.
+	bool mirror_h = false;
 	/// Proveedor de tiles opcional (**ajustes por ROM**: otro grupo de tiles o
 	/// mayor profundidad, 3/4 bpp). Si es `nullptr`, se usa la CHR 2 bpp normal.
 	const enhance::ITileProvider* tile_provider = nullptr;
@@ -89,7 +94,12 @@ struct Ppu {
 		case 4u:  // OAMDATA
 			return oam[oam_addr];
 		case 7u: {  // PPUDATA
-			const eng::u8 r = vram[v & 0x7FFu];
+			eng::u8 r;
+			if ((v & 0x3F00u) == 0x3F00u) {
+				r = static_cast<eng::u8>(palette[v & 0x1Fu] & 0x3Fu);
+			} else {
+				r = vram[vram_index(v)];
+			}
 			v = static_cast<eng::u16>(v + ((ctrl & 0x04u) ? 32u : 1u));
 			return r;
 		}
@@ -137,7 +147,7 @@ struct Ppu {
 			if ((v & 0x3F00u) == 0x3F00u) {
 				palette[v & 0x1Fu] = static_cast<eng::u8>(value & 0x3Fu);
 			} else {
-				vram[v & 0x7FFu] = value;
+				vram[vram_index(v)] = value;
 			}
 			v = static_cast<eng::u16>(v + ((ctrl & 0x04u) ? 32u : 1u));
 			break;
@@ -163,24 +173,29 @@ struct Ppu {
 	/// Dibuja el **fondo** completo en `fb` (sin sprites) aplicando scroll y
 	/// attribute tables. Usa `chr` como pattern tables.
 	void render_background() {
-		const eng::u16 nt_base = static_cast<eng::u16>((ctrl & 0x03u) * 0x400u);
 		const eng::u16 bg_base = (ctrl & 0x10u) ? 0x1000u : 0x0000u;
 		const eng::u8 universal = static_cast<eng::u8>(palette[0] & 0x3Fu);
+		const int base_h = ctrl & 1;         ///< Nametable base horizontal ($2000 bit0).
+		const int base_v = (ctrl >> 1) & 1;  ///< Nametable base vertical ($2000 bit1).
 
 		for (int py = 0; py < kPpuHeight; ++py) {
 			const int ly = line_scroll ? line_sy[py] : scroll_y;
 			const int lx = line_scroll ? line_sx[py] : scroll_x;
-			const int sy = (py + ly) & 0xFF;
-			const int ty = sy >> 3;
-			const int fine_y = sy & 7;
+			const int fy = py + ly;                 ///< 0..510 (9 bits, cruza nametable)
+			const int fine_y = fy & 7;
+			const int cy = (fy >> 3) & 0x3Fu;       ///< Fila de tile 0..63
 			for (int px = 0; px < kPpuWidth; ++px) {
-				const int sx = (px + lx) & 0xFF;
-				const int tx = sx >> 3;
-				const int fine_x = sx & 7;
+				const int fx = px + lx;
+				const int fine_x = fx & 7;
+				const int cx = (fx >> 3) & 0x3Fu;
 
-				const eng::u16 nt_off = static_cast<eng::u16>(nt_base + (ty & 31) * 32 + (tx & 31));
+				// Nametable efectiva = base XOR bit de cruce, y banco según mirroring.
+				const int nt_h = (base_h + (cx >> 5)) & 1;
+				const int nt_v = (base_v + (cy >> 5)) & 1;
+				const eng::u16 nt_base = static_cast<eng::u16>(nt_bank(nt_h, nt_v) * 0x400);
+				const eng::u16 nt_off = static_cast<eng::u16>(nt_base + (cy & 31) * 32 + (cx & 31));
 				const eng::u8 tile = vram[nt_off & 0x7FFu];
-				const eng::u8 attr = attr_bits(nt_base, tx, ty);
+				const eng::u8 attr = attr_bits(nt_base, cx, cy);
 
 				const eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
 				const int bit = 7 - fine_x;
@@ -335,11 +350,31 @@ private:
 	/// \param nt_base Base de la nametable activa ($2000/$2400/$2800/$2C00).
 	/// \param tx,ty   Tile (8×8) dentro de la nametable (0..31).
 	/// \return Índice de paleta de fondo (0..3).
-	eng::u8 attr_bits(eng::u16 nt_base, int tx, int ty) const {
-		const int ax = (tx >> 2) & 7;
-		const int ay = (ty >> 2) & 7;
+	/// Banco de nametable (0/1 de los 2 KB) según el **mirroring** del cartucho.
+	/// \param nt_h Bit horizontal de nametable efectivo; \param nt_v Bit vertical.
+	/// \return Banco CIRAM (0/1).
+	[[nodiscard]] int nt_bank(int nt_h, int nt_v) const noexcept { return mirror_h ? nt_v : nt_h; }
+
+	/// Dirección física (0..0x7FF) en los 2 KB de VRAM para una dirección de PPU
+	/// `$2000-$3EFF`, aplicando el **mirroring** (CIRAM A10). El offset es A0-A9.
+	/// \param addr Dirección de PPU.
+	/// \return Índice dentro de `vram`.
+	[[nodiscard]] eng::u16 vram_index(eng::u16 addr) const noexcept {
+		const int nt_h = (addr >> 10) & 1;
+		const int nt_v = (addr >> 11) & 1;
+		return static_cast<eng::u16>(nt_bank(nt_h, nt_v) * 0x400 + (addr & 0x3FFu));
+	}
+
+	/// Atributo (paleta 0..3) del tile en la nametable `nt_base`, coordenadas
+	/// **de tile globales** `cx`/`cy` (0..63; el banco ya lo fija `nt_base`).
+	/// \param nt_base Base (banco) de la nametable.
+	/// \param cx Coarse X (0..63). \param cy Coarse Y (0..63).
+	/// \return Los 2 bits de atributo (0..3).
+	eng::u8 attr_bits(eng::u16 nt_base, int cx, int cy) const {
+		const int ax = (cx >> 2) & 7;
+		const int ay = (cy >> 2) & 7;
 		const eng::u8 byte = vram[(nt_base + 0x3C0 + ay * 8 + ax) & 0x7FFu];
-		const int quad = ((ty >> 1) & 1) * 2 + ((tx >> 1) & 1);
+		const int quad = ((cy >> 1) & 1) * 2 + ((cx >> 1) & 1);
 		return static_cast<eng::u8>((byte >> (quad * 2)) & 0x03u);
 	}
 };

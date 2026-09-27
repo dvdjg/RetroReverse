@@ -462,6 +462,7 @@ private:
 	eng::u32 prg_size_ = 0;                                   ///< Tamaño de PRG en bytes.
 	eng::u32 chr_size_ = 0;                                   ///< Tamaño de CHR en bytes (0 = CHR RAM).
 	int mapper_ = 0;                                          ///< Número de mapper iNES.
+	bool mirror_h_ = false;                                   ///< Mirroring horizontal (bit0 flags6).
 	bool has_trainer_ = false;                                ///< ¿Trae trainer de 512 B?
 	eng::u16 reset_ = 0;                                      ///< Vector de reset.
 	eng::u16 nmi_ = 0;                                        ///< Vector de NMI.
@@ -518,6 +519,8 @@ private:
 		chr_size_ = static_cast<eng::u32>(chr_pages) * 8192u;
 		mapper_ = static_cast<int>((flags6 >> 4u) | (flags7 & 0xF0u));
 		has_trainer_ = (flags6 & 0x04u) != 0u;
+		// Bit0 de flags6: 0 = mirroring horizontal, 1 = vertical.
+		mirror_h_ = (flags6 & 0x01u) == 0u;
 		const bool prg_fixed = (mapper_ == 0 || mapper_ == 3);
 		return prg_size_ != 0u && prg_fixed;
 	}
@@ -784,6 +787,8 @@ private:
 		}
 		out.append("};\nstatic constexpr int kMapper = ");
 		out.append_s32(mapper_);
+		out.append(";\nstatic constexpr int kMirroring = ");
+		out.append_s32(mirror_h_ ? 0 : 1); // 0 = horizontal, 1 = vertical
 		out.append(";\n\n");
 	}
 

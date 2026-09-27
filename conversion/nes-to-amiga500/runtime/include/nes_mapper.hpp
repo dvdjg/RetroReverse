@@ -31,6 +31,9 @@ struct Mapper {
 	const eng::u8* chr = nullptr;       ///< CHR-ROM (o `nullptr` si CHR RAM).
 	eng::u32 chr_size = 0;              ///< Tamaño de CHR en bytes.
 	eng::u8* chr_ram = nullptr;         ///< CHR RAM (si `chr == nullptr`).
+	/// Mirroring de nametables del header iNES: `true` = horizontal (según el
+	/// cartucho; scroll vertical), `false` = vertical (scroll horizontal).
+	bool mirror_h = false;
 
 	// --- Estado de bancos ---
 	eng::u8 prg_bank = 0; ///< Banco de PRG seleccionado (UxROM/MMC1).

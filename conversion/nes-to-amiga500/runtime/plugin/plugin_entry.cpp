@@ -35,6 +35,7 @@ unsigned n2a_prg_size(void) { return static_cast<unsigned>(kPrgSize); }
 const unsigned char* n2a_chr(void) { return CHR_ROM; }
 unsigned n2a_chr_size(void) { return static_cast<unsigned>(kChrSize); }
 int n2a_mapper(void) { return kMapper; }
+int n2a_mirroring(void) { return kMirroring; }
 
 int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
 	(void)mem_p;

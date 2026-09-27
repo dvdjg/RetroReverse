@@ -42,11 +42,16 @@ def readp6(p):
 wa,ha,da=readp6(sys.argv[1]); wb,hb,db=readp6(sys.argv[2]); thr=float(sys.argv[3])
 if (wa,ha)!=(wb,hb):
     print('diff_mesen: dimensiones distintas'); sys.exit(1)
-n=wa*ha; diff=0
+n=wa*ha; diff=0; sdiff=0
+lr,lg,lb=0.299,0.587,0.114
 for i in range(n):
-    d=abs(da[3*i]-db[3*i])+abs(da[3*i+1]-db[3*i+1])+abs(da[3*i+2]-db[3*i+2])
-    if d>30: diff+=1
-pct=100.0*diff/n
-print('diff_mesen: %.1f%% de píxeles distintos (umbral %.1f%%)'%(pct,thr))
+    r1,g1,b1=da[3*i],da[3*i+1],da[3*i+2]
+    r2,g2,b2=db[3*i],db[3*i+1],db[3*i+2]
+    if abs(r1-r2)+abs(g1-g2)+abs(b1-b2)>30: diff+=1
+    # Métrica estructural: solo cuenta diferencias de LUMINANCIA > umbral (ignora
+    # el tono de paleta, que es ruido entre emuladores). Refleja geometría/tiles.
+    if abs((r1*lr+g1*lg+b1*lb)-(r2*lr+g2*lg+b2*lb))>48: sdiff+=1
+pct=100.0*diff/n; spct=100.0*sdiff/n
+print('diff_mesen: color=%.1f%%  estructura(lum)=%.1f%% (umbral %.1f%%)'%(pct,spct,thr))
 sys.exit(0 if pct<thr else 1)
 PY

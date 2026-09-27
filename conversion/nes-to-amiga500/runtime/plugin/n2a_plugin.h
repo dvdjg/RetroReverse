@@ -45,6 +45,7 @@ N2A_EXPORT unsigned n2a_prg_size(void);        ///< Tamaño de la PRG en bytes.
 N2A_EXPORT const unsigned char* n2a_chr(void); ///< CHR-ROM embebida (puede ser de 1 byte).
 N2A_EXPORT unsigned n2a_chr_size(void);        ///< Tamaño de la CHR (0 = CHR RAM).
 N2A_EXPORT int n2a_mapper(void);               ///< Número de mapper iNES.
+N2A_EXPORT int n2a_mirroring(void);            ///< Mirroring: 0 = horizontal, 1 = vertical.
 
 /// Ejecuta el *basic block* en `((n2a::CPU*)cpu)->PC`.
 /// \param cpu Puntero al `n2a::CPU` del host (mismo layout; ver `N2A_ABI_VERSION`).

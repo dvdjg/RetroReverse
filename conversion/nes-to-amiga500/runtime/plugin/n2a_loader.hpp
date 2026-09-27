@@ -51,6 +51,7 @@ struct TranspiledGame {
 	const unsigned char* (*fn_chr)() = nullptr;    ///< `n2a_chr`.
 	unsigned (*fn_chr_size)() = nullptr;           ///< `n2a_chr_size`.
 	int (*fn_mapper)() = nullptr;                  ///< `n2a_mapper`.
+	int (*fn_mirroring)() = nullptr;               ///< `n2a_mirroring` (opcional).
 	int (*fn_block)(void*, void*, int*) = nullptr; ///< `n2a_block`.
 
 	/// ¿Hay un plugin cargado y compatible?
@@ -85,6 +86,7 @@ struct TranspiledGame {
 		fn_chr = reinterpret_cast<const unsigned char* (*)()>(sym("n2a_chr"));
 		fn_chr_size = reinterpret_cast<unsigned (*)()>(sym("n2a_chr_size"));
 		fn_mapper = reinterpret_cast<int (*)()>(sym("n2a_mapper"));
+		fn_mirroring = reinterpret_cast<int (*)()>(sym("n2a_mirroring")); // opcional
 		fn_block = reinterpret_cast<int (*)(void*, void*, int*)>(sym("n2a_block"));
 		if (fn_version == nullptr || fn_arch == nullptr || fn_init == nullptr ||
 		    fn_prg == nullptr || fn_prg_size == nullptr || fn_chr == nullptr ||
@@ -117,7 +119,7 @@ struct TranspiledGame {
 		handle = nullptr;
 		fn_version = nullptr; fn_arch = nullptr; fn_init = nullptr;
 		fn_prg = nullptr; fn_prg_size = nullptr; fn_chr = nullptr; fn_chr_size = nullptr;
-		fn_mapper = nullptr; fn_block = nullptr;
+		fn_mapper = nullptr; fn_mirroring = nullptr; fn_block = nullptr;
 	}
 
 	/// Rellena `m` con el cartucho del plugin (mapper, PRG y CHR).
@@ -133,6 +135,7 @@ struct TranspiledGame {
 		m.prg_size = fn_prg_size();
 		m.chr = fn_chr();
 		m.chr_size = fn_chr_size();
+		m.mirror_h = (fn_mirroring != nullptr) ? (fn_mirroring() == 0) : false;
 	}
 
 	/// Ejecuta el bloque de `cpu.PC`. \return Ciclos, o 0 si no hay bloque.
