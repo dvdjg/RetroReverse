@@ -132,6 +132,40 @@ estado** del **oráculo** en esos 6 juegos, documentada como límite **conocido*
 intérprete↔codegen pasa (`ram_diff=0`) con la ejecución **del mismo motor**; la diferencia plugin vs
 intérprete es la granularidad de bloque (vía 2).
 
+### Estrategia considerada: *state-injection* (Test A, 2026) — **EN DIAGNÓSTICO**
+
+**Contexto / directiva del usuario (2026).** El objetivo es **máxima compatibilidad replicable en un
+A500 real (68000 @7 MHz)**. No se debe perseguir un modelo *cycle-lockstep* que el Amiga **no pueda
+ejecutar**. Por tanto, para los 4 juegos con el límite de timing de arriba, se acepta como técnica
+legítima de entrega al Amiga la **inyección de estado** (*state-injection*): capturar el estado de
+`mesen` en un frame dado y **embebido como datos** en la salida transpilada, de forma que el
+transpilado arranque *desde* ese estado en vez de reconstruirlo instrucción a instrucción. Solo se
+adoptará si resulta **barato y determinista**.
+
+**Qué se está midiendo (Test A).** Distinguir dos hipótesis para la divergencia de los 4 juegos:
+1. **Estado de arranque** (barato, replicable): la divergencia viene de un estado inicial
+   (RAM/VRAM/OAM/paleta/fase CPU↔PPU) ligeramente distinto → inyectarlo debería llevar el diff a 0.0%
+   sin cambiar el motor de ejecución.
+2. **Lockstep continuo** (caro, límite honesto): la divergencia es intrínseca a la resolución
+   temporal *por instrucción* → ninguna inyección de arranque la elimina; habría que ir a
+   ciclo/bus (lo que el Amiga no puede permitirse) → se documenta como límite.
+
+**Herramienta.** Se añadió a `external/libretro-mesen/Core/CPU.cpp` un **volcado de estado**
+autodescriptivo (`RRS1`: posición de `frameCycle`/`scanline`/`cycle`, `cpuCycleCount`, `P`+registros,
+paleta, OAM, RAM interna, 4 nametables) disparado por `MESEN_DUMP_FRAME`/`MESEN_STATE`. El siguiente
+paso es un **hook de inyección** en `frame_probe`/`nes_system.hpp` que siembre el oráculo desde el
+blob y mida si `ic`→0.0%.
+
+**Criterio de decisión.** Si la inyección de arranque **elimina** la divergencia de forma estable y
+**determinista** → es una entrega válida y **replicable en A500** (el estado es un bloque de datos en
+Chip RAM; el motor sigue siendo el mismo). Si **no** la elimina → se confirma que es un límite
+**intrínseco de resolución temporal** y se documenta como tal (no se persigue el lockstep en el
+Amiga). En ambos casos, **nunca** se debe regresar un juego ya a 0.0%.
+
+> Nota: la inyección de estado es un **artefacto de entrega** del port (datos por juego), no un
+> cambio del motor genérico. Debe quedar trazada (qué frame, qué hash del blob) y no mezclarse con el
+> oráculo genérico, cuyas cifras (`COMPATIBILITY.md`) se seguirán midiendo **sin** inyección.
+
 ## Impacto de los arreglos en la versión Amiga
 
 Estos arreglos viven en el **oráculo/host** (PPU/APU software), no en el renderer Amiga (Copper/

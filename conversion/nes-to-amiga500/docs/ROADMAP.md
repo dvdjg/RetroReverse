@@ -71,10 +71,12 @@ plataforma).
 **Objetivo**: generar C++23 a partir de la PRG-ROM, con *basic blocks*, control de flujo resuelto y
 llamadas `cpu.*` que imitan el ensamblador. Detalle en [`TRANSPILER.md`](TRANSPILER.md).
 
-**Estado: prototipo funcional** en [`../tools/transpiler/`](../tools/transpiler/README.md)
+**Estado: EN CURSO (prototipo funcional)** en [`../tools/transpiler/`](../tools/transpiler/README.md)
 (C++23 sobre `eng/core`, sin STL): iNES → desasm recursivo → basic blocks → codegen NROM, con
 ramas/`JMP`/`JSR`/`RTS`, tabla de despacho y *smoke test* que compila y ejecuta el C++ generado
-(ROMs propias).
+(ROMs propias). Sigue siendo **NROM-only** (el *banking* con tablas de despacho por banco es lo
+pendiente, F9); equivalencia intérprete↔codegen verificada en la matriz (`ram_diff=0` en el mismo
+motor).
 
 El **codegen** ya se mide: `tools/transpiler/tests/bench_codegen.sh` compara el C++ generado con el
 intérprete y con `FastCpu` sobre una ROM de cálculo (~13× vs intérprete, con equivalencia exacta), y
@@ -109,14 +111,16 @@ idéntico a un intérprete de referencia (traza de PC + estado final).
 **Objetivo**: un emulador de la NES **completo pero lento** en host, que sea el *oráculo* del nodo.
 Es el "cero" del HLE: todo lo que no se acelere caerá aquí.
 
-**Estado: EN CURSO.** [`../runtime/fallback/nes_ppu.hpp`](../runtime/fallback/nes_ppu.hpp) implementa
-registros, VRAM, OAM, paleta, scroll, VBlank/NMI, el **render del fondo** y los **sprites**
-(8×8/8×16, flips, 4 paletas, prioridad tras el fondo, límite de 8 por línea y **sprite-0 hit**) a un
-framebuffer de índices NES (`runtime/fallback/test/ppu_test.cpp`), con **scroll por línea**
-(mid-frame). **Validación diferencial** con `mesen` (vía el orquestador) en
-[`../runtime/test/diff_mesen.sh`](../runtime/test/diff_mesen.sh): ~12 % de píxeles distintos en
-Donkey Kong y ~24 % en Balloon Fight (la diferencia es en gran parte **paleta y timing**, no
-estructura). Pendiente: afinar timing/paleta para reducir la divergencia.
+**Estado: EN CURSO (oráculo operativo).** [`../runtime/fallback/nes_ppu.hpp`](../runtime/fallback/nes_ppu.hpp)
+implementa registros, VRAM, OAM, paleta, scroll, VBlank/NMI, el **render del fondo** y los
+**sprites** (8×8/8×16, flips, 4 paletas, prioridad tras el fondo, límite de 8 por línea y
+**sprite-0 hit**) a un framebuffer de índices NES (`runtime/fallback/test/ppu_test.cpp`), con
+**scroll por línea** (mid-frame). **Validación diferencial** con `mesen` en
+[`../runtime/test/port_matrix.sh`](../runtime/test/port_matrix.sh) (71 ROMs;
+[`COMPATIBILITY.md`](COMPATIBILITY.md)): **67/71 a 0.0%** de divergencia **estructural** (la
+diferencia de píxeles es en gran parte **paleta**, no geometría). Los 4 restantes (`ic`, `galaga`,
+`metalstorm`, `pacman`) son un **único límite conocido** de sincronización PPU/NMI sub-instrucción
+(ver [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md), [`RISKS.md`](RISKS.md)); no bloqueante para el port.
 
 - PPU software: render 256×240 (tiles, attributes, sprites, scroll, sprite-0 hit), VBlank/NMI,
   `$2000-$2007`, OAM, DMA `$4014`.
@@ -219,11 +223,14 @@ Copper/Blitter en el destino y el reconocimiento estático/dinámico de patrones
 
 **Objetivo**: soportar juegos comerciales. Detalle en [`MAPPERS.md`](MAPPERS.md).
 
-**Estado: EN CURSO.** [`../runtime/include/nes_mapper.hpp`](../runtime/include/nes_mapper.hpp)
-implementa el cartucho (bancos PRG/CHR) para **NROM (0), UxROM (2), CNROM (3)** y **MMC1 (1)**
-parcial, y el runner [`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp) parsea
-iNES/**NES 2.0**. El transpilador sigue siendo **NROM-only**; el *banking* con tablas de despacho
-por banco es lo pendiente.
+**Estado: EN CURSO (muy avanzado).** [`../runtime/include/nes_mapper.hpp`](../runtime/include/nes_mapper.hpp)
+implementa el cartucho (bancos PRG/CHR) para **NROM (0), UxROM (2), CNROM (3), MMC1 (1) completo,
+MMC3 (4, incl. IRQ por flanco de A12)**, y ampliado: **VRC6 (24/26), MMC5 (5, subconjunto:
+PRG/CHR/WRAM/ExRAM/fill-mode/**split vertical**), AxROM (7) y FME-7 (69)**; el runner
+[`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp) parsea iNES/**NES 2.0**. Matriz
+completa en [`COMPATIBILITY.md`](COMPATIBILITY.md). El transpilador sigue siendo **NROM-only**; el
+*banking* con tablas de despacho por banco es lo pendiente. De MMC5 quedan: nametables por
+ExRAM/CHR ROM, IRQ, multiplicador y audio.
 
 - Orden: **0 (NROM) → 2 (UxROM) → 3 (CNROM) → 1 (MMC1) → 4 (MMC3, con IRQ de scanline)**.
 - Interfaz `Mapper` (read/write PRG, CHR, IRQ, `scanline_clock`).

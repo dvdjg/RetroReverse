@@ -3,6 +3,33 @@
 Directrices persistentes para el agente que trabaja en `RetroReverse`. Se aplican a **todos**
 los expedientes de desensamblado, no solo a `sanity-arte`.
 
+## Estado vivo del pilar NES → Amiga 500 (punto de entrada para nuevos hilos)
+
+El trabajo activo del hilo actual es la **conversión NES → Amiga 500**, en
+[`conversion/nes-to-amiga500/`](conversion/nes-to-amiga500/README.md). **Antes de retomarlo, leer:**
+
+| Necesito… | Documento |
+|---|---|
+| **Traspaso vivo del hilo** (estado, rutas, próximos pasos) | [`CONTEXT.md`](CONTEXT.md) (local, **ignorado por git**) |
+| Plan por fases (F0→F10) y criterios de cierre | [`conversion/nes-to-amiga500/docs/ROADMAP.md`](conversion/nes-to-amiga500/docs/ROADMAP.md) |
+| Timing PPU/NMI: estado y límite conocido | [`conversion/nes-to-amiga500/docs/TIMING_ROADMAP.md`](conversion/nes-to-amiga500/docs/TIMING_ROADMAP.md) |
+| Matriz de compatibilidad vs `mesen` (67/71 a 0.0%) | [`conversion/nes-to-amiga500/docs/COMPATIBILITY.md`](conversion/nes-to-amiga500/docs/COMPATIBILITY.md) |
+| Riesgos y límites reales | [`conversion/nes-to-amiga500/docs/RISKS.md`](conversion/nes-to-amiga500/docs/RISKS.md) |
+| Método de validación diferencial vs mesen | [`conversion/nes-to-amiga500/docs/VALIDATION.md`](conversion/nes-to-amiga500/docs/VALIDATION.md), [`REFERENCE_TRACER.md`](conversion/nes-to-amiga500/docs/REFERENCE_TRACER.md) |
+| Juegos difíciles (mappers, casos límite) | [`conversion/nes-to-amiga500/docs/HARD_GAMES.md`](conversion/nes-to-amiga500/docs/HARD_GAMES.md) |
+
+**Estado resumido** (fase de desarrollo actual: **F1–F3 en curso; F9 (mappers) avanzado**): runtime
+6502 + PPU software (oráculo) en `conversion/nes-to-amiga500/runtime/`, transpilador prototipo, y
+validación diferencial contra **mesen** con **67/71 ROMs a 0.0%** de divergencia estructural. Los 4
+restantes (`ic`, `galaga`, `metalstorm`, `pacman`) comparten **un único límite conocido**: la
+sincronización PPU/NMI sub-instrucción entre frames. **No es cosmético**; se aborda como diagnóstico
+de *state-injection* (ver `CONTEXT.md` §Estado para el detalle del hilo). El backend **Mega Drive
+está descartado**.
+
+**Regla de oro del pilar**: primero que funcione **lento y correcto** (fallback software = oráculo),
+luego rápido (HLE). Toda entrega a **A500 real (68000 @7 MHz)** debe ser replicable en hardware; no
+perseguir un modelo *cycle-lockstep* que el Amiga no pueda ejecutar.
+
 ## Objetivo principal (confirmado por el usuario)
 
 1. Recuperar las **técnicas** de las demos/juegos Amiga, con énfasis en las **técnicas gráficas**.
