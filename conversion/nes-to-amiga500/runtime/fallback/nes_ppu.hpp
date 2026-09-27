@@ -76,6 +76,9 @@ struct Ppu {
 	/// `$2000` por línea (para splits que cambian la **nametable base** o la base de
 	/// BG a mitad de frame, como el HUD de SMB3). Si no hay split, se usa el `ctrl` final.
 	eng::u8 line_ctrl[kPpuHeight] {};
+	/// `$2001` por línea (los splits también cambian qué está activo: p. ej. desactivar
+	/// el fondo o los sprites en el HUD). Si no hay split, se usa el `mask` final.
+	eng::u8 line_mask[kPpuHeight] {};
 	bool line_scroll = false;
 
 	/// Fija el scroll de la línea `y` (splits mid-frame). \param y Línea; \param sx
@@ -85,6 +88,7 @@ struct Ppu {
 			line_sx[y] = sx;
 			line_sy[y] = sy;
 			line_ctrl[y] = ctrl; // captura la nametable base de $2000 en esta línea
+			line_mask[y] = mask; // captura $2001 (BG/sprites activos) en esta línea
 			line_scroll = true;
 		}
 	}
@@ -255,13 +259,14 @@ struct Ppu {
 	/// attribute tables. Usa `chr` como pattern tables.
 	void render_background() {
 		const eng::u8 universal = static_cast<eng::u8>(palette[0] & 0x3Fu);
-		const bool bg_on = (mask & 0x08u) != 0u;   ///< $2001 bit3: fondo habilitado.
-		const bool left_clip = (mask & 0x02u) == 0u; ///< $2001 bit1: recorta 8 px izq.
 
 		for (int py = 0; py < kPpuHeight; ++py) {
-			// `$2000` por línea: los splits (HUD tipo SMB3) cambian la nametable base
-			// mid-frame; sin esto el render usa la base final para todo el frame.
+			// `$2000`/`$2001` por línea: los splits (HUD tipo SMB3) cambian la nametable
+			// base y qué está activo mid-frame; sin esto el render usa el valor final.
 			const eng::u8 c = line_scroll ? line_ctrl[py] : ctrl;
+			const eng::u8 m = line_scroll ? line_mask[py] : mask;
+			const bool bg_on = (m & 0x08u) != 0u;      ///< $2001 bit3: fondo habilitado.
+			const bool left_clip = (m & 0x02u) == 0u;  ///< $2001 bit1: recorta 8 px izq.
 			const eng::u16 bg_base = (c & 0x10u) ? 0x1000u : 0x0000u;
 			const int base_h = c & 1;         ///< Nametable base horizontal ($2000 bit0).
 			const int base_v = (c >> 1) & 1;  ///< Nametable base vertical ($2000 bit1).
@@ -333,13 +338,14 @@ struct Ppu {
 	/// un píxel de fondo no transparente.
 	void render_sprites() {
 		sprite0_line = 0xFFFFu; ///< Se recalcula: sin sprites, no hay sprite-0 hit.
-		const bool spr_on = (mask & 0x10u) != 0u;    ///< $2001 bit4: sprites habilitados.
-		const bool spr_left = (mask & 0x04u) != 0u;  ///< $2001 bit2: sprites en 8 px izq.
-		if (!spr_on) {
-			return;
-		}
 		const int height = (ctrl & 0x20u) ? 16 : 8;
 		for (int y = 0; y < kPpuHeight; ++y) {
+			const eng::u8 m = line_scroll ? line_mask[y] : mask;
+			const bool spr_on = (m & 0x10u) != 0u;   ///< $2001 bit4: sprites habilitados.
+			const bool spr_left = (m & 0x04u) != 0u; ///< $2001 bit2: sprites en 8 px izq.
+			if (!spr_on) {
+				continue;
+			}
 			int selected[8];
 			int n = 0;
 			bool overflow = false;

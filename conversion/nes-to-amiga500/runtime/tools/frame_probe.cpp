@@ -138,8 +138,8 @@ int main(int argc, char** argv) {
 		for (unsigned i = 0; i < n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH; ++i) {
 			fb = (fb ^ sys.ppu.fb[i]) * 16777619u;
 		}
-		std::printf("f=%3d PC=%04X nmi=%u irq=%u@%d ram=%08X fb=%08X ctrl=%02X mask=%02X st=%02X jam=%d op=%02X@%04X m1c=%02X m1p=%02X\n",
-			    f, sys.cpu.PC, sys.nmi_count, sys.mapper.mmc3_irq_count,
+		std::printf("f=%3d PC=%04X cyc=%u nmi=%u irq=%u@%d ram=%08X fb=%08X ctrl=%02X mask=%02X st=%02X jam=%d op=%02X@%04X m1c=%02X m1p=%02X\n",
+			    f, sys.cpu.PC, sys.interp.cycles, sys.nmi_count, sys.mapper.mmc3_irq_count,
 			    (sys.mapper.mmc3_irq_scan == 0xFFFFu) ? -1
 								  : static_cast<int>(sys.mapper.mmc3_irq_scan),
 			    h, fb, sys.ppu.ctrl, sys.ppu.mask, sys.ppu.status,
