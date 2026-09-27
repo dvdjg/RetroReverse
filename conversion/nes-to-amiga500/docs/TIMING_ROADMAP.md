@@ -162,6 +162,16 @@ mueve la primera divergencia de metalstorm de idx **16336 → 43443** (mejor) pe
 no del PPU (que es continuo). El residuo real es un **offset de ~+4 dots** entre nuestra fase y la
 de mesen (probablemente su `_ppuOffset`/`StartCpuCycle`). **No es el lockstep**: es un ajuste fino.
 
+**Intentos de cerrar el offset (2026), con resultado:**
+- **Flag de VBlank en `(241,1)`** (como mesen `PPU.cpp:1257`) → **REGRESIONA** jurassicpark
+  (0.0→13.7%) y **rompe el `ppu_test`**. Nuestro flag en `(241,0)` es el **correcto** (con nuestro
+  modelo de avance). Revertido.
+- **Reset-dot** (`N2A_RESET_DOT` = 25..30, +1..+6 dots) → mueve la primera divergencia de metalstorm
+  de idx **16336 → 43443** (mejor) pero **no la elimina**. Es un ajuste parcial, no el cierre.
+→ El offset exacto requiere **replicar el modelo de reset/ciclo de mesen con precisión de sub-dot**
+(`_ppuOffset`/`StartCpuCycle`/`EndCpuCycle`), no un ajuste ciego. **No** se ha logrado cerrar del todo;
+los 4 juegos (ic/galaga/metalstorm/pacman) siguen.
+
 ### ✅ Fase 1+2 JUNTAS — WIN (2026)
 
 Implementadas **Fase 1 (PPU dot a dot)** **y Fase 2 (fase continua, dot sin resetear)**:
