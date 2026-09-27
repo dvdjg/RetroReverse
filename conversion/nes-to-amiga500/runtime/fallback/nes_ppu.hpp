@@ -140,6 +140,10 @@ struct Ppu {
 			// de $2002 devuelve el bit de VBlank a 0, aunque el flag ya esté puesto.
 			if (scanline == 241u && dot < 3u) r = static_cast<eng::u8>(r & 0x7Fu);
 			status = static_cast<eng::u8>(status & ~0x80u);
+			// Leer $2002 limpia el flag de VBlank, lo que **cancela el NMI pendiente**
+			// (mesen `UpdateStatusFlag`: `ClearNmiFlag()`). Sin esto, un bucle que lee
+			// $2002 antes de la frontera de instrucción no evita el NMI.
+			nmi_occurred = false;
 			write_toggle = false;
 			return r;
 		}
