@@ -383,6 +383,7 @@ private:
 		}
 		if (a >= 0x4020u) {
 			mapper.cpu_cycle = interp.cycles;
+			mapper.cur_scan = ppu.scanline;
 			mapper.cpu_write(a, v);
 			return;
 		}

@@ -67,6 +67,8 @@ struct Mapper {
 	bool mmc3_irq_pending = false;  ///< IRQ pedida (se limpia al escribir $E000).
 	eng::u16 mmc3_irq_scan = 0xFFFFu; ///< Scanline del primer IRQ pedido (diagnóstico).
 	eng::u32 mmc3_irq_count = 0;     ///< Nº de IRQs pedidos (diagnóstico).
+	eng::u16 cur_scan = 0xFFFFu;     ///< Scanline actual (lo fija el sistema antes de `cpu_write`).
+	eng::u32 mmc3_chr_mid = 0;       ///< Escrituras a bancos CHR en pleno frame visible (<240).
 
 	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
 	[[nodiscard]] bool irq_line() const noexcept {
@@ -346,6 +348,9 @@ private:
 				mmc3_prg_mode = (value & 0x40u) ? 1u : 0u;
 				mmc3_chr_mode = (value & 0x80u) ? 1u : 0u;
 			} else {
+				if (mmc3_bank_select < 6u && cur_scan < 240u) {
+					++mmc3_chr_mid; // cambio de banco CHR a mitad del frame visible
+				}
 				mmc3_regs[mmc3_bank_select] = value;
 			}
 		} else if (addr < 0xC000u) {                // $A000-$BFFF: mirroring
