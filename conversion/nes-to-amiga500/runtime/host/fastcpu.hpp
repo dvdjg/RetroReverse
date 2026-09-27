@@ -20,6 +20,7 @@
 
 #include "../../tools/transpiler/src/opcodes.hpp"
 #include "nes_runtime.hpp"
+#include "nes_interpreter.hpp"
 
 namespace n2a {
 
@@ -649,6 +650,32 @@ struct FastCpu {
 	/// \param out_instrs Nº de instrucciones ejecutadas (salida).
 	/// \return Ciclos totales del bloque; 0 si la primera instrucción necesita el
 	///         intérprete (el llamante hace entonces un único `interp.step`).
+	/// ¿La instrucción decodificada `d` accede a la zona de registros de la PPU
+	/// (`$2000-$3FFF`, espejo de `$2000-$2007`)? Se usa para **cortar el bloque** y
+	/// dejar esa instrucción al intérprete, que reloja la PPU dot-exacto por acceso.
+	/// Cubre lecturas/escrituras absolutas y absolutas indexadas (donde `d.operand` es
+	/// la dirección base o el puntero); no cubre `(ind),Y` (raro contra la PPU).
+	/// \param d Instrucción decodificada (`operand` = dirección base/operando).
+	/// \return `true` si el acceso cae en `$2000-$3FFF`.
+	[[nodiscard]] static bool touches_ppu(const Dec& d) noexcept {
+		switch (d.opcode) {
+		// LDA/LDX/LDY/LAX + ADC/SBC/AND/ORA/EOR/CMP/CPX/CPY/BIT (abs, abs,X, abs,Y)
+		case 0xAD: case 0xBD: case 0xB9: case 0xAE: case 0xBE: case 0xAC: case 0xBC:
+		case 0x6D: case 0x7D: case 0x79: case 0xED: case 0xFD: case 0xF9:
+		case 0x2D: case 0x3D: case 0x39: case 0x0D: case 0x1D: case 0x19:
+		case 0x4D: case 0x5D: case 0x59: case 0xCD: case 0xDD: case 0xD9:
+		case 0xEC: case 0xCC: case 0x2C:
+		// ASL/LSR/ROL/ROR/INC/DEC abs (lectura+escritura)
+		case 0x0E: case 0x1E: case 0x4E: case 0x5E: case 0x6E: case 0x7E:
+		case 0xEE: case 0xFE: case 0xCE: case 0xDE:
+			// (abs,X)/(abs,Y): el índice puede cruzar fuera de la PPU; se corta igual
+			// (coste bajo: solo cuando la dirección base cae en $2000-$3FFF).
+			return d.operand >= 0x2000u && d.operand <= 0x3FFFu;
+		default:
+			return false;
+		}
+	}
+
 	static int run_block(void* ctx, CPU& cpu, NESMemory& mem, int budget, int* out_instrs) {
 		FastCpu* self = static_cast<FastCpu*>(ctx);
 		if (out_instrs != nullptr) {
@@ -659,9 +686,15 @@ struct FastCpu {
 		}
 		int total = 0;
 		for (;;) {
-			// Garantiza no cruzar la línea salvo la primera instrucción forzosa.
-			if (total != 0 && total + 7 > budget) {
-				break;
+			// Garantiza no cruzar la línea salvo la primera instrucción forzosa. Se usa
+			// el nº de ciclos **real** de la siguiente instrucción (no el peor caso de 7):
+			// con el peor caso, un bloque podía cortarse antes de tiempo cerca de una
+			// frontera y divergir del intérprete (equivalencia).
+			if (total != 0) {
+				const int need = Interpreter::opcode_cycles(mem.read(cpu.PC));
+				if (need > 0 && total + need > budget) {
+					break;
+				}
 			}
 			const eng::u16 pc = cpu.PC;
 			if (pc < 0x8000u) {
@@ -679,6 +712,14 @@ struct FastCpu {
 				}
 			}
 			const Dec& d = self->dec[pc];
+			// Si la instrucción accede a un registro de PPU (`$2000-$3FFF`), se corta el
+			// bloque para que `step_block` la ejecute con el intérprete, que reloja la PPU
+			// **por acceso** (dot-exacto). El camino rápido reloja la PPU al final del
+			// bloque, así que una lectura de `$2002` dentro del bloque vería un VBlank
+			// obsoleto y los bucles de espera divergirían del intérprete.
+			if (touches_ppu(d)) {
+				break; // si es la 1ª instrucción, `total==0` → el llamante usa el intérprete
+			}
 			// `eval` devuelve 0 sin efectos para opcodes no cubiertos: se corta
 			// aquí y el llamante ejecuta esa instrucción con el intérprete.
 			const eng::u8 op = d.opcode;

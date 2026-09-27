@@ -60,6 +60,7 @@ struct NesSystem {
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
 	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
 	bool cycle_exact_ = true; ///< Reloj de bus por acceso activo (ver `set_cycle_exact`).
+	int frames_done_ = 0;     ///< Frames completados: el 1º no fuerza la frontera (PPU desde línea 0).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
 	NesSystem() : interp(cpu, mem) {
@@ -109,6 +110,7 @@ struct NesSystem {
 		ppu.mirror_h = mapper.mirror_h;
 		ppu.scanline = 0;
 		ppu.vblank_suppress = false; // mesen activa el flag en (241,1) desde el frame 0
+		frames_done_ = 0;
 		interp.jammed = false;
 		// La CPU tarda 8 ciclos en empezar a ejecutar tras el reset (mesen CPU.cpp:150:
 		// "the CPU takes 8 cycles before it starts executing the ROM's code"); durante
@@ -223,11 +225,15 @@ struct NesSystem {
 		// los bucles de espera del reset).
 		ppu.vblank_suppress = false;
 		ppu.mirror_h = mapper.mirror_h; // la MMC3 cambia el mirroring en runtime
-		// Frontera de frame nítida en la **pre-VBlank** (scanline 240): el bucle del juego
-		// que espera el VBlank de la línea 241 converge en la misma frontera. Con `scanline
-		// = 240` y el flag activo en (241,1) (mesen), el primer VBlank cae tras ~341 dots y
-		// los bucles de espera del reset salen a tiempo (sin esto bioniccommando se colgaba).
-		ppu.scanline = 240u;
+		// Frontera de frame en la pre-VBlank (scanline 240). El PRIMER frame **no** se fuerza:
+		// la PPU arranca en la línea 0 y llega a la 241 por sí sola (forzar la 240 aquí
+		// saltaría las líneas 0-239 y adelantaría el primer VBlank ~27000 ciclos, haciendo
+		// que el bucle `LDA $2002/BPL` del reset salga de inmediato). Desde el 2º frame la
+		// PPU ya está en la 240 y se fija una frontera nítida.
+		if (frames_done_ > 0) {
+			ppu.scanline = 240u;
+		}
+		++frames_done_;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
 		ppu.dot = 0u;
