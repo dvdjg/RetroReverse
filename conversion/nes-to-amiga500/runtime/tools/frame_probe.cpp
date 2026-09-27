@@ -31,8 +31,8 @@ void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
 	if (c.I) p |= 0x04u;
 	if (c.Z) p |= 0x02u;
 	if (c.C) p |= 0x01u;
-	const eng::u16 sc = (g_sys != nullptr) ? g_sys->ppu.scanline : 0u;
-	const unsigned char b[10] = {static_cast<unsigned char>(pc & 0xFFu),
+	const eng::u32 cyc = (g_sys != nullptr) ? g_sys->interp.cycles : 0u;
+	const unsigned char b[12] = {static_cast<unsigned char>(pc & 0xFFu),
 				     static_cast<unsigned char>(pc >> 8u),
 				     op,
 				     c.A,
@@ -40,9 +40,11 @@ void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
 				     c.Y,
 				     p,
 				     c.SP,
-				     static_cast<unsigned char>(sc & 0xFFu),
-				     static_cast<unsigned char>(sc >> 8u)};
-	std::fwrite(b, 1, 10, g_cpu);
+				     static_cast<unsigned char>(cyc & 0xFFu),
+				     static_cast<unsigned char>((cyc >> 8u) & 0xFFu),
+				     static_cast<unsigned char>((cyc >> 16u) & 0xFFu),
+				     static_cast<unsigned char>((cyc >> 24u) & 0xFFu)};
+	std::fwrite(b, 1, 12, g_cpu);
 	++g_cpu_n;
 }
 
