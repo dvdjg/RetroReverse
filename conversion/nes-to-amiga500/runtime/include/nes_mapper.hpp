@@ -202,6 +202,16 @@ struct Mapper {
 		}
 	}
 
+	/// ¿La VRC6 usa **nametables por CHR ROM**? (`$B003` bit 4 = 1.) Lo consulta el
+	/// sistema para mapear la PPU. \return `true` si el modo CHR-ROM está activo.
+	[[nodiscard]] bool vrc6_chr_nt_active() const noexcept {
+		return kind == MapperKind::Vrc6 && (vrc6_banking & 0x10u) != 0u;
+	}
+
+	/// Página CHR ROM (1 KB) del nametable `nt` (0..3) en modo CHR-ROM de la VRC6.
+	/// \param nt Índice de nametable 0..3. \return Página CHR (0..255).
+	[[nodiscard]] eng::u8 vrc6_chr_nt_page(int nt) const noexcept { return vrc6_chr_nt(nt); }
+
 	/// Lee el byte de la CPU en `addr` (zona de cartucho `$4020-$FFFF`).
 	/// \param addr Dirección de 16 bits.
 	/// \return Byte leído (0 si no está mapeado).
@@ -608,12 +618,13 @@ private:
 		}
 	}
 
-	/// Fija el mirroring desde `$B003` (mesen VRC6.h). Sólo los modos de nametable por
-	/// CIRAM (bit 4 = 0); el modo de nametables por CHR ROM no se modela (raro).
+	/// Fija el mirroring desde `$B003` (mesen VRC6.h). Si `bit 4` = 1, los nametables
+	/// salen de **CHR ROM** (páginas 1 KB de `vrc6_chr[4..7]`), no de CIRAM; el sistema
+	/// lo consulta vía `vrc6_chr_nt` para mapear la PPU.
 	void vrc6_update_mirroring() {
 		vrc6_banking &= 0xFFu;
 		if ((vrc6_banking & 0x10u) != 0u) {
-			return; // nametables por CHR ROM: sin efecto (no modelado)
+			return; // nametables por CHR ROM: lo resuelve `vrc6_chr_nt_enabled`
 		}
 		switch (vrc6_banking & 0x2Fu) {
 		case 0x20u:
@@ -637,6 +648,52 @@ private:
 		default:
 			mirror_single = -1;
 			break;
+		}
+	}
+
+	/// ¿La VRC6 usa **nametables por CHR ROM**? (`$B003` bit 4 = 1.)
+	[[nodiscard]] bool vrc6_chr_nt_enabled() const noexcept {
+		return kind == MapperKind::Vrc6 && (vrc6_banking & 0x10u) != 0u;
+	}
+
+	/// Página CHR ROM (1 KB) del nametable `nt` (0..3) en modo CHR-ROM (mesen
+	/// `VRC6.h::UpdatePpuBanking`, rama `if(_bankingMode & 0x10)`). Cada modo de
+	/// `$B003 & 0x2F` reparte los registros `_chrRegisters[4..7]` de forma distinta.
+	/// \param nt Índice de nametable 0..3.
+	/// \return Número de página CHR (0..255).
+	[[nodiscard]] eng::u8 vrc6_chr_nt(int nt) const noexcept {
+		const eng::u8 r4 = vrc6_chr[4];
+		const eng::u8 r5 = vrc6_chr[5];
+		const eng::u8 r6 = vrc6_chr[6];
+		const eng::u8 r7 = vrc6_chr[7];
+		const eng::u8 e6 = static_cast<eng::u8>(r6 & 0xFEu);
+		const eng::u8 e7 = static_cast<eng::u8>(r7 & 0xFEu);
+		switch (vrc6_banking & 0x2Fu) {
+		case 0x20u:
+		case 0x27u:
+			return (nt == 0 || nt == 1) ? e6 : static_cast<eng::u8>(e7 | ((nt == 3) ? 1u : 0u));
+		case 0x23u:
+		case 0x24u:
+			return (nt & 1) == 0 ? e6 : e7;
+		case 0x28u:
+		case 0x2Fu:
+			return (nt < 2) ? e6 : e7;
+		case 0x2Bu:
+		case 0x2Cu:
+			return static_cast<eng::u8>(((nt & 1) == 0 ? e6 : e7) | 1u);
+		default: {
+			switch (vrc6_banking & 0x07u) {
+			case 0u:
+			case 6u:
+			case 7u:
+				return (nt < 2) ? r6 : r7;
+			case 1u:
+			case 5u:
+				return (nt == 0) ? r4 : (nt == 1) ? r5 : (nt == 2) ? r6 : r7;
+			default: // 2,3,4
+				return (nt & 1) == 0 ? r6 : r7;
+			}
+		}
 		}
 	}
 

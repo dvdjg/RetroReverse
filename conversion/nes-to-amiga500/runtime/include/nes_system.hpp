@@ -263,6 +263,15 @@ struct NesSystem {
 			ppu.split_ctrl = mapper.mmc5_split_ctrl;
 			ppu.split_scroll = mapper.mmc5_split_scroll;
 			ppu.split_exram = mapper.mmc5_exram;
+		} else if (mapper.vrc6_chr_nt_active()) {
+			// VRC6 con nametables por **CHR ROM** ($B003 bit 4): los 4 nametables leen
+			// páginas del CHR ROM (`nt_chr_page`), con atributos incluidos.
+			for (int i = 0; i < 4; ++i) {
+				ppu.nt_map[i] = 4u;
+				ppu.nt_chr_page[i] = mapper.vrc6_chr_nt_page(i);
+			}
+			ppu.nt_map_on = true;
+			ppu.split_exram = nullptr;
 		} else {
 			ppu.nt_map_on = false;
 			ppu.split_exram = nullptr;

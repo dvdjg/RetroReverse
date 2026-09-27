@@ -49,10 +49,13 @@ struct Ppu {
 	/// `mirror_h`); `0` = solo pantalla A (banco 0); `1` = solo pantalla B (banco 1).
 	/// Toda la VRAM de nametables apunta al mismo banco de 1 KB.
 	int nt_single = -1;
-	/// **Mapeo de nametables por cartucho** (MMC5 `$5105`): `nt_map[i]` ∈ {0,1 = CIRAM
-	/// página, 2 = ExRAM, 3 = fill-mode}. Lo fija el sistema; si `nt_map_on` es false se
-	/// usa el mirroring normal (`nt_bank`).
+	/// **Mapeo de nametables por cartucho** (MMC5 `$5105` / VRC6 `$B003` bit 4):
+	/// `nt_map[i]` ∈ {0,1 = CIRAM página, 2 = ExRAM, 3 = fill-mode, 4 = página de CHR
+	/// ROM}. Lo fija el sistema; si `nt_map_on` es false se usa el mirroring normal
+	/// (`nt_bank`). El origen 4 (nametables por **CHR ROM**, VRC6) lee la página
+	/// `nt_chr_page[i]` del CHR ROM (1 KB cada una), incluidos los atributos.
 	eng::u8 nt_map[4] = {0, 1, 0, 1};
+	eng::u8 nt_chr_page[4] = {0, 0, 0, 0}; ///< Página CHR ROM de cada nametable (origen 4).
 	eng::u8* nt_exram = nullptr;      ///< Fuente 2 (ExRAM de la MMC5, 1 KB R/W).
 	const eng::u8* nt_fill = nullptr; ///< Fuente 3 (nametable de relleno, 1 KB sólo lectura).
 	bool nt_map_on = false;           ///< Usar `nt_map` en vez del mirroring.
@@ -351,7 +354,7 @@ struct Ppu {
 				const int nt_v = (base_v + (ty_abs / 30)) & 1; // vertical: 30 filas
 				const eng::u16 nt_base = static_cast<eng::u16>(nt_bank(nt_h, nt_v) * 0x400);
 				const eng::u16 nt_off = static_cast<eng::u16>(nt_base + (cy & 31) * 32 + (cx & 31));
-				// Mapeo por cartucho (MMC5): CIRAM/ExRAM/fill según `nt_map`.
+				// Mapeo por cartucho (MMC5/VRC6): CIRAM/ExRAM/fill/CHR-ROM según `nt_map`.
 				const int nt = nt_h | (nt_v << 1);
 				// Split vertical de la MMC5 ($5200-$5202): dentro de su región la nametable
 				// se sustituye por ExRAM, indexada por el scroll del split. `bit6` = lado
@@ -365,9 +368,10 @@ struct Ppu {
 					split_col
 						? split_exram[((static_cast<int>(split_scroll & 0xF8u) << 2) |
 							      tc) & 0x3FF]
-						: (nt_map_on
-								  ? nt_src_byte(nt, static_cast<eng::u16>((cy & 31) * 32 + (cx & 31)))
-								  : vram[nt_off & 0x7FFu]);
+						: nt_read(nt_h, nt_v,
+							  static_cast<eng::u16>((cy & 31) * 32 + (cx & 31)));
+				(void)nt;
+				(void)nt_off;
 				const eng::u8 attr = attr_bits(nt_base, cx, cy);
 
 				const eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
@@ -556,20 +560,39 @@ private:
 		return mirror_h ? nt_v : nt_h;
 	}
 
-	/// Byte de nametable por el **mapeo del cartucho** (`nt_map`, MMC5 `$5105`): CIRAM
-	/// página, ExRAM o fill-mode. Sólo se usa si `nt_map_on`.
+	/// Byte de nametable por el **mapeo del cartucho** (`nt_map`, MMC5 `$5105` o VRC6
+	/// `$B003` bit 4): CIRAM página, ExRAM, fill-mode o página de CHR ROM. Sólo se
+	/// usa si `nt_map_on`.
 	/// \param nt Índice de nametable 0..3. \param off Offset dentro de la nametable (0..$3FF).
 	/// \return Byte del origen mapeado.
 	[[nodiscard]] eng::u8 nt_src_byte(int nt, eng::u16 off) const noexcept {
 		off = static_cast<eng::u16>(off & 0x3FFu);
-		const int s = nt_map[nt & 3];
+		const int i = nt & 3;
+		const int s = nt_map[i];
 		if (s == 2) {
 			return nt_exram != nullptr ? nt_exram[off] : 0u;
 		}
 		if (s == 3) {
 			return nt_fill != nullptr ? nt_fill[off] : 0u;
 		}
+		if (s == 4) {
+			// Nametable por CHR ROM (VRC6): la página `nt_chr_page` (1 KB) del CHR.
+			return chr_byte(static_cast<eng::u16>(static_cast<eng::u16>(nt_chr_page[i]) * 0x400u + off));
+		}
 		return vram[(static_cast<eng::usize>(s) & 1u) * 0x400u + off];
+	}
+
+	/// Lee la nametable activa: por el mapeo del cartucho si `nt_map_on`, o por la
+	/// VRAM con mirroring normal. Unifica la lectura de tiles y atributos (VRC6
+	/// CHR-ROM nametables afectan a **ambos**).
+	/// \param nt_h Bit horizontal de nametable; \param nt_v Bit vertical.
+	/// \param off Offset 0..$3FF dentro de la nametable.
+	/// \return Byte de la nametable.
+	[[nodiscard]] eng::u8 nt_read(int nt_h, int nt_v, eng::u16 off) const noexcept {
+		if (nt_map_on) {
+			return nt_src_byte(nt_h | (nt_v << 1), off);
+		}
+		return vram[(static_cast<eng::usize>(nt_bank(nt_h, nt_v)) * 0x400u + (off & 0x3FFu)) & 0x7FFu];
 	}
 
 	/// Dirección física (0..0x7FF) en los 2 KB de VRAM para una dirección de PPU
@@ -623,7 +646,13 @@ private:
 	eng::u8 attr_bits(eng::u16 nt_base, int cx, int cy) const {
 		const int ax = (cx >> 2) & 7;
 		const int ay = (cy >> 2) & 7;
-		const eng::u8 byte = vram[(nt_base + 0x3C0 + ay * 8 + ax) & 0x7FFu];
+		(void)nt_base;
+		// Los atributos viven en el offset $3C0-$3FF de la nametable; se leen por el
+		// mismo origen que los tiles (VRC6 CHR-ROM nametables incluyen atributos).
+		const eng::u16 off = static_cast<eng::u16>(0x3C0 + ay * 8 + ax);
+		const int nt_h = (nt_base >> 10) & 1;
+		const int nt_v = (nt_base >> 11) & 1;
+		const eng::u8 byte = nt_read(nt_h, nt_v, off);
 		const int quad = ((cy >> 1) & 1) * 2 + ((cx >> 1) & 1);
 		return static_cast<eng::u8>((byte >> (quad * 2)) & 0x03u);
 	}
