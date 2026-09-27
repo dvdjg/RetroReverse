@@ -15,10 +15,11 @@ n2a::LoadedRom g_rom;
 std::FILE* g_wt = nullptr;  ///< Volcado de escrituras a `$2007` (addr lo/hi + valor).
 std::FILE* g_reg = nullptr;   ///< Volcado de escrituras a registros PPU (reg + valor).
 std::FILE* g_mmc1 = nullptr;  ///< Volcado de commits MMC1 (reg + valor).
-std::FILE* g_cpu = nullptr;   ///< Traza de CPU (pc lo/hi, op, A, X, Y, P, SP).
+std::FILE* g_cpu = nullptr;   ///< Traza de CPU (pc lo/hi, op, A, X, Y, P, SP, scan lo/hi).
 unsigned long long g_cpu_n = 0; ///< Instrucciones trazadas.
+n2a::NesSystem* g_sys = nullptr; ///< Para leer la scanline en la traza.
 
-/// Callback de traza de CPU: escribe 8 bytes por instrucción.
+/// Callback de traza de CPU: escribe 10 bytes por instrucción.
 void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
 	if (g_cpu == nullptr || g_cpu_n > 4000000ULL) {
 		return;
@@ -30,9 +31,18 @@ void trace_cpu(void* /*user*/, eng::u16 pc, eng::u8 op, const n2a::CPU& c) {
 	if (c.I) p |= 0x04u;
 	if (c.Z) p |= 0x02u;
 	if (c.C) p |= 0x01u;
-	const unsigned char b[8] = {static_cast<unsigned char>(pc & 0xFFu),
-				    static_cast<unsigned char>(pc >> 8u), op, c.A, c.X, c.Y, p, c.SP};
-	std::fwrite(b, 1, 8, g_cpu);
+	const eng::u16 sc = (g_sys != nullptr) ? g_sys->ppu.scanline : 0u;
+	const unsigned char b[10] = {static_cast<unsigned char>(pc & 0xFFu),
+				     static_cast<unsigned char>(pc >> 8u),
+				     op,
+				     c.A,
+				     c.X,
+				     c.Y,
+				     p,
+				     c.SP,
+				     static_cast<unsigned char>(sc & 0xFFu),
+				     static_cast<unsigned char>(sc >> 8u)};
+	std::fwrite(b, 1, 10, g_cpu);
 	++g_cpu_n;
 }
 
@@ -94,6 +104,7 @@ int main(int argc, char** argv) {
 	sys.mapper.write_trace = &trace_mmc1;
 	if (trace) {
 		g_cpu = std::fopen("frame_probe.cpu", "wb");
+		g_sys = &sys;
 		sys.interp.trace = &trace_cpu;
 	}
 	std::printf("mapper=%u prg=%u chr=%u mirror_h=%d\n", g_rom.mapper_no, g_rom.prg_size,
