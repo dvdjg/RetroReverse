@@ -152,6 +152,16 @@ Re-tag `oracle-v2.1`, regenerar `port_matrix.baseline` + `COMPATIBILITY.md` + sn
   pero como **tarea dedicada** (Fase 3), no mezclado con el trabajo de mappers (donde el % por
   turno era muy superior: 38→71 ROMs en pocos turnos).
 
+### Fase 3 (2026): la fase es CONSTANTE (+4 dots) — no hay deriva
+
+Tras Fase 1+2, medido con el tracer de fase: el **dPPU es CONSTANTE** (`+345` raw ≈ **+4 dots**
+alineados) a lo largo de miles de instrucciones hasta la divergencia. Es decir, **la fase del PPU
+NO deriva** — es un **offset fijo pequeño**. Afinar el **dot del reset** (`N2A_RESET_DOT=26/28/30`)
+mueve la primera divergencia de metalstorm de idx **16336 → 43443** (mejor) pero **no la elimina**.
+→ El "largo de frame variable" (29778-29783) es del lado **CPU** (instrucciones por `run_frame`),
+no del PPU (que es continuo). El residuo real es un **offset de ~+4 dots** entre nuestra fase y la
+de mesen (probablemente su `_ppuOffset`/`StartCpuCycle`). **No es el lockstep**: es un ajuste fino.
+
 ### ✅ Fase 1+2 JUNTAS — WIN (2026)
 
 Implementadas **Fase 1 (PPU dot a dot)** **y Fase 2 (fase continua, dot sin resetear)**:
