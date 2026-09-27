@@ -412,12 +412,20 @@ private:
 		if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot >= start && ppu.sprite0_dot < end) {
 			ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
 		}
-		// MMC3: A12 sube en el fetch de sprites (dot ~257) de cada línea renderizada; el
-		// contador IRQ avanza ahí, no en la frontera de scanline (~257 dots / 86 ciclos
-		// antes). Es el flanco dominante con el render activo.
-		if (mapper.kind == MapperKind::Mmc3 && ppu.scanline < 240u && (ppu.mask & 0x18u) != 0u &&
-		    kA12Dot >= start && kA12Dot < end) {
-			mapper.on_scanline(ppu.scanline);
+		// MMC3: el contador IRQ avanza en el flanco de subida de A12. En una línea
+		// renderizada ese flanco ocurre (una vez) si **hay sprites** (fetch en $1000+,
+		// dot ~257) o si el **fondo usa la base de patrones $1000** (fetch de BG, A12
+		// sube al ir de la nametable $2000 a los patrones $1xxx). Si no (BG=$0000 y sin
+		// sprites) A12 no sube y no se reloja. (mesen/nestopia enganchan la línea de
+		// direcciones del PPU con un filtro; aquí se modela el flanco dominante por línea.)
+		if (mapper.kind == MapperKind::Mmc3 && ppu.scanline < 240u && kA12Dot >= start &&
+		    kA12Dot < end) {
+			const bool spr_on = (ppu.mask & 0x10u) != 0u;
+			const bool bg_on = (ppu.mask & 0x08u) != 0u;
+			const bool bg_hi = (ppu.ctrl & 0x10u) != 0u;
+			if (spr_on || (bg_on && bg_hi)) {
+				mapper.on_scanline(ppu.scanline);
+			}
 		}
 		ppu.dot = end;
 		while (ppu.dot >= 341u) {
