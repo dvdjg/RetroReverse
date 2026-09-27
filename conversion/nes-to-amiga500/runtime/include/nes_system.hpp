@@ -296,8 +296,8 @@ private:
 			if (!strobe) shift2 = static_cast<eng::u8>(shift2 >> 1u);
 			return static_cast<eng::u8>(b | 0x40u);
 		}
-		if (a >= 0x6000u && a < 0x8000u) {
-			return mem.prg_ram[a - 0x6000u]; // PRG-RAM del cartucho (MMC1/MMC3)
+		if (a >= 0x6000u && a < 0x8000u && mapper.kind == MapperKind::Mmc3) {
+			return mem.prg_ram[a - 0x6000u]; // PRG-RAM de la MMC3 (plana)
 		}
 		if (a >= 0x4020u) {
 			return mapper.cpu_read(a);
@@ -331,8 +331,8 @@ private:
 			apu.write_reg(a, v);
 			return;
 		}
-		if (a >= 0x6000u && a < 0x8000u) {
-			mem.prg_ram[a - 0x6000u] = v; // PRG-RAM del cartucho (MMC1/MMC3)
+		if (a >= 0x6000u && a < 0x8000u && mapper.kind == MapperKind::Mmc3) {
+			mem.prg_ram[a - 0x6000u] = v; // PRG-RAM de la MMC3 (plana)
 			return;
 		}
 		if (a >= 0x4020u) {
