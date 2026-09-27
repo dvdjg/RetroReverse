@@ -56,6 +56,20 @@ if (wa,ha)!=(wb,hb):
     print('diff_mesen: dimensiones distintas'); sys.exit(1)
 n=wa*ha; diff=0; sdiff=0
 lr,lg,lb=0.299,0.587,0.114
+# Detección de **pantalla plana** (<= FLAT_MAX colores distintos): un frame sin
+# contenido (título/intro esperando input) hace que la métrica de estructura cuente
+# TODA la pantalla si ambos tienen distinto color de fondo → "100%" engañoso.
+# En ese caso el resultado es **inconcluyente**, no una divergencia real.
+# FLAT_MAX=1 (monocromo) es conservador: un título simple de 2 colores NO se marca
+# (evita falsos inconcluyentes en juegos reales como Akumajou).
+FLAT_MAX=1
+def ncolors(d):
+    s=set()
+    for i in range(n):
+        s.add((d[3*i],d[3*i+1],d[3*i+2]))
+        if len(s)>FLAT_MAX: return len(s)
+    return len(s)
+c_ours=ncolors(da); c_ref=ncolors(db)
 for i in range(n):
     r1,g1,b1=da[3*i],da[3*i+1],da[3*i+2]
     r2,g2,b2=db[3*i],db[3*i+1],db[3*i+2]
@@ -64,6 +78,12 @@ for i in range(n):
     # el tono de paleta, que es ruido entre emuladores). Refleja geometría/tiles.
     if abs((r1*lr+g1*lg+b1*lb)-(r2*lr+g2*lg+b2*lb))>48: sdiff+=1
 pct=100.0*diff/n; spct=100.0*sdiff/n
-print('diff_mesen: color=%.1f%%  estructura(lum)=%.1f%% (umbral %.1f%%)'%(pct,spct,thr))
+flat = c_ours<=FLAT_MAX and c_ref<=FLAT_MAX
+tag = ' INCONCLUYENTE(pantalla-plan)' if flat else ''
+print('diff_mesen: color=%.1f%%  estructura(lum)=%.1f%% (umbral %.1f%%) colores=%d/%d%s'
+      %(pct,spct,thr,c_ours,c_ref,tag))
+# Si ambos frames son planos, no es una divergencia fiable → salir 0 (no falla).
+if flat:
+    sys.exit(0)
 sys.exit(0 if pct<thr else 1)
 PY

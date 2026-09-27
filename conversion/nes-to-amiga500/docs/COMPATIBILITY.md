@@ -11,6 +11,11 @@ versiona; `build/` está en `.gitignore`).
 Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-sync por PC) está en
 [`REFERENCE_TRACER.md`](REFERENCE_TRACER.md); las limitaciones reales, en [`RISKS.md`](RISKS.md).
 
+> **Frames planos = inconcluyente.** Si el frame (de la ROM y de `mesen`) es **monocromo** (≤1 color
+> distinto), `diff_mesen` lo marca **`INCONCLUYENTE(pantalla-plan)`** y `port_matrix` lo muestra como
+> **`flat`** en vez de un `100%` engañoso: es una pantalla de espera/intro (título sin *input*), no
+> una divergencia. Ej.: Esper Dream 2, Gemfire (a 60 frames).
+
 ## Matriz (60 frames)
 
 | ROM | mapper | estructura vs mesen |

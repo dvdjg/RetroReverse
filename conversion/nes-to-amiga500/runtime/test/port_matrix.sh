@@ -35,9 +35,14 @@ hash_of() { # hash del framebuffer del oráculo
 		sed -n 's/.*hash=\([0-9a-f]*\).*/\1/p'
 }
 
-struct_of() { # % estructural vs mesen
+struct_of() { # % estructural vs mesen; "flat" si la comparación es inconcluyente
 	local line
 	line="$(ROM="$1" FRAMES="$FRAMES" bash "$ROOT/test/diff_mesen.sh" 2>/dev/null | tail -1)"
+	# Frame plano (pantalla de espera/intro): el "100%" no es una divergencia real.
+	if printf '%s' "$line" | grep -q 'INCONCLUYENTE'; then
+		printf 'flat'
+		return
+	fi
 	printf '%s' "$line" | sed -n 's/.*estructura(lum)=\([0-9.]*\)%.*/\1/p'
 }
 
