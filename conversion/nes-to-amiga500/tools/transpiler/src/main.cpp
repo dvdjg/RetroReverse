@@ -388,6 +388,10 @@ bool extract_7z(const char* sevenzip, const std::string& archive, const std::str
 	return std::system(cmd.c_str()) == 0;
 }
 
+/// Versión del **codegen/ABI**: subirla invalida la caché de plugins (se escribe
+/// en el sidecar como `"gen"`). v2 = +`kMirroring`/`n2a_mirroring`.
+constexpr int kCodegenVersion = 2;
+
 /// Opciones de codegen fijadas por los flags (ver `main`).
 bool g_no_cycles = false;
 bool g_fast_ram = false;
@@ -485,8 +489,40 @@ void write_sidecar(const char* json, const char* base, const char* tag, const ch
 	js.append_hex(crc, 8u, true);
 	js.append("\",\n  \"source\": \"");
 	js.append(eng::util::StringView(rom));
-	js.append("\"\n}\n");
+	js.append("\",\n  \"gen\": ");
+	js.append_s32(kCodegenVersion);
+	js.append("\n}\n");
 	(void)n2a::write_whole_file(json, js.view());
+}
+
+/// Lee un campo entero `"key": <n>` del sidecar JSON `path`.
+/// \return El valor, o `-1` si no existe.
+int read_sidecar_int(const char* path, const char* key) {
+	ByteBuffer b;
+	if (!n2a::read_whole_file(path, b)) {
+		return -1;
+	}
+	eng::util::StringView t(reinterpret_cast<const char*>(b.data()), b.size());
+	const eng::usize k = t.find(eng::util::StringView(key));
+	if (k == eng::util::StringView::npos) {
+		return -1;
+	}
+	eng::usize i = t.find(eng::util::StringView(":"), k);
+	if (i == eng::util::StringView::npos) {
+		return -1;
+	}
+	++i;
+	while (i < t.size() && (t[i] == ' ' || t[i] == '\t' || t[i] == '"')) {
+		++i;
+	}
+	int v = 0;
+	bool any = false;
+	while (i < t.size() && t[i] >= '0' && t[i] <= '9') {
+		v = v * 10 + (t[i] - '0');
+		any = true;
+		++i;
+	}
+	return any ? v : -1;
 }
 
 /// CRC32 (IEEE) del contenido de `path` (0 si no se pudo leer).
@@ -778,8 +814,10 @@ int main(int argc, char** argv) {
 			// Caché: si el plugin existe y el CRC de la ROM no cambió, no se rehace.
 			const eng::u32 crc = crc32_file(rom);
 			ByteBuffer existing;
-			const bool cached =
-				n2a::read_whole_file(n2x, existing) && read_cached_crc(json) == crc;
+			// La caché caduca si cambia la ROM **o** la versión de codegen/ABI.
+			const bool cached = n2a::read_whole_file(n2x, existing) &&
+					    read_cached_crc(json) == crc &&
+					    read_sidecar_int(json, "gen") == kCodegenVersion;
 			if (cached) {
 				Dyn s;
 				s.append("sin cambios, reutilizo ");
