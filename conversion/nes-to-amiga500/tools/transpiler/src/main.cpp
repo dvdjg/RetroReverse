@@ -916,10 +916,15 @@ int main(int argc, char** argv) {
 				ok.append(n2x);
 				n2a::out_line(ok.view());
 			}
+			// Mapeo de **idiomas de raster** de esta ROM (lo consumirá el codegen/buscará
+			// el backend Amiga para emitir las primitivas HLE; ver docs/TIMING_AMIGA.md).
+			char rjson[1024];
+			join_path(outdir, stem, ".raster.json", rjson, sizeof rjson);
+			(void)write_raster_json(std::vector<std::string> {std::string(rom)}, rjson);
 			n2x_list.push_back(n2x);
 			// Empaquetado por defecto: `<rom>.<plataforma>.7z` con el `.n2x` (+ sidecar).
 			if (use_7z) {
-				(void)pack_7z(sevenzip, arc, std::vector<std::string> {n2x, json});
+				(void)pack_7z(sevenzip, arc, std::vector<std::string> {n2x, json, rjson});
 			}
 		}
 		// Un mismo `.7z` puede contener varias ROMs (`--bundle <nombre>`).

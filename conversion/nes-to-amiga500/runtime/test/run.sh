@@ -96,4 +96,12 @@ fi
 echo "[extra] validacion diferencial con mesen"
 bash "$ROOT/test/diff_mesen.sh" || echo "diff_mesen: divergencia por encima del umbral (informativo)."
 
+echo "[extra] matriz de compatibilidad (subset, puerta de regresion)"
+if [ -f "$REPO/external/libretro-mesen/mesen_libretro.so" ] && \
+   [ -x "$REPO/tools/orchestrator/vertical_slice" ]; then
+	bash "$ROOT/test/port_matrix.sh" --subset --gate
+else
+	echo "AVISO: sin mesen/orquestador; se omite la puerta de matriz."
+fi
+
 echo "RUNTIME OK"

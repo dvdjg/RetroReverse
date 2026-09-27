@@ -224,6 +224,7 @@ struct Apu {
 	eng::u32 frame_div = 0;        ///< Divisor del frame counter.
 	eng::u8 frame_step = 0;        ///< Paso del frame counter (4 o 5).
 	bool frame_irq = false;        ///< IRQ pendiente del frame counter.
+	bool frame_irq_inhibit = false; ///< IRQ del frame counter inhibida ($4017 bit 6).
 
 	/// Escribe un registro del APU (`$4000-$4017`).
 	/// \param addr  Dirección dentro de `$4000-$4017`.
@@ -285,7 +286,8 @@ struct Apu {
 		} else if (addr == 0x4017u) {
 			frame_step = 0u;
 			frame_div = 0u;
-			if ((value & 0x40u) != 0u) {
+			frame_irq_inhibit = (value & 0x40u) != 0u; // bit 6 = inhibir IRQ
+			if (frame_irq_inhibit) {
 				frame_irq = false;
 			}
 		}
@@ -513,6 +515,11 @@ private:
 		clock_envelope(pulse1);
 		clock_envelope(pulse2);
 		clock_envelope(noise);
+		// IRQ del frame counter: se levanta al cerrar la secuencia (paso 3), salvo
+		// que esté inhibida por `$4017` bit 6.
+		if (frame_step == 3u && !frame_irq_inhibit) {
+			frame_irq = true;
+		}
 		frame_step = static_cast<eng::u8>((frame_step + 1u) & 3u);
 	}
 

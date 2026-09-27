@@ -51,6 +51,10 @@ struct Ppu {
 	/// dirección `v` y el valor de cada escritura a `$2007` (nametable o paleta)
 	/// para trazar cómo el juego carga la VRAM. No afecta al comportamiento.
 	void (*write_trace)(eng::u16 v_addr, eng::u8 value) = nullptr;
+	/// Hook de **diagnóstico**: se llama con `(registro, valor)` en cada escritura a
+	/// `$2000-$2007` (registro = `addr & 7`), para trazar la secuencia de registros
+	/// (p. ej. `$2006`). No afecta al comportamiento.
+	void (*reg_trace)(eng::u8 reg, eng::u8 value) = nullptr;
 
 	// --- Dirección/scroll ---
 	eng::u16 v = 0;          ///< Dirección de VRAM ($2006) o dirección temporal.
@@ -133,6 +137,9 @@ struct Ppu {
 	/// \param value Byte a escribir. `$2005` reparte X e Y; `$2006` fija `v` en dos
 	///              escrituras; `$2007` escribe en nametable o paleta.
 	void write_reg(eng::u16 addr, eng::u8 value) {
+		if (reg_trace != nullptr) {
+			reg_trace(static_cast<eng::u8>(addr & 0x07u), value);
+		}
 		switch (addr & 0x07u) {
 		case 0u:  // PPUCTRL
 			ctrl = value;

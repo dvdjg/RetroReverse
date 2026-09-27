@@ -12,7 +12,16 @@
 
 namespace {
 n2a::LoadedRom g_rom;
-std::FILE* g_wt = nullptr; ///< Volcado de escrituras a `$2007` (addr lo/hi + valor).
+std::FILE* g_wt = nullptr;  ///< Volcado de escrituras a `$2007` (addr lo/hi + valor).
+std::FILE* g_reg = nullptr; ///< Volcado de escrituras a registros PPU (reg + valor).
+
+/// Callback de traza de registros PPU: escribe `(reg, value)`.
+void trace_ppu_reg(eng::u8 reg, eng::u8 value) {
+	if (g_reg != nullptr) {
+		const unsigned char b[2] = {reg, value};
+		std::fwrite(b, 1, 2, g_reg);
+	}
+}
 
 /// Callback de traza de `$2007`: escribe `addr` (lo, hi) y `value`.
 void trace_ppu_write(eng::u16 addr, eng::u8 value) {
@@ -42,10 +51,12 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	g_wt = std::fopen("frame_probe.wt", "wb");
+	g_reg = std::fopen("frame_probe.reg", "wb");
 	sys.load_mapper(g_rom.mapper);
 	sys.reset();
 	sys.set_cycle_exact(cycle_exact);
 	sys.ppu.write_trace = &trace_ppu_write; // tras reset(): este hace `ppu = Ppu{}`
+	sys.ppu.reg_trace = &trace_ppu_reg;
 	std::printf("mapper=%u prg=%u chr=%u mirror_h=%d\n", g_rom.mapper_no, g_rom.prg_size,
 		    g_rom.chr_size, static_cast<int>(g_rom.mapper.mirror_h));
 	for (int f = 0; f < frames; ++f) {
@@ -104,6 +115,9 @@ int main(int argc, char** argv) {
 	}
 	if (g_wt != nullptr) {
 		std::fclose(g_wt);
+	}
+	if (g_reg != nullptr) {
+		std::fclose(g_reg);
 	}
 	std::printf("escrito frame_probe.[ppm|chr|nt|ram|wt]\n");
 	return 0;

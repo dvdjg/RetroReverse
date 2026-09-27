@@ -133,6 +133,8 @@ struct NesSystem {
 			if (ppu.nmi_occurred) {
 				ppu.nmi_occurred = false;
 				trigger_nmi();
+			} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq)) {
+				trigger_irq();
 			}
 			if (out_instrs != nullptr) {
 				*out_instrs = n;
@@ -197,6 +199,8 @@ struct NesSystem {
 		if (ppu.nmi_occurred) {
 			ppu.nmi_occurred = false; // el NMI se toma en frontera de instrucción
 			trigger_nmi();
+		} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq)) {
+			trigger_irq(); // IRQ (frame counter del APU / DMC), si no está enmascarada
 		}
 		return cyc;
 	}
@@ -379,6 +383,22 @@ private:
 		cpu.push(p);
 		cpu.I = true;
 		cpu.PC = mem.read16(0xFFFAu);
+	}
+
+	/// Toma una **IRQ**: apila PC y estado y salta al vector `$FFFE`. La usa el
+	/// frame counter del APU (y el DMC). El flag `I` la enmascara.
+	void trigger_irq() {
+		eng::u8 p = 0x20u;
+		if (cpu.N) p = static_cast<eng::u8>(p | 0x80u);
+		if (cpu.V) p = static_cast<eng::u8>(p | 0x40u);
+		if (cpu.D) p = static_cast<eng::u8>(p | 0x08u);
+		if (cpu.I) p = static_cast<eng::u8>(p | 0x04u);
+		if (cpu.Z) p = static_cast<eng::u8>(p | 0x02u);
+		if (cpu.C) p = static_cast<eng::u8>(p | 0x01u);
+		cpu.push16(cpu.PC);
+		cpu.push(p);
+		cpu.I = true;
+		cpu.PC = mem.read16(0xFFFEu);
 	}
 };
 
