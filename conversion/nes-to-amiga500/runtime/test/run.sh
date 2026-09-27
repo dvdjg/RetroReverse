@@ -96,6 +96,9 @@ fi
 echo "[extra] validacion diferencial con mesen"
 bash "$ROOT/test/diff_mesen.sh" || echo "diff_mesen: divergencia por encima del umbral (informativo)."
 
+echo "[extra] consistencia de mappers: nes_frame == frame_probe (por mapper)"
+bash "$ROOT/test/mapper_consistency_test.sh"
+
 echo "[extra] matriz de compatibilidad (subset, puerta de regresion)"
 if [ -f "$REPO/external/libretro-mesen/mesen_libretro.so" ] && \
    [ -x "$REPO/tools/orchestrator/vertical_slice" ]; then

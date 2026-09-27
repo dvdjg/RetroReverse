@@ -132,8 +132,11 @@ Pendientes reales (2026, tras la matriz corregida):
 - **Nametables por CHR ROM de la VRC6** (`$B003` bit 4): implementadas (mesen `VRC6.h::UpdatePpuBanking`)
   por completitud, aunque **ninguna ROM del catálogo las usa** (Esper Dream 2 tiene `bit4=0`); sin
   regresión en Akumajou (2.7% estructura).
-- **MMC5 (5)**: **Uncharted Waters 45.8%** divergencia notoria (¿PRG-RAM 512 KB / CHR 128 KB / split?).
-  Gemfire, Laser Invasion y Nobunaga's ya están a 0.0–3.1%.
+- **MMC5 (5)**: **Uncharted Waters 45.8%** (60/120 frames igual): a diferencia de Esper/Mouryou,
+  **sí renderiza** (4 colores vs 3 de `mesen`) pero con **luminancia muy distinta** (51.8 vs 2.8) →
+  diferencia real de CHR/paleta en pantalla de título, no pantalla plana. ROM MMC5 con **PRG 512 KB /
+  CHR 128 KB** (la mayor del catálogo MMC5); a investigar (¿numeración de bancos CHR > 255 / PRG-RAM).
+  Gemfire, Laser Invasion, Nobunaga's y CV3 ya están a 0.0–3.1%.
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).
 - **Timing `$2002`**: ic 92.2%, metalstorm 14.2%, gradius 3.3%, smb 3.1% (ver
