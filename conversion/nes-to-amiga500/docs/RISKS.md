@@ -134,6 +134,10 @@ intérprete es la granularidad de bloque (vía 2).
 
 ### Estrategia considerada: *state-injection* (Test A, 2026) — **EN DIAGNÓSTICO**
 
+> Contexto de timing y alternativas descartadas: [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md) (Fases 0–6,
+> fase/residuo, IRQ MMC3, y por qué ningún ajuste de fase/flag/dot cierra el offset sin regresar un
+> juego ya a 0.0%).
+
 **Contexto / directiva del usuario (2026).** El objetivo es **máxima compatibilidad replicable en un
 A500 real (68000 @7 MHz)**. No se debe perseguir un modelo *cycle-lockstep* que el Amiga **no pueda
 ejecutar**. Por tanto, para los 4 juegos con el límite de timing de arriba, se acepta como técnica

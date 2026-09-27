@@ -14,6 +14,11 @@
 >   no un bug nuestro claro. (Coincide con la observación de que nuestro `(241,0)` compensa.)
 > - El andamiaje experimental (`kFrameSnap`) se **retiró**; Fase 2 es el comportamiento por defecto.
 
+> **Alternativa en diagnóstico (2026)**: la **inyección de estado** (*state-injection*) como entrega
+> replicable en A500 — capturar el estado de `mesen` y embeberlo como datos, en vez de cerrar el
+> lockstep. Hipótesis, herramienta y criterio de decisión en
+> [`RISKS.md`](RISKS.md#estrategia-considerada-state-injection-test-a-2026--en-diagnóstico).
+
 **Objetivo.** Que los **efectos observables** de la PPU (flag de VBlank en `$2002`, NMI, sprite-0,
 overflow, IRQ de mapper A12/por-ciclo, fin de frame) ocurran en el **ciclo exacto** respecto a la
 CPU, con **fase continua** entre frames, para que el oráculo coincida con mesen también en los

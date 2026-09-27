@@ -13,6 +13,10 @@ parcial). Se empieza por los mappers más simples.
 | 3 | CNROM | CHR bank switch | baja |
 | 1 | MMC1 | muchos mid/late | media |
 | 4 | MMC3 | SMB3, etc. (+ IRQ scanline) | alta |
+| 5 | MMC5 | Castlevania III (USA), Gemfire (+ ExRAM/split/IRQ) | muy alta |
+| 7 | AxROM | Battletoads | media |
+| 24/26 | VRC6 | Akumajou Densetsu, Esper Dream 2 | alta |
+| 69 | FME-7 | Mr. Gimmick, Batman RotJ | alta |
 
 ## Interfaz
 
@@ -102,10 +106,27 @@ análisis dinámico (trazas en host) para descubrir qué bancos se ejecutan.
 ## Estado
 
 Implementado en [`../runtime/include/nes_mapper.hpp`](../runtime/include/nes_mapper.hpp): cartucho
-con bancos PRG/CHR para **NROM (0), UxROM (2), CNROM (3)** y **MMC1 (1)** parcial, más el parseo de
-iNES/**NES 2.0** en [`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp). El
-transpilador sigue siendo **NROM-only**; el *banking* con **tablas de despacho por banco** es lo
-pendiente.
+con bancos PRG/CHR, más el parseo de iNES/**NES 2.0** en
+[`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp).
+
+| Mapper | Nombre | Estado |
+|---:|---|---|
+| 0 | NROM | **completo** |
+| 1 | MMC1 | **completo** (PRG modes 2/3, CHR 4K/8K, WRAM + disable, 1-pantalla/V/H) |
+| 2 | UxROM | completo |
+| 3 | CNROM | completo |
+| 4 | MMC3 | **PRG/CHR por bancos, mirroring, IRQ por flanco de A12 (modelo por línea)** |
+| 5 | MMC5 | **subconjunto**: PRG (4 modos), CHR (4 modos), WRAM `$6000-$7FFF`, ExRAM `$5C00-$5FFF`, fill-mode, nametables por ExRAM, split vertical (`$5200-$5202`), IRQ por scanline, multiplicador. **Pendiente: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`)** |
+| 7 | AxROM | **implementado** (PRG de 32 KB conmutado, mirroring 1-pantalla) |
+| 24/26 | VRC6 | **implementado** (PRG/CHR por bancos, mirroring `$B003`, IRQ por ciclos de CPU; variante VRC6b) |
+| 69 | FME-7 | **implementado** (PRG/CHR por bancos, IRQ por ciclo, mirroring) |
+| — | CHR-RAM | soportado (patrones por `$2007`) |
+
+La matriz por juego (71 ROMs, 67 a **0.0%** estructural vs `mesen`) está en
+[`COMPATIBILITY.md`](COMPATIBILITY.md). Ninguna ROM **MMC5** llega a 0.0% todavía (4.6%–9.2%): el
+código implementa los registros, pero el **resultado diverge** — investigación pendiente (ver
+`COMPATIBILITY.md` §Lectura). El transpilador sigue siendo **NROM-only**; el *banking* con
+**tablas de despacho por banco** es lo pendiente (F2/F9).
 
 ## Cierre (F9)
 

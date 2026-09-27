@@ -77,7 +77,8 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
 
 ## Lectura
 
-- **23 juegos a 0.0%**: geometría/tiles idénticos a `mesen`; lo que queda es solo paleta.
+- **25 juegos a 0.0%** (tabla principal) **+ Kirby's Adventure** (mappers ampliados): geometría/tiles
+  idénticos a `mesen`; lo que queda es solo paleta.
 - **9 juegos ≤3.6%** (contra, crystalis, gradius, megaman4, ninjagaiden, smb, smb3, xevious, zelda):
   residual menor de timing (misma raíz que abajo).
 - **4 juegos 13–92%** (ic 92.2%, galaga 36.7%, metalstorm 14.2%, pacman 13.2%): **un único límite
@@ -96,7 +97,7 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
 | 2 | UxROM | completo |
 | 3 | CNROM | completo |
 | 4 | MMC3 | PRG/CHR por bancos, mirroring, IRQ por flanco de A12 (modelo por línea) |
-| 5 | MMC5 | **subconjunto**: PRG (4 modos), CHR (4 modos), WRAM `$6000-$7FFF`, ExRAM `$5C00-$5FFF`, fill-mode. Pendiente: nametables por ExRAM/CHR ROM, split vertical, IRQ, multiplicador, audio |
+| 5 | MMC5 | **subconjunto**: PRG (4 modos), CHR (4 modos), WRAM `$6000-$7FFF`, ExRAM `$5C00-$5FFF`, fill-mode, nametables por ExRAM, split vertical, IRQ por scanline, multiplicador. **Pendiente: audio de expansión y banco CHR del split** |
 | 24/26 | VRC6 | PRG/CHR por bancos, mirroring (`$B003`), IRQ por ciclos de CPU; variante VRC6b (26) |
 | — | CHR-RAM | soportado (patrones por `$2007`) |
 
@@ -104,8 +105,10 @@ Juegos nuevos que arrancan y renderizan (estructura vs mesen, 60 frames):
 **Akumajou Densetsu (VRC6/24) 9.5%**, **Esper Dream 2 (VRC6/26) 4.6%**,
 **Castlevania III (MMC5/5) 9.2%**.
 
-Pendientes (para más ROMs "difíciles"; ver [`HARD_GAMES.md`](HARD_GAMES.md)): AxROM (7),
-FME-7 (69); y en MMC5, los modos de nametable por ExRAM/CHR y el split vertical.
+Pendientes reales: en **MMC5** solo el **audio de expansión** (`$5000-$5015`) y el **banco CHR del
+split** (`$5202`); y en el **transpilador**, el *banking* (sigue **NROM-only**). AxROM (7) y FME-7
+(69) ya están implementados ([`MAPPERS.md`](MAPPERS.md)). Las ROMs MMC5 no llegan a 0.0%: el código
+soporta los registros, pero el **resultado diverge** — causa por investigar (ver §Lectura).
 
 ## Notas de método
 
