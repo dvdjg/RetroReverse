@@ -70,10 +70,16 @@ Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-
 | 2 | UxROM | completo |
 | 3 | CNROM | completo |
 | 4 | MMC3 | PRG/CHR por bancos, mirroring, IRQ por flanco de A12 (modelo por línea) |
+| 5 | MMC5 | **subconjunto**: PRG (4 modos), CHR (4 modos), WRAM `$6000-$7FFF`, ExRAM `$5C00-$5FFF`, fill-mode. Pendiente: nametables por ExRAM/CHR ROM, split vertical, IRQ, multiplicador, audio |
+| 24/26 | VRC6 | PRG/CHR por bancos, mirroring (`$B003`), IRQ por ciclos de CPU; variante VRC6b (26) |
 | — | CHR-RAM | soportado (patrones por `$2007`) |
 
-Pendientes (para las ROMs "difíciles"; ver [`HARD_GAMES.md`](HARD_GAMES.md)): **VRC6 (24/26)**,
-**MMC5 (5)**, AxROM (7), FME-7 (69).
+Juegos nuevos que arrancan y renderizan (estructura vs mesen, 60 frames):
+**Akumajou Densetsu (VRC6/24) 9.5%**, **Esper Dream 2 (VRC6/26) 4.6%**,
+**Castlevania III (MMC5/5) 9.2%**.
+
+Pendientes (para más ROMs "difíciles"; ver [`HARD_GAMES.md`](HARD_GAMES.md)): AxROM (7),
+FME-7 (69); y en MMC5, los modos de nametable por ExRAM/CHR y el split vertical.
 
 ## Notas de método
 
