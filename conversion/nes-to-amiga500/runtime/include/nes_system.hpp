@@ -60,6 +60,7 @@ struct NesSystem {
 		mem.io_user = this;
 		mem.io_read = &NesSystem::io_read_cb;
 		mem.io_write = &NesSystem::io_write_cb;
+		apu.set_reader(&NesSystem::apu_read_cb, this); // DMC: leer samples de la PRG
 		hle.ppu = &ppu;
 	}
 
@@ -197,6 +198,12 @@ struct NesSystem {
 	}
 
 private:
+	/// Lector de memoria del **DMC**: lee el byte de `a` (PRG) para el canal DMC.
+	/// Sin esto el DMC leía silencio y faltaban los samples.
+	static eng::u8 apu_read_cb(void* u, eng::u16 a) {
+		return static_cast<NesSystem*>(u)->mem.read(a);
+	}
+
 	static eng::u8 io_read_cb(void* u, eng::u16 a) {
 		return static_cast<NesSystem*>(u)->io_read(a);
 	}

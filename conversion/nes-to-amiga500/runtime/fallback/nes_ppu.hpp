@@ -185,7 +185,10 @@ struct Ppu {
 			const int lx = line_scroll ? line_sx[py] : scroll_x;
 			const int fy = py + ly;                 ///< 0..510 (9 bits, cruza nametable)
 			const int fine_y = fy & 7;
-			const int cy = (fy >> 3) & 0x3Fu;       ///< Fila de tile 0..63
+			const int ty_abs = fy >> 3;             ///< Fila de tile absoluta (0..~62)
+			// La nametable es de **30 filas** (240 px), no 32: el scroll vertical
+			// envuelve ahí y cambia de nametable (a diferencia del horizontal, 32).
+			const int cy = ty_abs % 30;             ///< Fila dentro de la nametable (0..29)
 			for (int px = 0; px < kPpuWidth; ++px) {
 				if (!bg_on || (left_clip && px < 8)) {
 					const int idx = py * kPpuWidth + px;
@@ -198,8 +201,8 @@ struct Ppu {
 				const int cx = (fx >> 3) & 0x3Fu;
 
 				// Nametable efectiva = base XOR bit de cruce, y banco según mirroring.
-				const int nt_h = (base_h + (cx >> 5)) & 1;
-				const int nt_v = (base_v + (cy >> 5)) & 1;
+				const int nt_h = (base_h + (cx >> 5)) & 1;   // horizontal: 32 columnas
+				const int nt_v = (base_v + (ty_abs / 30)) & 1; // vertical: 30 filas
 				const eng::u16 nt_base = static_cast<eng::u16>(nt_bank(nt_h, nt_v) * 0x400);
 				const eng::u16 nt_off = static_cast<eng::u16>(nt_base + (cy & 31) * 32 + (cx & 31));
 				const eng::u8 tile = vram[nt_off & 0x7FFu];
