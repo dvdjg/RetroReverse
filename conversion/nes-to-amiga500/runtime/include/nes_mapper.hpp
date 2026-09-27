@@ -86,6 +86,21 @@ struct Mapper {
 	bool vrc6_irq_cycle_mode = false;///< Modo por ciclo ($F001 bit2) vs por scanline.
 	bool vrc6_irq_pending = false;   ///< IRQ pedida.
 
+	// --- MMC5 (mapper 5) ---
+	// Subconjunto: PRG (modos 0-3), CHR (modos 0-3), PRG-RAM $6000-$7FFF, ExRAM
+	// $5C00-$5FFF, fill-mode. PENDIENTE: nametables por ExRAM ($5104/$5105), split
+	// vertical ($5200-$5205), IRQ por detección de scanline, multiplicador, audio.
+	eng::u8 mmc5_prg_mode = 3;          ///< $5100: modo PRG (0-3).
+	eng::u8 mmc5_prg_banks[5] = {0};    ///< $5113-$5117: bancos PRG/PRG-RAM.
+	eng::u8 mmc5_chr_mode = 0;          ///< $5101: modo CHR (0-3).
+	eng::u8 mmc5_chr_banks[12] = {0};   ///< $5120-$512B: bancos CHR (bajo).
+	eng::u8 mmc5_chr_upper = 0;         ///< $5130: bits altos de los bancos CHR.
+	eng::u8 mmc5_nametable = 0;         ///< $5105: mapa de nametables (pendiente).
+	eng::u8 mmc5_exram_mode = 0;        ///< $5104: modo de ExRAM.
+	eng::u8 mmc5_fill_tile = 0;         ///< $5106: tile de relleno.
+	eng::u8 mmc5_fill_color = 0;        ///< $5107: color de relleno.
+	eng::u8 mmc5_exram[0x400] = {0};    ///< ExRAM ($5C00-$5FFF, 1 KB).
+
 	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
 	[[nodiscard]] bool irq_line() const noexcept {
 		if (kind == MapperKind::Mmc3) {
@@ -185,6 +200,44 @@ struct Mapper {
 			}
 			return prg_at(bank8 * 0x2000u + (off & 0x1FFFu));
 		}
+		case MapperKind::Mmc5: {
+			// 8 KB por ventana, modo de $5100 (mesen MMC5.h `UpdatePrgBanks`). Los bancos
+			// de $5113-$5117 son números de página de 8 KB (`prg_banks[4]` = $5117).
+			const eng::u32 n8 = prg_size / 0x2000u;
+			const eng::u8 p1 = mmc5_prg_banks[1];
+			const eng::u8 p2 = mmc5_prg_banks[2];
+			const eng::u8 p3 = mmc5_prg_banks[3];
+			const eng::u8 p4 = mmc5_prg_banks[4];
+			eng::u32 bank8;
+			if (mmc5_prg_mode == 0u) {
+				bank8 = static_cast<eng::u32>(p4 & 0x7Cu) + ((addr >> 13u) & 3u);
+			} else if (mmc5_prg_mode == 1u) {
+				bank8 = (addr < 0xC000u) ? static_cast<eng::u32>(p2 & 0xFEu) + ((addr >> 13u) & 1u)
+							 : static_cast<eng::u32>(p4 & 0x7Eu) + ((addr >> 13u) & 1u);
+			} else if (mmc5_prg_mode == 2u) {
+				if (addr < 0xC000u) {
+					bank8 = static_cast<eng::u32>(p2 & 0xFEu) + ((addr >> 13u) & 1u);
+				} else if (addr < 0xE000u) {
+					bank8 = p3;
+				} else {
+					bank8 = p4 & 0x7Fu;
+				}
+			} else { // modo 3
+				if (addr < 0xA000u) {
+					bank8 = p1;
+				} else if (addr < 0xC000u) {
+					bank8 = p2;
+				} else if (addr < 0xE000u) {
+					bank8 = p3;
+				} else {
+					bank8 = p4 & 0x7Fu;
+				}
+			}
+			if (n8 != 0u) {
+				bank8 %= n8;
+			}
+			return prg_at(bank8 * 0x2000u + (off & 0x1FFFu));
+		}
 		case MapperKind::Vrc6: {
 			// $8000-$BFFF = 16 KB conmutable ($8000-$8003); $C000 = 8 KB conmutable
 			// ($C000-$C003); $E000 = último 8 KB fijo (mesen VRC6.h).
@@ -234,6 +287,9 @@ struct Mapper {
 		case MapperKind::Vrc6:
 			vrc6_write(addr, value);
 			break;
+		case MapperKind::Mmc5:
+			mmc5_write(addr, value);
+			break;
 		}
 	}
 
@@ -261,6 +317,9 @@ struct Mapper {
 			} else if (kind == MapperKind::Vrc6) {
 				// 8 bancos de 1 KB con el modo de $B003 (mesen VRC6.h `UpdatePpuBanking`).
 				off = static_cast<eng::u32>(vrc6_chr_page(addr >> 10u)) * 0x400u +
+				      (addr & 0x3FFu);
+			} else if (kind == MapperKind::Mmc5) {
+				off = static_cast<eng::u32>(mmc5_chr_page(addr >> 10u)) * 0x400u +
 				      (addr & 0x3FFu);
 			}
 			return chr[off % chr_size];
@@ -551,6 +610,60 @@ private:
 				}
 				vrc6_irq_prescaler = static_cast<eng::s16>(vrc6_irq_prescaler + 341);
 			}
+		}
+	}
+
+	/// Banco CHR de 1 KB (`page` 0..7) de la MMC5 según el modo de `$5101` (mesen
+	/// `MMC5.h::UpdateChrBanks`, rama `chrA` = bancos normales del fondo). Los bancos
+	/// `$5120-$512B` son números de página en unidades del modo; `$5130` aporta los bits
+	/// altos.
+	/// \param page Índice 0..7 (1 KB).
+	/// \return Número de banco CHR de 1 KB.
+	[[nodiscard]] eng::u16 mmc5_chr_page(eng::u32 page) const noexcept {
+		const eng::u32 upper = static_cast<eng::u32>(mmc5_chr_upper) << 8u;
+		const auto bank = [&](eng::u32 i) -> eng::u32 {
+			return static_cast<eng::u32>(mmc5_chr_banks[i & 7u]) | upper;
+		};
+		switch (mmc5_chr_mode & 3u) {
+		case 0u:
+			return static_cast<eng::u16>((bank(7u) << 3u) + page);
+		case 1u:
+			return static_cast<eng::u16>(((page < 4u ? bank(3u) : bank(7u)) << 2u) +
+						     (page & 3u));
+		case 2u:
+			return static_cast<eng::u16>((bank(1u + ((page >> 1u) & 3u) * 2u) << 1u) +
+						     (page & 1u));
+		default:
+			return static_cast<eng::u16>(bank(page));
+		}
+	}
+
+	/// Escrituras de registro de la MMC5. Subconjunto: PRG/CHR, ExRAM, fill-mode.
+	/// PENDIENTE (ver `MMC5` arriba): nametables por ExRAM ($5104/$5105), split vertical
+	/// ($5200-$5205), IRQ, multiplicador y audio.
+	/// \param addr Dirección. \param value Byte.
+	void mmc5_write(eng::u16 addr, eng::u8 value) {
+		if (addr >= 0x5113u && addr <= 0x5117u) {
+			mmc5_prg_banks[addr - 0x5113u] = value;
+			return;
+		}
+		if (addr >= 0x5120u && addr <= 0x512Bu) {
+			mmc5_chr_banks[addr - 0x5120u] = value;
+			return;
+		}
+		if (addr >= 0x5C00u && addr <= 0x5FFFu) {
+			mmc5_exram[(addr - 0x5C00u) & 0x3FFu] = value;
+			return;
+		}
+		switch (addr) {
+		case 0x5100u: mmc5_prg_mode = static_cast<eng::u8>(value & 0x03u); break;
+		case 0x5101u: mmc5_chr_mode = static_cast<eng::u8>(value & 0x03u); break;
+		case 0x5104u: mmc5_exram_mode = static_cast<eng::u8>(value & 0x03u); break;
+		case 0x5105u: mmc5_nametable = value; break; // pendiente: mapeo real de nametables
+		case 0x5106u: mmc5_fill_tile = value; break;
+		case 0x5107u: mmc5_fill_color = static_cast<eng::u8>(value & 0x03u); break;
+		case 0x5130u: mmc5_chr_upper = static_cast<eng::u8>(value & 0x03u); break;
+		default: break; // $5000-$5015 (audio), $5102/$5103 (protect), $5200+ (split)
 		}
 	}
 };

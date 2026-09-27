@@ -93,6 +93,13 @@ struct NesSystem {
 		ppu.chr_ctx = &mapper;
 		ppu.mirror_h = m.mirror_h;
 		ppu.nt_single = m.mirror_single;
+		if (mapper.kind == MapperKind::Mmc5) {
+			// Estado de power-on de la MMC5 (mesen `MMC5.h::InitMapper`): PRG modo 3 y
+			// $5117 = $FF (último banco de 8 KB swapped en $E000-$FFFF, donde vive el
+			// vector de reset). Sin esto el reset lee un banco equivocado.
+			mapper.mmc5_prg_mode = 3;
+			mapper.mmc5_prg_banks[4] = 0xFF;
+		}
 		mem.prg = m.prg;
 		mem.prg_size = m.prg_size;
 	}
@@ -344,9 +351,13 @@ private:
 			if (!strobe) shift2 = static_cast<eng::u8>(shift2 >> 1u);
 			return static_cast<eng::u8>(b | 0x40u);
 		}
+		if (a >= 0x5C00u && a < 0x6000u && mapper.kind == MapperKind::Mmc5) {
+			return mapper.mmc5_exram[(a - 0x5C00u) & 0x3FFu]; // ExRAM de la MMC5
+		}
 		if (a >= 0x6000u && a < 0x8000u &&
-		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1)) {
-			// PRG-RAM/WRAM en $6000-$7FFF (MMC3 y MMC1). La MMC1 puede deshabilitarla
+		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1 ||
+		     mapper.kind == MapperKind::Mmc5)) {
+			// PRG-RAM/WRAM en $6000-$7FFF (MMC3/MMC1/MMC5). La MMC1 puede deshabilitarla
 			// ($E000 bit 4); ver `mapper.wram_enabled`.
 			if (mapper.kind == MapperKind::Mmc1 && !mapper.mmc1_wram_enabled) {
 				return 0u;
@@ -386,7 +397,8 @@ private:
 			return;
 		}
 		if (a >= 0x6000u && a < 0x8000u &&
-		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1)) {
+		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1 ||
+		     mapper.kind == MapperKind::Mmc5)) {
 			if (mapper.kind != MapperKind::Mmc1 || mapper.mmc1_wram_enabled) {
 				mem.prg_ram[a - 0x6000u] = v;
 			}
