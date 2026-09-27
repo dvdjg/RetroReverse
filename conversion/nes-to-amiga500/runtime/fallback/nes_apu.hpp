@@ -2,13 +2,14 @@
 
 /// \file nes_apu.hpp
 /// APU software (2A03) del camino de **fallback** (fase F7): modelo de registros
-/// `$4000-$4017`, frame counter y síntesis de los canales pulse, triangle y noise
-/// a un flujo de muestras mono.
+/// `$4000-$4017`, frame counter y síntesis de los cinco canales (pulse ×2,
+/// triangle, noise y DMC) a un flujo de muestras mono, con **mezcla no lineal**
+/// (tablas NESdev) y **envelope** de los dos pulse y del noise, además del
+/// **sweep** de los pulse.
 ///
 /// Es una implementación **simplificada y documentada** pensada para validación y
-/// comparación (contra `mesen`); no busca precisión ciclo a ciclo. El canal DMC
-/// queda para una iteración posterior. La salida se mezcla de forma lineal (la
-/// mezcla no lineal exacta es una optimización).
+/// comparación (contra `mesen`); no busca precisión ciclo a ciclo (el DMC lee sus
+/// muestras de la PRG mediante `set_reader`).
 ///
 /// \note En el destino Amiga la generación se hará por bloques y en punto fijo;
 /// aquí el acumulador de ciclos es entero para no depender de la FPU.
@@ -87,10 +88,43 @@ struct Apu {
 		bool const_vol = false;   ///< Volumen constante (vs. envelope).
 		bool env_start = false;   ///< Reinicio del envelope.
 
+		// --- Sweep ($4001/$4005) ---
+		bool sweep_enable = false; ///< E del registro de sweep.
+		bool sweep_negate = false; ///< N: decrementa el periodo (vs. incrementa).
+		eng::u8 sweep_period = 0;  ///< P: divisor del sweep (0..7).
+		eng::u8 sweep_shift = 0;   ///< S: desplazamiento (0..7).
+		eng::u8 sweep_div = 0;     ///< Divisor actual del sweep.
+		bool sweep_reload = false; ///< Recarga el divisor en el próximo reloj.
+		/// Diferencia documentada entre canales: pulse1 resta `+1` al negar, pulse2 no.
+		bool quirk_pulse1 = false;
+
+		/// Periodo **destino** del sweep (0..0x7FF, sin clamp) según N/`sweep_shift`.
+		/// \return El periodo tras aplicar el desplazamiento (puede salir de rango).
+		[[nodiscard]] eng::u16 sweep_target() const {
+			const int delta = static_cast<int>(period) >> sweep_shift;
+			int t = static_cast<int>(period);
+			if (sweep_negate) {
+				t -= delta + (quirk_pulse1 ? 1 : 0);
+			} else {
+				t += delta;
+			}
+			if (t < 0) {
+				t = 0;
+			}
+			return static_cast<eng::u16>(t);
+		}
+
+		/// ¿El sweep silencia el canal? Si el periodo es < 8 o el destino > 0x7FF,
+		/// el canal queda mudo (independientemente de E).
+		[[nodiscard]] bool sweep_muted() const {
+			return period < 8u || sweep_target() > 0x7FFu;
+		}
+
 		/// Salida instantánea del canal (0..15). Usa el **envelope** (`env_decay`) si
 		/// no es volumen constante (`const_vol`), o `env_period` como volumen fijo.
+		/// Silencia si el sweep está fuera de rango.
 		[[nodiscard]] eng::u8 output() const {
-			if (!enabled || length == 0u) {
+			if (!enabled || length == 0u || sweep_muted()) {
 				return 0u;
 			}
 			const eng::u8 vol = const_vol ? env_period : env_decay;
@@ -124,19 +158,25 @@ struct Apu {
 		eng::u16 period = 0;
 		eng::u16 timer = 0;
 		eng::u16 lfsr = 1;
-		eng::u8 volume = 0;
+		eng::u8 volume = 0;   ///< Volumen constante ($400C) o periodo del envelope.
 		eng::u8 length = 0;
 		bool mode = false;
 		bool enabled = false;
 		bool length_halt = false;
 		bool const_vol = false;
 
-		/// Salida (0..15) según el bit bajo del LFSR.
+		// --- Envelope ($400C) ---
+		eng::u8 env_period = 0; ///< Periodo del envelope.
+		eng::u8 env_div = 0;    ///< Divisor del envelope.
+		eng::u8 env_decay = 0;  ///< Nivel de decaimiento (0..15).
+		bool env_start = false; ///< Reinicio del envelope.
+
+		/// Salida (0..15) según el bit bajo del LFSR y el volumen/envelope.
 		[[nodiscard]] eng::u8 output() const {
 			if (!enabled || length == 0u || (lfsr & 1u) != 0u) {
 				return 0u;
 			}
-			return volume;
+			return const_vol ? volume : env_decay;
 		}
 	};
 
@@ -190,9 +230,9 @@ struct Apu {
 	/// \param value Byte a escribir.
 	void write_reg(eng::u16 addr, eng::u8 value) {
 		if (addr >= 0x4000u && addr <= 0x4003u) {
-			write_pulse(pulse1, static_cast<eng::u8>(addr - 0x4000u), value);
+			write_pulse(pulse1, static_cast<eng::u8>(addr - 0x4000u), value, true);
 		} else if (addr <= 0x4007u) {
-			write_pulse(pulse2, static_cast<eng::u8>(addr - 0x4004u), value);
+			write_pulse(pulse2, static_cast<eng::u8>(addr - 0x4004u), value, false);
 		} else if (addr == 0x4008u) {
 			triangle.linear_control = (value & 0x80u) != 0u;
 			triangle.length_halt = (value & 0x80u) != 0u;
@@ -207,11 +247,13 @@ struct Apu {
 			noise.length_halt = (value & 0x20u) != 0u;
 			noise.const_vol = (value & 0x10u) != 0u;
 			noise.volume = static_cast<eng::u8>(value & 0x0Fu);
+			noise.env_period = static_cast<eng::u8>(value & 0x0Fu);
 		} else if (addr == 0x400Eu) {
 			noise.mode = (value & 0x80u) != 0u;
 			noise.period = kNoisePeriod[value & 0x0Fu];
 		} else if (addr == 0x400Fu) {
 			noise.length = kLength[value >> 3];
+			noise.env_start = true; // $400F reinicia la envolvente del noise
 		} else if (addr == 0x4010u) {
 			dmc.irq_enable = (value & 0x80u) != 0u;
 			dmc.loop = (value & 0x40u) != 0u;
@@ -282,7 +324,9 @@ private:
 	void* reader_user = nullptr; ///< Cookie pasada a `reader`.
 
 	/// Escribe uno de los 4 registros de un pulse (`n` = 0..3).
-	static void write_pulse(Pulse& p, eng::u8 n, eng::u8 value) {
+	/// \param pulse1 `true` para el canal 1 (sweep resta `+1` al negar).
+	static void write_pulse(Pulse& p, eng::u8 n, eng::u8 value, bool pulse1) {
+		p.quirk_pulse1 = pulse1;
 		switch (n) {
 		case 0u:
 			p.duty = static_cast<eng::u8>((value >> 6) & 0x03u);
@@ -290,6 +334,13 @@ private:
 			p.const_vol = (value & 0x10u) != 0u;
 			p.env_period = static_cast<eng::u8>(value & 0x0Fu);
 			p.volume = p.const_vol ? p.env_period : p.env_decay;
+			break;
+		case 1u:  // $4001/$4005: sweep (EPPP NSSS)
+			p.sweep_enable = (value & 0x80u) != 0u;
+			p.sweep_period = static_cast<eng::u8>((value >> 4) & 0x07u);
+			p.sweep_negate = (value & 0x08u) != 0u;
+			p.sweep_shift = static_cast<eng::u8>(value & 0x07u);
+			p.sweep_reload = true; // el divisor recarga en el próximo reloj
 			break;
 		case 2u:
 			p.period = static_cast<eng::u16>((p.period & 0x700u) | value);
@@ -406,41 +457,62 @@ private:
 		}
 	}
 
-	/// Reloj del **envelope** de un pulse (arrranque y decaimiento). Se llama a
+	/// Reloj del **envelope** de un canal (arranque y decaimiento). Se llama a
 	/// ~240 Hz desde `clock_frame`. Sin esto, los canales en modo envelope quedaban
-	/// mudos o sin decaer.
-	/// \param p Canal pulse a relojear.
-	static void clock_envelope(Pulse& p) {
-		if (p.env_start) {
-			p.env_start = false;
-			p.env_decay = 15u;
-			p.env_div = p.env_period;
+	/// mudos o sin decaer. Vale tanto para `Pulse` como para `Noise` (mismos campos).
+	/// \param ch Canal a relojear.
+	template <typename Ch>
+	static void clock_envelope(Ch& ch) {
+		if (ch.env_start) {
+			ch.env_start = false;
+			ch.env_decay = 15u;
+			ch.env_div = ch.env_period;
 			return;
 		}
-		if (p.env_div == 0u) {
-			p.env_div = p.env_period;
-			if (p.env_decay > 0u) {
-				--p.env_decay;
-			} else if (p.length_halt) {
-				p.env_decay = 15u; // lazo del envelope
+		if (ch.env_div == 0u) {
+			ch.env_div = ch.env_period;
+			if (ch.env_decay > 0u) {
+				--ch.env_decay;
+			} else if (ch.length_halt) {
+				ch.env_decay = 15u; // lazo del envelope
 			}
 		} else {
-			--p.env_div;
+			--ch.env_div;
+		}
+	}
+
+	/// Reloj del **sweep** de un pulse (~120 Hz, medios frames): aplica el
+	/// desplazamiento al periodo (si E y S != 0 y no está mudo) y recarga el
+	/// divisor. Sin esto, los efectos de frecuencia de los pulse (saltos, disparos)
+	/// sonaban mal o planos.
+	/// \param p Canal pulse a relojear.
+	static void clock_sweep(Pulse& p) {
+		if (p.sweep_div == 0u && p.sweep_enable && p.sweep_shift != 0u && !p.sweep_muted()) {
+			p.period = p.sweep_target();
+		}
+		if (p.sweep_div == 0u || p.sweep_reload) {
+			p.sweep_div = p.sweep_period;
+			p.sweep_reload = false;
+		} else {
+			--p.sweep_div;
 		}
 	}
 
 	/// Frame counter (4 pasos): decae los length counters (si no están en halt,
-	/// ~120 Hz) y relojea el **envelope** de los dos pulses (~240 Hz). Aproximado;
-	/// suficiente para la mezcla.
+	/// ~120 Hz), relojea el **envelope** de los dos pulses y del noise (~240 Hz) y
+	/// el **sweep** de los pulses (~120 Hz). Aproximado; suficiente para la mezcla.
 	void clock_frame() {
 		if ((frame_step & 1u) == 0u) {
 			if (!pulse1.length_halt && pulse1.length > 0u) --pulse1.length;
 			if (!pulse2.length_halt && pulse2.length > 0u) --pulse2.length;
 			if (!noise.length_halt && noise.length > 0u) --noise.length;
 			if (!triangle.length_halt && triangle.length > 0u) --triangle.length;
+			clock_sweep(pulse1);
+			clock_sweep(pulse2);
 		}
 		clock_envelope(pulse1);
 		clock_envelope(pulse2);
+		clock_envelope(noise);
 		frame_step = static_cast<eng::u8>((frame_step + 1u) & 3u);
 	}
 

@@ -81,6 +81,40 @@ int main() {
 		++fail;
 	}
 
+	// --- Sweep de pulse -----------------------------------------------------
+	{
+		n2a::Apu sw;
+		sw.sample_rate = 22050u;
+		sw.write_reg(0x4015u, 0x01u);  // habilita pulse1
+		sw.write_reg(0x4000u, 0xBFu);  // duty 2, halt, volumen constante 15
+		sw.write_reg(0x4002u, 0x40u);  // periodo bajo = $40
+		sw.write_reg(0x4003u, 0x00u);  // periodo alto = 0 -> periodo = 64
+		const eng::u16 p0 = sw.pulse1.period;
+		sw.write_reg(0x4001u, 0x81u);  // sweep: E=1, sin negar, shift=1
+		eng::s16 sbuf[2000] = {};
+		sw.generate_samples(eng::Span<eng::s16> {sbuf, 2000u});
+		if (sw.pulse1.period <= p0) {
+			std::printf("  sweep no vario el periodo (%u -> %u)\n", p0, sw.pulse1.period);
+			++fail;
+		}
+	}
+
+	// --- Envolvente del noise ----------------------------------------------
+	{
+		n2a::Apu nz;
+		nz.sample_rate = 22050u;
+		nz.write_reg(0x4015u, 0x08u);  // habilita noise
+		nz.write_reg(0x400Cu, 0x00u);  // const=0 -> modo envelope, periodo 0
+		nz.write_reg(0x400Eu, 0x04u);  // periodo del ruido
+		nz.write_reg(0x400Fu, 0x00u);  // longitud + arranque del envelope
+		eng::s16 nbuf[2000] = {};
+		nz.generate_samples(eng::Span<eng::s16> {nbuf, 2000u});
+		if (nz.noise.env_decay >= 15u) {
+			std::printf("  envelope del noise no decae (env=%u)\n", nz.noise.env_decay);
+			++fail;
+		}
+	}
+
 	if (fail == 0) {
 		std::printf("APU OK (pulse/noise %d/256; DMC+mezcla %d/512 no nulas)\n", nonzero, nonzero2);
 		return 0;

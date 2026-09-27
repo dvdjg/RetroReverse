@@ -28,6 +28,17 @@ limitaciones honestas y cómo se mitigan.
 | **Dos caminos HLE/fallback** divergen | estado emulado único; tests diferenciales HLE vs fallback |
 | **Deriva a "port mirando captura"** | prohibido: la fuente de verdad es la ROM y el estado emulado |
 
+### Evidencia: deriva de timing y el residual de SMB (2026)
+
+El sprite-0 y el NMI se toman en **frontera de instrucción** (no en el dot exacto), así que el
+estado del juego puede divergir del de `mesen` en unos ciclos por frame. Medido en SMB a 60
+frames: la RAM del juego difiere en 16 bytes ya desde el frame 10 (incluye `$0000` y la pila
+`$01F8`), con el acumulador de scroll `$07A7-$07AD` desplazado un bit (la rutina `SEC;ROR $07A7,X`
+de `$8131`). Consecuencia: el logo del título ("SUPER"/recuadro) asienta ~2 filas más bajo que en
+`mesen`, lo que explica el 3.1% de diff **estructural** restante (el resto, "MARIO BROS.", menú,
+suelo, ya coincide). **No es un bug del renderer**: es precisión de timing CPU/PPU (NMI y
+sprite-0) y queda como límite conocido hasta que se aborde el sincronismo dot-exacto.
+
 ## Riesgos de proyecto
 
 | Riesgo | Mitigación |

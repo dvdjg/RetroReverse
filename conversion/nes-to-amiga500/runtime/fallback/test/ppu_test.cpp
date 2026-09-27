@@ -161,6 +161,41 @@ int main() {
 		++fail;
 	}
 
+	// Regresión: `$2007` al espacio de **pattern** (`$0000-$1FFF`) NO debe tocar la
+	// VRAM de nametables (en NROM es CHR-ROM). Antes se aliasaba vía `vram_index` y
+	// corrompía el fondo (SMB llenaba el cielo de glifos "0").
+	g_chr[0x0005] = 0x5Au;                 // dato de prueba en la CHR
+	const eng::u8 nt_saved = ppu.vram[0x005];
+	ppu.write_reg(0x2006u, 0x00u);
+	ppu.write_reg(0x2006u, 0x05u);         // v = $0005 (pattern table)
+	ppu.write_reg(0x2007u, 0x00u);         // intento de escritura: debe ignorarse
+	if (ppu.vram[0x005] != nt_saved) {
+		std::printf("  escritura a pattern ($0005) corrompió el nametable\n");
+		++fail;
+	}
+	ppu.write_reg(0x2006u, 0x00u);
+	ppu.write_reg(0x2006u, 0x05u);
+	if (ppu.read_reg(0x2007u) != 0x5Au) {  // la lectura sí devuelve la CHR
+		std::printf("  lectura de pattern por $2007 no devuelve la CHR\n");
+		++fail;
+	}
+
+	// Regresión: espejo de paleta `$3F10/$14/$18/$1C` -> `$3F00/$04/$08/$0C`
+	// (el backdrop del título de SMB se fija por `$3F10`; sin espejo salía negro).
+	ppu.write_reg(0x2006u, 0x3Fu);
+	ppu.write_reg(0x2006u, 0x10u);         // v = $3F10
+	ppu.write_reg(0x2007u, 0x22u);
+	if (ppu.palette[0x00] != 0x22u) {
+		std::printf("  espejo $3F10->$3F00 no aplicado (palette[0]=%02X)\n", ppu.palette[0x00]);
+		++fail;
+	}
+	ppu.write_reg(0x2006u, 0x3Fu);
+	ppu.write_reg(0x2006u, 0x00u);         // lee $3F00: debe reflejar el espejo
+	if (ppu.read_reg(0x2007u) != 0x22u) {
+		std::printf("  lectura del backdrop tras $3F10 no refleja el espejo\n");
+		++fail;
+	}
+
 	if (fail == 0) {
 		std::printf("PPU OK (fondo + sprites + registros)\n");
 		return 0;

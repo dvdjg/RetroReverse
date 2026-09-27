@@ -86,9 +86,13 @@ int main(int argc, char** argv) {
 		std::fwrite(sys.ppu.vram, 1, sizeof(sys.ppu.vram), fp);
 		std::fclose(fp);
 	}
+	if (FILE* fp = std::fopen("frame_probe.ram", "wb")) {
+		std::fwrite(sys.mem.ram, 1, sizeof(sys.mem.ram), fp);
+		std::fclose(fp);
+	}
 	if (g_wt != nullptr) {
 		std::fclose(g_wt);
 	}
-	std::printf("escrito frame_probe.chr / frame_probe.nt / frame_probe.wt\n");
+	std::printf("escrito frame_probe.[ppm|chr|nt|ram|wt]\n");
 	return 0;
 }
