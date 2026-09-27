@@ -18,7 +18,7 @@ Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-
 | adventureisland3.nes | 4 | 5d038b0a606c8533 | **0.0%** |
 | bf.nes | 0 | 04c3132d97e3672d | **0.0%** |
 | bioniccommando.nes | 1 | c01d2139c3342edd | **0.0%** |
-| blastermaster.nes | 1 | 8a7b8dc3994cd02b | 9.1% |
+| blastermaster.nes | 1 | 8a7b8dc3994cd02b | **0.0%** |
 | castlevania.nes | 2 | d1b769801057969b | **0.0%** |
 | contra.nes | 2 | b43e93ee563b00f1 | 0.9% |
 | crystalis.nes | 4 | 8a8236eec0306f33 | 2.7% |
@@ -29,7 +29,7 @@ Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-
 | galaga.nes | 0 | b9a1f352e7973f29 | 36.7% |
 | gradius.nes | 3 | d469bd3c363f13cb | 3.3% |
 | ic.nes | 0 | a55551d254978383 | 92.2% |
-| jurassicpark.nes | 4 | 0bf9becd786be2e9 | 13.7% |
+| jurassicpark.nes | 4 | 0bf9becd786be2e9 | **0.0%** |
 | kungfu.nes | 0 | c9be5cc53c87d813 | **0.0%** |
 | legendofzeldathe.nes | 1 | ee3583a5ad9b7d25 | 0.4% |
 | mariobros.nes | 0 | bede7c8b020a9bdb | **0.0%** |
@@ -80,10 +80,11 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
 - **23 juegos a 0.0%**: geometría/tiles idénticos a `mesen`; lo que queda es solo paleta.
 - **9 juegos ≤3.6%** (contra, crystalis, gradius, megaman4, ninjagaiden, smb, smb3, xevious, zelda):
   residual menor de timing (misma raíz que abajo).
-- **6 juegos 9–92%** (ic, galaga, metalstorm, jurassicpark, pacman, blastermaster): **un único
-  límite conocido** — la sincronización PPU/NMI **por instrucción** (no por ciclo). No son 6 bugs:
-  los 6 comparten la misma primera divergencia real (el instante del NMI/VBlank). Detalle y
-  **solución** (lockstep PPU/CPU ciclo a ciclo, o muestreo cycle-exacto de `$2002`) en
+- **4 juegos 13–92%** (ic 92.2%, galaga 36.7%, metalstorm 14.2%, pacman 13.2%): **un único límite
+  conocido** — la sincronización PPU/NMI **por instrucción** (frames con deriva). Los 6 juegos eran
+  la misma causa; **jurassicpark y blastermaster ya están a 0.0%** tras la **Fase 1+2** del timing
+  (PPU dot a dot + fase continua; ver [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md)). Lo que queda es la
+  **deriva entre frames** (frontera de frame sub-instrucción). Detalle y solución en
   [`RISKS.md`](RISKS.md).
 
 ## Mappers soportados

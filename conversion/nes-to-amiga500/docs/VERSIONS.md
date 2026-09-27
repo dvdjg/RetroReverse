@@ -10,8 +10,17 @@ port. Regla: si un cambio altera lo **observable** (framebuffer, estado de RAM, 
 | **ABI de plugin** | `N2A_ABI_VERSION` (`runtime/plugin/n2a_plugin.h`) | **1** | Contrato `.n2x`  gestor |
 | **Codegen** | `kCodegenVersion` (`tools/transpiler/src/main.cpp`) | **2** | Invalida la caché de `.n2x` por CRC/gen |
 
-Tags: `oracle-v1` (kOracleVersion 1), `oracle-v1.1` (kOracleVersion 2), **`oracle-v2`**
-(kOracleVersion **3**; ver abajo).
+Tags: `oracle-v1` (kOracleVersion 1), `oracle-v1.1` (kOracleVersion 2), `oracle-v2`
+(kOracleVersion 3), **`oracle-v2.1`** (kOracleVersion **4**; ver abajo).
+
+## Cambios v3 → v4 (etiqueta `oracle-v2.1`) — timing PPU por dot
+
+Fase 1+2 del [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md):
+- **PPU dot a dot** (`clock_ppu` avanza dot a dot, como mesen `PPU::Exec`): sprite-0, flag de
+  VBlank y **reloj A12 de la MMC3** se resuelven en su **dot exacto**.
+- **Fase continua**: el dot del PPU **no se resetea** al inicio de frame (solo con `kFrameSnap`).
+- Efecto observable: **jurassicpark 13.7% → 0.0%** y **blastermaster 9.1% → 0.0%**; el primer bucle
+  de VBlank de metalstorm alinea. Sin regresiones (`gate EXIT=0`).
 
 ## Cambios v2 → v3 (etiqueta `oracle-v2`)
 

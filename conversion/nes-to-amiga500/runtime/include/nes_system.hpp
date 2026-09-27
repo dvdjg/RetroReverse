@@ -25,7 +25,7 @@ namespace n2a {
 /// Versión del **oráculo** (semántica observable de la emulación: framebuffer, RAM,
 /// timing). Queda **congelada** antes de empezar el backend Amiga; cualquier cambio
 /// que altere lo observable debe incrementarla (ver `docs/VERSIONS.md`).
-inline constexpr int kOracleVersion = 3;
+inline constexpr int kOracleVersion = 4;
 
 /// Consola NES mínima: memoria con hooks hacia PPU/APU/mapper, CPU intérprete y
 /// control de NMI por VBlank.
