@@ -44,6 +44,21 @@ C018: BMI $C015     ; espera a que bit7 (VBlank) = 1
 **timing del flag VBlank** relativo a los ciclos de CPU. El arreglo es afinar la posición exacta
 (scanline/dot) y el consumo de ciclos para que coincida con la referencia.
 
+## Correcciones aplicadas (medidas con `trace_diff`)
+
+| Cambio | Fundamento (fceumm) | Divergencia |
+|---|---|---|
+| (estado inicial) | — | idx 7830 |
+| **Warm-up** `warmup_frames=2` | `ppudead=2` (2 frames sin VBlank) | idx 17055 |
+| **Frontera de frame** en scanline 240 (pre-VBlank) | `FCEUPPU_Loop` pone el flag al inicio | idx **69405** |
+
+Es decir, pasamos de coincidir ~0.5 frame a **~8 frames** con la referencia. **Los ciclos de CPU
+coinciden EXACTOS** (verificado en la traza): el problema era de **fase del PPU**, no de ciclos.
+
+**Desfase residual**: en idx 69405 fceumm toma el **NMI** (`PC=C058`) ~1–6 ciclos antes que nosotros
+(el NMI en fceumm se dispara en `FCEUPPU_Loop` tras `X6502_Run(12)`). Ajustar el instante del NMI
+(dot-accurate) es el paso que falta para cerrar el frame completo.
+
 ## Estado
 
 - La herramienta funciona y localiza la divergencia en segundos.
