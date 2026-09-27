@@ -84,6 +84,10 @@ struct Ppu {
 	// --- Tiempo ---
 	eng::u16 scanline = 0;   ///< Línea actual (0..261 en NTSC).
 	eng::u16 dot = 0;        ///< Dot dentro de la línea (0..340; 341 dots/línea).
+	/// **Warm-up del PPU**: durante los primeros frames tras el reset el PPU no
+	/// levanta el flag de VBlank (como fceumm, `ppudead=2`). Necesario para que el
+	/// bucle de espera de VBlank del juego coincida con la referencia.
+	bool vblank_suppress = false;
 	bool nmi_occurred = false; ///< Se puso el flag de VBlank (NMI si `ctrl & 0x80`).
 	/// Scanline en la que ocurre el **sprite-0 hit** (calculada al renderizar); el
 	/// flag de `$2002` se pone al llegar a esa línea (así el CPU lo ve ponerse y
@@ -214,8 +218,10 @@ struct Ppu {
 	void tick_scanline() {
 		++scanline;
 		if (scanline == 241u) {
-			status = static_cast<eng::u8>(status | 0x80u);
-			nmi_occurred = (ctrl & 0x80u) != 0u;
+			if (!vblank_suppress) {
+				status = static_cast<eng::u8>(status | 0x80u);
+				nmi_occurred = (ctrl & 0x80u) != 0u;
+			}
 		} else if (scanline == 261u) {
 			// Pre-render: se borran VBlank, sprite-0 y overflow (el PPU real limpia
 			// sprite-0/overflow aquí). Sin esto, el bit de sprite-0 quedaba pegado
