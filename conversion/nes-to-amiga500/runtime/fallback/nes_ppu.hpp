@@ -132,6 +132,16 @@ struct Ppu {
 	eng::u8 read_reg(eng::u16 addr) {
 		switch (addr & 0x07u) {
 		case 2u: {  // PPUSTATUS
+			// LÍMITE CONOCIDO (ver docs/RISKS.md, "sincronización PPU/NMI por instrucción"):
+			// el CPU llama a este `read_reg` a granularidad de **acceso de bus**, con la PPU
+			// avanzada ya al dot del ciclo siguiente (`Interpreter::rd` hace `mem.tick()`
+			// antes de `mem.read()`). Un emulador cycle-accurate (mesen) muestrea el bit de
+			// VBlank en el ciclo **exacto** del acceso; esa diferencia de ~1 ciclo hace que
+			// los bucles `LDA $2002` de espera de VBlank de 6 juegos (ic/galaga/pacman/
+			// metalstorm/jurassicpark/blastermaster) salgan una iteración antes o después.
+			// SOLUCIÓN: subdividir la instrucción aquí — calcular el ciclo exacto del acceso
+			// de datos y evaluar el flag con la PPU avanzada a **ese** dot (no al siguiente);
+			// o sincronizar PPU/CPU ciclo a ciclo. Mover la ventana del flag NO basta.
 			eng::u8 r = static_cast<eng::u8>(status & 0xE0u);
 #ifdef N2A_PPU_READ_PROBE
 			{

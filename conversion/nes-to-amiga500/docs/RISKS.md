@@ -28,39 +28,72 @@ limitaciones honestas y cómo se mitigan.
 | **Dos caminos HLE/fallback** divergen | estado emulado único; tests diferenciales HLE vs fallback |
 | **Deriva a "port mirando captura"** | prohibido: la fuente de verdad es la ROM y el estado emulado |
 
-### Evidencia: deriva de timing y el residual de SMB (2026)
+### Límite real: sincronización PPU/NMI **por instrucción** (no por ciclo) (2026)
 
-**Método.** El orquestador (`vertical_slice --dump-ram`) vuelca la RAM de `mesen`; `frame_probe`
-vuelca la nuestra. Comparando frame a frame se localiza la divergencia con precisión.
+**Una sola raíz para los 6 juegos "malos".** Tras arreglar los mappers (MMC1 completo, MMC3) y el
+**CHR conmutado en el render**, la matriz queda casi toda a **0%** (32/38). Los 6 restantes —
+`ic` 92.2%, `galaga` 36.7%, `metalstorm` 14.2%, `jurassicpark` 13.7%, `pacman` 13.2%,
+`blastermaster` 9.1% — **no son 6 bugs distintos**: con el **tracer de re-sync por PC**
+(`trace_diff.py`; salta las iteraciones *benignas* del bucle de espera de VBlank) se comprobó que
+**todos comparten la misma primera divergencia real**: el **timing del NMI/VBlank**.
 
-**SMB.** La RAM difiere de `mesen` desde el frame 4 y **se estabiliza en 8 bytes** a partir del
-frame 14: `$0000`, `$0001`, `$0778` y 5 bytes de la base de la pila (`$01F8-$01FC`). El
-acumulador de scroll `$07A7-$07AD` (rutina `SEC;ROR $07A7,X` de `$8131`) aparece desplazado un bit
-en algunos frames. No es un offset de 1 frame (comparar con `mesen` `f+1` empeora). Consecuencia:
-el logo del título ("SUPER"/recuadro) asienta ~2 filas más bajo que en `mesen` → el **3.1%** de
-diff **estructural** restante ("MARIO BROS.", menú y suelo ya coinciden).
+**Evidencia (metalstorm).** El bucle principal del juego es `$FCBA: JMP $FCBA` (espera-NMI: el NMI
+hace el trabajo de cada frame). En la divergencia (idx 43447) **ambos** están en ese bucle, pero
+**nosotros en el bucle** y **mesen dentro del handler NMI** (`$FCBF: PHA; TXA;…`) → el
+*interleaving* NMI↔bucle se desalinea. Lo mismo, con el mismo offset `+1`, en `ic` (idx 9132) y
+`galaga`/`pacman`. (SMB: el mismo efecto deja el logo del título ~2 filas más bajo → su 3.1%.)
 
-**Qué se probó (y se descartó).** (a) **sprite-0 dot-exacto** (`sprite0_line`/`sprite0_dot`, flag en
-la columna del hit) — no cambió. (b) offset de 1 frame — no. (c) **pre-reloj del acceso a datos**
-(`LDA $2002` ve el ciclo real) — no. (d) **intérprete dirigido por ciclo** (reloj de bus por acceso:
-`NESMemory::cycle_tick`) — no cambió los 8 bytes ni el diff. (e) **longitud de frame**: teníamos 261
-líneas; corregido a **262** (ciclos/frame pasaron de 29668 a **29782**, el real NTSC) — *sigue* sin
-cambiar los 8 bytes ni los diffs. (f) SMB **no lee `$4015`** → no es el frame IRQ del APU. (g) Con
-los headers previos, `dk`/`galaga` divergen igual → **no es regresión** de estos arreglos.
+**Causa.** Nuestro CPU sincroniza la PPU **por instrucción** (cada acceso de bus hace `mem.tick()`,
+la PPU avanza 3 dots; los ciclos internos se completan al final), mientras que mesen la sincroniza
+**por ciclo**. Consecuencias medibles:
 
-**Causa.** Todo el timing temporal (eventos de PPU dot-exactos, acceso por ciclo, longitud de frame)
-está descartado, y el **power-up** también: la RAM es **idéntica a mesen en el frame 1** (el `` `diff` ``
-**es 0**); la divergencia aparece y desaparece entre los frames 2 y 14, en código sensible al timing
-(`$0001` es un puntero/scratch; el bucle de `$8719` lo usa como bytes altos de una lectura de
-`$2007`). Candidato restante: una **nuance de CPU/APU** (p. ej. el frame counter del APU) no cubierta
-por nestest. No rompe el juego (llega al mismo título) y **no bloquea el Amiga** (timing por
-hardware; ver [`TIMING_AMIGA.md`](TIMING_AMIGA.md)). El lockstep interno (intérprete ↔ codegen) ya
-pasa (`ram_diff=0`), así que no es una inconsistencia entre nuestros dos motores.
+- La lectura de `$2002` muestrea el flag de VBlank a **una instrucción de distancia** (~7-9 ciclos)
+  de mesen → el bucle de espera de VBlank sale **una iteración** antes o después.
+- El **NMI** cae por tanto en una **frontera de instrucción distinta** → se desalinea el interleaving
+  NMI↔bucle principal (y de ahí la cascada de estado posterior).
+- El **largo de frame** no se puede fijar a **29780.67** ciclos (media NTSC): se redondea a **~29782**
+  (~1.3 ciclos más) porque la frontera de frame cae en frontera de instrucción.
+
+**Lo que NO lo arregla (probado y descartado).** Mover el dot del flag (0/1), la máscara de lectura
+(`<3`/`<6` dots), los ciclos de reset (7/8/9), el avance de PPU (5–20 dots), un **"lookahead"** de la
+ventana del flag (16/24/150 dots), la frontera de frame, y el **skip de 1 dot en frames impares**
+(NTSC, `mesen PPU.cpp:1316` — correcto y aplicado, pero **neutro**). Todos **desplazan** la
+divergencia pero **no la eliminan**: el problema no es el **valor** del flag, sino la **resolución
+temporal** de la sincronización. Un parche por juego sería inviable (6 juegos, cada uno con su punto
+interno de divergencia).
+
+**La solución (real, no un remiendo).** Hacer la sincronización PPU↔CPU **por ciclo** en los puntos
+sensibles. Dos vías equivalentes, de menor a mayor alcance:
+
+1. **Muestreo cycle-exacto de `$2002`** (mínimo, localizado). Hoy `Interpreter::rd()` hace
+   `mem.tick()` **antes** de `mem.read()`, así que la lectura ve el dot del ciclo **siguiente**; de
+   ahí nace el desfase de ~1 ciclo. Arreglo: para la instrucción que **lee `$2002`** (`LDA/AND/… abs`
+   con operando `$2002`), calcular el **ciclo exacto** del acceso de datos
+   (`cpu_cycle_actual + ciclo_del_acceso`, p. ej. 3 para `LDA abs`) y evaluar el flag de VBlank con
+   la PPU avanzada **al dot de ese ciclo** (no al siguiente), y solo entonces completar los ciclos
+   internos. Es subdividir la instrucción en su punto de muestreo. Acotado, pero toca el intérprete
+   (y hay que replicarlo en el codegen para mantener la equivalencia intérprete↔bloques).
+
+2. **Lockstep PPU/CPU ciclo a ciclo** (general, "correcto"). Sustituir el avance "3 dots por acceso"
+   por un lazo que avance **1 ciclo de CPU = 3 dots de PPU** y resuelva los eventos de PPU en su
+   **ciclo exacto**: flag de VBlank en `(241,1)`, sprite-0 en su dot, contador A12 de la MMC3, y el
+   instante de toma del NMI (al final de la instrucción durante la cual se puso el flag, como mesen
+   `CPU::Exec`: `if(_prevRunIrq || _prevNeedNmi) IRQ()`). Elimina de raíz el ±1, el borde del NMI y
+   el largo de frame, a cambio de reescribir el bucle de ejecución del intérprete.
+
+> Nota de método: el **tracer de re-sync por PC** (`trace_diff.py`) fue decisivo — sin él, la
+> comparación por índice se atasca en el primer bucle de VBlank (benigno) y **oculta** la divergencia
+> real. Es la herramienta que convirtió "6 juegos misteriosos" en "**una** limitación localizada".
+
+**Impacto.** No bloquea el Amiga: el port usa timing por **hardware** (Copper/Blitter; ver
+[`TIMING_AMIGA.md`](TIMING_AMIGA.md)), no este sincronismo fino. Es una limitación de **fidelidad de
+estado** del **oráculo** en esos 6 juegos, documentada como límite **conocido** de `oracle-v2`.
 
 **Impacto en el codegen.** El mismo efecto aparece entre el **plugin** (bloques) y el **intérprete**
 (instrucción a instrucción): al verificar los 13 `.n2x`, 5 coinciden (RAM 0/2048) y 8 difieren en
-**2–13 bytes de RAM con el framebuffer idéntico** (0/61440 píxeles). Es decir, es una limitación de
-*fidelidad de estado*, no de imagen; relevante para el Amiga porque usa el camino **codegen**.
+**2–13 bytes de RAM con el framebuffer idéntico** (0/61440 píxeles). El lockstep interno
+intérprete↔codegen pasa (`ram_diff=0`) con la ejecución **del mismo motor**; la diferencia plugin vs
+intérprete es la granularidad de bloque (vía 2).
 
 ## Impacto de los arreglos en la versión Amiga
 

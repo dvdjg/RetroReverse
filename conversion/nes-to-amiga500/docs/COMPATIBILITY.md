@@ -2,111 +2,83 @@
 
 Por cada ROM de `runtime/build/*.nes`: **mapper**, **hash de framebuffer del oráculo** (huella
 determinista, `nes_frame`) y diff **estructural** (luminancia, tolerante a la paleta) contra `mesen`
-a 60 frames. Regenerar: `bash runtime/test/port_matrix.sh` (o `--subset` para unos pocos).
+a 60 frames. Regenerar: `bash runtime/test/port_matrix.sh` (o `--subset`, `--gate`, `--update`).
+
+Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-sync por PC) está en
+[`REFERENCE_TRACER.md`](REFERENCE_TRACER.md); las limitaciones reales, en [`RISKS.md`](RISKS.md).
+
+## Matriz (60 frames)
 
 | ROM | mapper | hash (oráculo) | estructura vs mesen |
 |---|---:|---|---:|
-| bf | 0 | 04c3132d97e3672d | **0.0%** |
-| dk | 0 | 7328b6a9584db4fd | **0.0%** |
-| dkjr | 0 | 34f01ab01fd0d11f | **0.0%** |
-| exb | 0 | 875ff9a0bca77295 | **0.0%** |
-| kungfu | 0 | c9be5cc53c87d813 | **0.0%** |
-| mariobros | 0 | bede7c8b020a9bdb | **0.0%** |
-| mspacman | 0 | d9883df6de0f2047 | **0.0%** |
-| popeye | 0 | 41e76abab6c7fee7 | **0.0%** |
-| smb | 0 | 698b602b6fb8f86f | 3.1% |
-| xevious | 0 | 3d7944c0da3f5263 | 4.4% |
-| pacman | 0 | 6e9afde6b9ecf94f | 12.9% |
-| galaga | 0 | 1bca91d35b077dbb | 36.4% |
-| ic | 0 | a55551d254978383 | **92.2%** |
-
-Todas mapper 0 (NROM) por ahora.
+| adventureisland3.nes | 4 | 5d038b0a606c8533 | **0.0%** |
+| bf.nes | 0 | 04c3132d97e3672d | **0.0%** |
+| bioniccommando.nes | 1 | c01d2139c3342edd | **0.0%** |
+| blastermaster.nes | 1 | 8a7b8dc3994cd02b | 9.1% |
+| castlevania.nes | 2 | d1b769801057969b | **0.0%** |
+| contra.nes | 2 | b43e93ee563b00f1 | 0.9% |
+| crystalis.nes | 4 | 8a8236eec0306f33 | 2.7% |
+| dk.nes | 0 | 7328b6a9584db4fd | **0.0%** |
+| dkjr.nes | 0 | 34f01ab01fd0d11f | **0.0%** |
+| ducktales.nes | 2 | 2322b9db55bbffe9 | **0.0%** |
+| exb.nes | 0 | 875ff9a0bca77295 | **0.0%** |
+| galaga.nes | 0 | b9a1f352e7973f29 | 36.7% |
+| gradius.nes | 3 | d469bd3c363f13cb | 3.3% |
+| ic.nes | 0 | a55551d254978383 | 92.2% |
+| jurassicpark.nes | 4 | 0bf9becd786be2e9 | 13.7% |
+| kungfu.nes | 0 | c9be5cc53c87d813 | **0.0%** |
+| legendofzeldathe.nes | 1 | ee3583a5ad9b7d25 | 0.4% |
+| mariobros.nes | 0 | bede7c8b020a9bdb | **0.0%** |
+| megaman.nes | 2 | 267c824a48dbae2f | **0.0%** |
+| megaman2.nes | 1 | 7c173727e77aa95d | **0.0%** |
+| megaman3.nes | 4 | 4eb841b0583bbb83 | **0.0%** |
+| megaman4.nes | 4 | 729624b8d3285f43 | 2.6% |
+| megaman5.nes | 4 | 335d4236a41e1cbd | **0.0%** |
+| megaman6.nes | 4 | 3843a7520e54c17d | **0.0%** |
+| metalstorm.nes | 4 | 82679d2512b7c06b | 14.2% |
+| metroid.nes | 1 | 6d60cfca28c2626b | **0.0%** |
+| mspacman.nes | 0 | d9883df6de0f2047 | **0.0%** |
+| ninjagaiden.nes | 1 | 715560d48b6fd58b | 1.2% |
+| ninjagaideniii….nes | 4 | 5262cb44d08ec383 | **0.0%** |
+| ninjagaidenii….nes | 4 | 5262cb44d08ec383 | **0.0%** |
+| pacman.nes | 0 | 33fe82bcda272bcf | 13.2% |
+| popeye.nes | 0 | 41e76abab6c7fee7 | **0.0%** |
+| shatterhand.nes | 4 | 5012b52846c85bbd | **0.0%** |
+| smb.nes | 0 | 698b602b6fb8f86f | 3.1% |
+| smb3.nes | 4 | a950ee1dc1d5b483 | 0.4% |
+| superc.nes | 4 | 5262cb44d08ec383 | **0.0%** |
+| tinytoonadventures.nes | 4 | 4b838964cfde9dfd | **0.0%** |
+| xevious.nes | 0 | 13048012ca91d263 | 3.6% |
 
 ## Lectura
 
-- **0.0% (8 juegos)**: geometría/tiles idénticos a `mesen`; lo que queda es solo paleta.
-- **smb 3.1% / xevious 4.4%**: residual de timing (SMB, ver `RISKS.md`) y cruce de nametable.
-- **pacman 12.9% / galaga 36.4%**: **deriva de frames** (no dot-exactos sub-ciclo a muchos frames).
-- **ic 92.2%**: **bug real confirmado** (ver abajo).
+- **23 juegos a 0.0%**: geometría/tiles idénticos a `mesen`; lo que queda es solo paleta.
+- **9 juegos ≤3.6%** (contra, crystalis, gradius, megaman4, ninjagaiden, smb, smb3, xevious, zelda):
+  residual menor de timing (misma raíz que abajo).
+- **6 juegos 9–92%** (ic, galaga, metalstorm, jurassicpark, pacman, blastermaster): **un único
+  límite conocido** — la sincronización PPU/NMI **por instrucción** (no por ciclo). No son 6 bugs:
+  los 6 comparten la misma primera divergencia real (el instante del NMI/VBlank). Detalle y
+  **solución** (lockstep PPU/CPU ciclo a ciclo, o muestreo cycle-exacto de `$2002`) en
+  [`RISKS.md`](RISKS.md).
 
-## Bug de Ice Climber (ic) — confirmado
+## Mappers soportados
 
-El framebuffer sale de **un solo color** (fondo): la **paleta no se carga** (a 60 frames solo
-`palette[0x1F]` tiene valor). Evidencia (trazas `$2007`/`$2006` de `frame_probe`):
-- El único sitio que fija `v=$3F00` es una **rutina de "warm-up"** en `$80A8`
-  (`LDA #$3F;STA $2006;LDA #$00;STA $2006;STA $2006;STA $2006;LDA $2002`), que **termina en
-  `v=$0000`** y **no va seguida de ningún `$2007`** con `v` en `$3F00-$3F1F`.
-- Un run de relleno de la nametable (`$3D5F+0x20k`) **desborda hacia `$3F00+`** y `$4000+`.
-- **El manejo de `$2006`/`$2007` del PPU es correcto** para las direcciones que el juego fija; el
-  render es correcto dada una paleta vacía. Conclusión: el **cargador de paleta no se ejecuta/llega**,
-  lo que apunta a una **divergencia de estado/CPU en el arranque** (misma familia que SMB), no a un
-  bug del PPU. Pendiente: traza de PC comparada para localizar el desvío.
+| Mapper | Nombre | Estado |
+|---:|---|---|
+| 0 | NROM | completo |
+| 1 | MMC1 | **completo** (PRG modes 2/3, CHR 4K/8K conmutada, WRAM + disable, 1-pantalla/V/H) |
+| 2 | UxROM | completo |
+| 3 | CNROM | completo |
+| 4 | MMC3 | PRG/CHR por bancos, mirroring, IRQ por flanco de A12 (modelo por línea) |
+| — | CHR-RAM | soportado (patrones por `$2007`) |
 
-## Set ampliado (mappers MMC1/UxROM/CNROM + CHR-RAM)
+Pendientes (para las ROMs "difíciles"; ver [`HARD_GAMES.md`](HARD_GAMES.md)): **VRC6 (24/26)**,
+**MMC5 (5)**, AxROM (7), FME-7 (69).
 
-Se añadió soporte de **CHR-RAM** (`nes_ppu.hpp`: `chr_ram`; los cartuchos con 0K CHR cargan los
-patrones por `$2007`). Resultados a 60 frames (`structura` vs mesen):
+## Notas de método
 
-| ROM | mapper | CHR | estructura | notas |
-|---|---:|---|---:|---|
-| contra | 2 | ROM | **0.0%** | OK |
-| bioniccommando | 1 | RAM | 1.3% | OK |
-| castlevania | 2 | RAM | **0.0%** | OK (color 26.8%) |
-| ducktales | 2 | RAM | **0.0%** | OK (color 96.6%) |
-| megaman | 2 | RAM | **0.0%** | OK |
-| gradius | 3 | ROM | 5.4% | OK |
-| megaman2 | 1 | RAM | 10.5% | parcial |
-| metroid | 1 | RAM | 12.9% | parcial (deriva) |
-| legendofzeldathe | 1 | RAM | 80.9% | **atascado** (render nunca habilitado) |
-| blastermaster | 1 | RAM | 100% | **atascado** |
-| ninjagaiden | 1 | RAM | 99.2% | **`jam` (opcode ilegal)** |
-
-CHR-RAM desbloquea muchos; los fallos restantes son de **MMC1** (banking parcial) y un **`jam`**.
-Diagnóstico añadido: `NesInterpreter::jam_op`/`jam_pc` (frame_probe lo imprime `op=XX@YYYY`).
-- **Ninja Gaiden**: el `jam` es un **KIL (`$22`) en `$A4D4`** → el CPU ejecuta **datos** (banking
-  MMC1 erróneo), no un opcode desconocido.
-- **Referencia encontrada**: las fuentes de los cores que ya tenemos contienen MMC1 real —
-  `external/libretro-mame/src/devices/bus/nes/mmc1.cpp` (`nes_sxrom`) y
-  `external/libretro-fceumm/src/boards/asic_mmc1.c`. Según MAME, los modos PRG (ctrl bits 2-3) son:
-  `0/1`=32 KB; `2`=`$8000` **fijo banco 0** / `$C000` conmutable; `3`=`$8000` conmutable / `$C000`
-  **último fijo**. El latch es **compartido** entre los 4 registros y el desplazamiento es
-  **LSB-first** (nuestro código ya coincide en esto). MAME filtra además escrituras consecutivas de
-  1 ciclo (`m_reg_write_enable`), que **no** implementamos.
-- Se implementó el modo 2 correcto y **regresó** Metroid (`m1p=0x10` fuera de rango; jam). Se
-  **revirtió**: el comportamiento actual (modo ≥2 = `$8000`=banco conmutable, `$C000`=último) es el
-  que hace funcionar Metroid/Mega Man 2. MMC1 sigue **parcial**; falta cotejar con el filtro de
-  escritura / CHR mode (no ir a ciegas: dos intentos, dos regresiones).
-
-Siguiente: cerrar MMC1 con la referencia (filtro de 1 ciclo + modo CHR) antes de MMC3.
-
-## MMC3 (mapper 4) — IMPLEMENTADO
-
-Se añadió **MMC3** a `nes_mapper.hpp` (PRG en 4 ventanas de 8 KB, CHR con modos 2/1 KB,
-mirroring por `$A000`, IRQ por scanline) + **PRG-RAM** (`$6000-$7FFF`) en `NesSystem` (era la
-clave: sin ella SMB3/Crystalis se colgaban) + IRQ de CPU reutilizada. Resultados (estructura vs
-mesen, 60 frames):
-
-| ROM | estructura | notas |
-|---|---:|---|
-| ninjagaiden2 / ninjagaiden3 / megaman6 | **0.0%** | perfecto |
-| megaman4 / tinytoon / superc / crystalis | 2–3% | perfecto (paleta/1 frame) |
-| shatterhand | 6.6% | |
-| adventureisland3 | 17.2% | color 98% (paleta) |
-| megaman5 / jurassicpark | 25–28% | usa IRQ por raster |
-| megaman3 / metalstorm | 36–38% | usa IRQ por raster |
-| smb3 | 53.6% | usa IRQ por raster (status bar) |
-
-Es decir, **el núcleo MMC3 es correcto** (varios a 0.0%); lo que queda alto son juegos que usan el
-**IRQ de raster de la MMC3** (nuestro contador es por scanline y aproxima el A12, y hay deriva de
-frames), más el PRG/CHR mode en algunos casos.
-
-## Juegos "difíciles" para Mega Drive
-
-Ver [`HARD_GAMES.md`](HARD_GAMES.md): inventario de los 28 juegos traídos de `F:\roms\nes` (MMC3=4,
-MMC5=5, AxROM=7, VRC6=24/26, FME-7=69) y por qué la MD los sufre.
-
-## Por qué esta matriz importa para el Amiga
-
-Es la **referencia congelada** (tag `oracle-v1`) contra la que se validará el backend Amiga sin
-rehacer nada: el Amiga se compara con el **oráculo** (mismos `hash`/estructura). Ver
-[`PORT_TEST_PLAN.md`](PORT_TEST_PLAN.md) y [`VERSIONS.md`](VERSIONS.md).
+- El **tracer de re-sync por PC** (`trace_diff.py`) fue clave: la comparación por índice se atasca
+  en el bucle de VBlank (benigno) y **oculta** la divergencia real; re-sincronizando por PC se
+  demuestra que los 6 "malos" comparten **una** raíz.
+- El render usa la **CHR conmutada** del mapper (no la ROM lineal): sin esto, los juegos con bancos
+  de CHR (smb3, megaman3, ninjagaiden…) daban geometría equivocada.

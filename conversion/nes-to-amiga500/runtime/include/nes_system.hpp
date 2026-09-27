@@ -222,6 +222,12 @@ struct NesSystem {
 				clock_ppu(cyc);
 			}
 		}
+		// El NMI se toma en **frontera de instrucción** tras la instrucción durante la
+		// cual se puso el flag de VBlank (como mesen `CPU::Exec`). LÍMITE (ver
+		// docs/RISKS.md): como el flag se pone a granularidad de acceso (no de ciclo),
+		// esta frontera puede caer 1 instrucción antes/después que la de mesen y
+		// desalinear el *interleaving* NMI↔bucle principal de 6 juegos. La solución es
+		// el lockstep PPU/CPU ciclo a ciclo (o subdividir la instrucción en el flag).
 		if (ppu.nmi_occurred) {
 			ppu.nmi_occurred = false; // el NMI se toma en frontera de instrucción
 			trigger_nmi();
@@ -253,6 +259,11 @@ struct NesSystem {
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
 		ppu.dot = 0u;
+		// LÍMITE (ver docs/RISKS.md): el frame se cierra en la **frontera de instrucción**
+		// que cae justo después de volver a la pre-VBlank, así que su largo es un entero
+		// (~29782) y no el real 29780.67 (media NTSC; los frames impares cuentan 340 dots
+		// en la pre-render, ver `Ppu::tick_dot`). Esa deriva de ~1.3 ciclos/frame no se
+		// puede fijar sin una frontera **sub-instrucción** (lockstep PPU/CPU ciclo a ciclo).
 		bool seen_vblank = false;
 		int guard = 0;
 		for (;;) {
