@@ -6,9 +6,18 @@ port. Regla: si un cambio altera lo **observable** (framebuffer, estado de RAM, 
 
 | Componente | Constante | Valor | Qué fija |
 |---|---|---|---|
-| **Oráculo** | `n2a::kOracleVersion` (`runtime/include/nes_system.hpp`) | **1** | Semántica de la emulación del host |
+| **Oráculo** | `n2a::kOracleVersion` (`runtime/include/nes_system.hpp`) | **2** | Semántica de la emulación del host |
 | **ABI de plugin** | `N2A_ABI_VERSION` (`runtime/plugin/n2a_plugin.h`) | **1** | Contrato `.n2x` ↔ gestor |
 | **Codegen** | `kCodegenVersion` (`tools/transpiler/src/main.cpp`) | **2** | Invalida la caché de `.n2x` por CRC/gen |
+
+Tags: `oracle-v1` (congelado inicial), **`oracle-v1.1`** (añade CHR-RAM, MMC3 + PRG-RAM, IRQ de CPU).
+
+## Cambios v1 → v1.1
+
+- **CHR-RAM** (cartuchos con 0K CHR): los patrones se cargan por `$2007`.
+- **MMC3 (mapper 4)**: PRG/CHR por bancos, mirroring, IRQ por scanline; + **PRG-RAM** `$6000-$7FFF`.
+- **IRQ de CPU** (frame counter del APU / DMC / MMC3).
+- Resultado: varios MMC3 a **0.0%** (Ninja Gaiden II/III, Mega Man 6); ver `COMPATIBILITY.md`.
 
 ## Oráculo v1 — comportamiento fijado
 
