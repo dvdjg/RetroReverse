@@ -55,6 +55,11 @@ int main(int argc, char** argv) {
 	n2a::NesSystem nes;
 	nes.load_mapper(g_loaded.mapper);
 	nes.reset();
+	// Reloj de bus **exacto** (dot-exacto por acceso): imprescindible para que el
+	// timing coincida con `frame_probe` y con el oráculo de la matriz. Sin esta
+	// llamada el hook `mem.cycle_tick` no se instala y la PPU solo avanza al final
+	// de la instrucción → frames distintos en juegos sensibles al timing.
+	nes.set_cycle_exact(true);
 	for (int i = 0; i < frames; ++i) {
 		nes.run_frame();
 	}

@@ -137,15 +137,19 @@ Pendientes reales (2026, tras la matriz corregida):
 - **Nametables por CHR ROM de la VRC6** (`$B003` bit 4): implementadas (mesen `VRC6.h::UpdatePpuBanking`)
   por completitud, aunque **ninguna ROM del catálogo las usa** (Esper Dream 2 tiene `bit4=0`); sin
   regresión en Akumajou (2.7% estructura).
-- **MMC5 (5)**: **Uncharted Waters 45.8%**. Investigado 2026 (histograma de color del frame, 60
-  frames): **`mesen`** = negro **59 377 px** (dominante) + logo rojo pequeño (1 885+178 px) → pantalla
-  **casi toda negra**; **nosotros** = negro 20 290 + **rojo 15 794 + 14 025** + gris 11 331 → pantalla
-  **llena de rojo/gris**. Es decir, **pintamos fondo a pantalla completa donde `mesen` pinta casi
-  negro** → hipótesis principal: **CHR/nametable equivocados** (tile 0 o nametable leídos de un banco
-  incorrecto). Usa el **modo atributo extendido de ExRAM** (`$5104`=1, 60 bytes ≠0), ya implementado,
-  pero la causa persiste → apunta a **banking de CHR** (CHR 128 KB, 12 registros). **Falta** volcar
-  CHR/nametable de `mesen` en el mismo frame para cerrar. Gemfire, Laser Invasion, Nobunaga's y CV3
-  siguen a 0.0–3.1% (sin regresión con los cambios).
+- **MMC5 (5)**: **Uncharted Waters 45.8%**. Investigado 2026 a fondo (histograma de color + estado):
+  - **`mesen`** pinta **casi todo negro** (59 377 px) + logo rojo pequeño; **nosotros** el centro/esquina
+    **sí** son negros (`fb=0F`) pero hay **~41 000 px no-negros repartidos por toda la pantalla**
+    (bbox x[1..255] y[0..239]) en lugar del logo pequeño.
+  - **Hipótesis descartadas** (medidas): (a) **modo atributo extendido de ExRAM** — implementado, diff
+    igual sin él; (b) **reloj de bus cycle-exact** — no cambia; (c) **selector `chrA` de CHR de la MMC5**
+    — implementado (correcto según mesen, sprites 8×16 → bancos 8-11), pero Uncharted tiene `$2000`
+    bit5=0 (8×8) → no aplica.
+  - La nametable (CIRAM) es **~965× tile 0** (bytes 0 = fondo) → debería salir negro; hay **56 tiles
+    distintos** en ~59 posiciones. La causa sigue **sin cerrar**: el render pinta de más donde `mesen`
+    pinta negro. **Falta** una comparación **pixel a pixel** con `mesen` (dump de nametable/CHR de
+    `mesen`, hoy no disponible: el volcado de estado `RRS1` no está en el `.so`).
+  - Gemfire/Laser/Nobunaga's/CV3 siguen a 0.0–3.1% (sin regresión con los cambios).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).
 - **Timing `$2002`**: ic 92.2%, metalstorm 14.2%, gradius 3.3%, smb 3.1% (ver

@@ -118,6 +118,11 @@ struct Mapper {
 	eng::u8 mmc5_split_ctrl = 0;        ///< $5200: enable(bit7) + lado(bit6) + delimiter(0-4).
 	eng::u8 mmc5_split_scroll = 0;      ///< $5201: scroll del split (índice en ExRAM).
 	eng::u8 mmc5_split_bank = 0;        ///< $5202: banco de CHR del split (no usado aún).
+	/// Selector **chrA** de la MMC5 (mesen `UpdateChrBanks`): `true` = juego de
+	/// registros A (bancos CHR 0-7, sprites 8×8 o estado fuera de frame); `false` =
+	/// juego B (bancos 8-11, fondo con sprites 8×16). Lo fija el sistema desde
+	/// `$2000` bit 5 antes de cada render (modelo *lazy*).
+	bool mmc5_chr_a = true;
 
 	// --- FME-7 / Sunsoft 5B (mapper 69) ---
 	eng::u8 fme7_command = 0;        ///< $8000: comando (0-15).
@@ -432,7 +437,7 @@ struct Mapper {
 				off = static_cast<eng::u32>(vrc6_chr_page(addr >> 10u)) * 0x400u +
 				      (addr & 0x3FFu);
 			} else if (kind == MapperKind::Mmc5) {
-				off = static_cast<eng::u32>(mmc5_chr_page(addr >> 10u)) * 0x400u +
+				off = static_cast<eng::u32>(mmc5_chr_page(addr >> 10u, mmc5_chr_a)) * 0x400u +
 				      (addr & 0x3FFu);
 			} else if (kind == MapperKind::Fme7) {
 				off = static_cast<eng::u32>(fme7_chr[addr >> 10u]) * 0x400u + (addr & 0x3FFu);
@@ -781,22 +786,31 @@ private:
 	/// altos.
 	/// \param page Índice 0..7 (1 KB).
 	/// \return Número de banco CHR de 1 KB.
-	[[nodiscard]] eng::u16 mmc5_chr_page(eng::u32 page) const noexcept {
+	/// Banco CHR de 1 KB (`page` 0..7) de la MMC5 (mesen `MMC5.h::UpdateChrBanks`).
+	/// La MMC5 selecciona entre **dos juegos de registros** (`chrA`): con sprites
+	/// **8×8** siempre usa los bancos 0-7; con sprites **8×16** el **fondo** puede
+	/// usar los bancos 8-11 (`chrB`). \param page Índice 0..7 (1 KB).
+	/// \param chr_a `true` = juego A (bancos 0-7); `false` = juego B (bancos 8-11).
+	/// \return Número de banco CHR de 1 KB (con los bits altos de `$5130`).
+	[[nodiscard]] eng::u16 mmc5_chr_page(eng::u32 page, bool chr_a) const noexcept {
 		const eng::u32 upper = static_cast<eng::u32>(mmc5_chr_upper) << 8u;
 		const auto bank = [&](eng::u32 i) -> eng::u32 {
-			return static_cast<eng::u32>(mmc5_chr_banks[i & 7u]) | upper;
+			// i es el índice **absoluto** (0-11): los registros $5120-$512B son 12.
+			return static_cast<eng::u32>(mmc5_chr_banks[(i < 12u) ? i : (i & 7u)]) | upper;
 		};
+		const eng::u32 b8 = chr_a ? 0u : 8u; // desplazamiento del juego B
 		switch (mmc5_chr_mode & 3u) {
 		case 0u:
-			return static_cast<eng::u16>((bank(7u) << 3u) + page);
+			return static_cast<eng::u16>((bank((chr_a ? 7u : 11u)) << 3u) + page);
 		case 1u:
-			return static_cast<eng::u16>(((page < 4u ? bank(3u) : bank(7u)) << 2u) +
-						     (page & 3u));
+			return static_cast<eng::u16>(
+				((page < 4u ? bank((chr_a ? 3u : 11u)) : bank((chr_a ? 7u : 11u))) << 2u) +
+				(page & 3u));
 		case 2u:
-			return static_cast<eng::u16>((bank(1u + ((page >> 1u) & 3u) * 2u) << 1u) +
-						     (page & 1u));
-		default:
-			return static_cast<eng::u16>(bank(page));
+			return static_cast<eng::u16>(
+				(bank(b8 + 1u + ((page >> 1u) & 3u) * 2u) << 1u) + (page & 1u));
+		default: // modo 3: 8 bancos de 1 KB (mesen: A usaría 0-7, B usa 8,9,10,11,8,9,10,11)
+			return static_cast<eng::u16>(bank(chr_a ? page : (8u + (page & 3u))));
 		}
 	}
 

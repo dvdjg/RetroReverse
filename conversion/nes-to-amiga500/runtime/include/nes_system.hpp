@@ -261,6 +261,10 @@ struct NesSystem {
 			ppu.nt_map_on = true;
 			// Modo atributo extendido ($5104 = 1): atributo y banco CHR desde ExRAM.
 			ppu.ext_attr_mode = (mapper.mmc5_exram_mode == 1u);
+			// Selector chrA de la MMC5: sprites **8×16** ($2000 bit 5) → el fondo usa
+			// el juego de bancos CHR B (8-11); con 8×8, el A (0-7). mesen
+			// `UpdateChrBanks` (`chrA = !largeSprites`). Modelo lazy: se fija por frame.
+			mapper.mmc5_chr_a = (ppu.ctrl & 0x20u) == 0u;
 			ppu.ext_attr_ram = mapper.mmc5_exram;
 			ppu.ext_attr_upper = mapper.mmc5_chr_upper;
 			// Split vertical ($5200-$5202): el render lee la nametable desde ExRAM.
