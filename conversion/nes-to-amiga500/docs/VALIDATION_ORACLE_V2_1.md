@@ -5,39 +5,36 @@
 > [`VERSIONS.md`](VERSIONS.md)). El record histórico de v1 está en
 > [`VALIDATION_ORACLE_V1.md`](VALIDATION_ORACLE_V1.md).
 >
-> **Nota de determinismo**: `pacman` (0.3% en `port_matrix.baseline`, 9.4% aquí) y `galaga` (0.9% /
-> 1.9%) **varían entre ejecuciones** — son los juegos sensibles al límite de timing `$2002`; su diff
-> pequeño fluctúa. El resto es estable.
-
-- commit: `86bad83`
-- tag: `oracle-v2.1-15-g86bad83`
-- fecha: 2026-09-27T19:05Z
+> **Nota de determinismo**: `pacman` y `galaga` **varían entre ejecuciones** (son los juegos
+> sensibles al límite de timing `$2002`); su diff pequeño fluctúa. `diff_mesen` marca como
+> **`INCONCLUYENTE(pantalla-plan)`** los frames **monocromos** de pantalla de espera/intro (p. ej.
+> Esper Dream 2 a 60 frames), que `port_matrix` muestra como **`flat`**.
 
 ## Suite (`test/run.sh`)
 ```
 frames       : 120
 direcciones  : 5220 decodificadas
-interprete   : 54.3 ms  (2211.4 fps)
-rapido       : 54.0 ms  (2223.0 fps)
+interprete   : 56.7 ms  (2115.0 fps)
+rapido       : 56.3 ms  (2132.9 fps)
 aceleracion  : 1.01x
 equivalencia : OK (ram_diff=0 fb_diff=0 regs=ok)
-cpu (sin render): interp 57.2 Mips | rapido 62.6 Mips | 1.10x
+cpu (sin render): interp 54.8 Mips | rapido 60.4 Mips | 1.10x
 [extra] telemetria de valores (--facts)
 facts_from_run: 74 direcciones con valores -> /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/conversion/nes-to-amiga500/runtime/build/facts_nestest.txt
 [extra] validacion diferencial con mesen
 diff_mesen: ROM=Balloon Fight (USA).nes frames=60
-diff_mesen: color=23.7%  estructura(lum)=0.0% (umbral 25.0%)
+diff_mesen: color=23.7%  estructura(lum)=0.0% (umbral 25.0%) colores=2/2
 [extra] consistencia de mappers: nes_frame == frame_probe (por mapper)
-OK: mapper 0 (bf.nes): nes_frame == frame_probe
-OK: mapper 1 (metroid.nes): nes_frame == frame_probe
-OK: mapper 2 (castlevania.nes): nes_frame == frame_probe
-OK: mapper 3 (gradius.nes): nes_frame == frame_probe
-OK: mapper 4 (megaman3.nes): nes_frame == frame_probe
-OK: mapper 5 (Gemfire (USA).nes): nes_frame == frame_probe
-OK: mapper 7 (Battletoads (USA).nes): nes_frame == frame_probe
-OK: mapper 24 (Akumajou Densetsu (Japan).nes): nes_frame == frame_probe
-OK: mapper 26 (Esper Dream 2 - Aratanaru Tatakai (Japan).nes): nes_frame == frame_probe
-OK: mapper 69 (Mr. Gimmick (Europe).nes): nes_frame == frame_probe
+OK: mapper 0 (bf.nes): nes_frame == frame_probe, interp == fast
+OK: mapper 1 (metroid.nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 2 (castlevania.nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 3 (gradius.nes): nes_frame == frame_probe, interp == fast
+OK: mapper 4 (megaman3.nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 5 (Gemfire (USA).nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 7 (Battletoads (USA).nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 24 (Akumajou Densetsu (Japan).nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 26 (Esper Dream 2 - Aratanaru Tatakai (Japan).nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
+OK: mapper 69 (Mr. Gimmick (Europe).nes): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)
 mapper_consistency: OK (10 mappers)
 [extra] matriz de compatibilidad (subset, puerta de regresion)
 | ROM | mapper | hash (oráculo) | estructura vs mesen |
@@ -68,7 +65,7 @@ RUNTIME OK
 | Castlevania III - Dracula's Curse (USA).nes | 5 | a174b99e10200e83 | 2.7% |
 | Contra (USA).nes | 2 | b43e93ee563b00f1 | 0.9% |
 | Crystalis (USA).nes | 4 | 8a8236eec0306f33 | 2.7% |
-| Esper Dream 2 - Aratanaru Tatakai (Japan).nes | 26 | a55551d254978383 | 100.0% |
+| Esper Dream 2 - Aratanaru Tatakai (Japan).nes | 26 | a55551d254978383 | flat |
 | Gemfire (USA).nes | 5 | 5262cb44d08ec383 | 0.0% |
 | Jurassic Park (USA).nes | 4 | b4f6ffdae7208829 | 0.0% |
 | Kirby's Adventure (USA) (Rev A).nes | 4 | 328eec9c90919d81 | 0.4% |
@@ -82,7 +79,7 @@ RUNTIME OK
 | Mr. Gimmick (Europe).nes | 69 | 51632f4f913e6af1 | 0.0% |
 | Ninja Gaiden II - The Dark Sword of Chaos (USA).nes | 4 | 5262cb44d08ec383 | 0.0% |
 | Ninja Gaiden III - The Ancient Ship of Doom (USA).nes | 4 | 5262cb44d08ec383 | 0.0% |
-| Nobunaga's Ambition II (USA).nes | 5 | 5c3358be2cc56527 | 0.6% |
+| Nobunaga's Ambition II (USA).nes | 5 | ed6298a164ed5c6f | 0.0% |
 | Shatterhand (USA).nes | 4 | 5012b52846c85bbd | 0.0% |
 | Super C (USA).nes | 4 | d203d72fc6ccdcfd | 0.1% |
 | Super Mario Bros. 3 (USA) (Rev A).nes | 4 | a950ee1dc1d5b483 | 0.4% |

@@ -96,6 +96,9 @@ case "$MODE" in
 	;;
 *)
 	printf '| ROM | mapper | hash (oráculo) | estructura vs mesen |\n|---|---:|---|---:|\n'
-	rows | while IFS=$'\t' read -r n m h s; do printf '| %s | %s | %s | %s%% |\n' "$n" "$m" "$h" "$s"; done
+	rows | while IFS=$'\t' read -r n m h s; do
+		sfmt="$s"; [ "$s" != "flat" ] && sfmt="$s%"
+		printf '| %s | %s | %s | %s |\n' "$n" "$m" "$h" "$sfmt"
+	done
 	;;
 esac
