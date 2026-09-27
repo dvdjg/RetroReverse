@@ -78,11 +78,13 @@ for i in range(n):
     # el tono de paleta, que es ruido entre emuladores). Refleja geometría/tiles.
     if abs((r1*lr+g1*lg+b1*lb)-(r2*lr+g2*lg+b2*lb))>48: sdiff+=1
 pct=100.0*diff/n; spct=100.0*sdiff/n
-flat = c_ours<=FLAT_MAX and c_ref<=FLAT_MAX
+# "Inconcluyente" sólo si ambos frames son planos **y** difieren (el clásico 100%
+# engañoso de pantalla de espera). Si siendo planos coinciden (color≈0), es un
+# match válido (p. ej. Ninja Gaiden II en negro a 60 frames).
+flat = c_ours<=FLAT_MAX and c_ref<=FLAT_MAX and pct>thr
 tag = ' INCONCLUYENTE(pantalla-plan)' if flat else ''
 print('diff_mesen: color=%.1f%%  estructura(lum)=%.1f%% (umbral %.1f%%) colores=%d/%d%s'
       %(pct,spct,thr,c_ours,c_ref,tag))
-# Si ambos frames son planos, no es una divergencia fiable → salir 0 (no falla).
 if flat:
     sys.exit(0)
 sys.exit(0 if pct<thr else 1)

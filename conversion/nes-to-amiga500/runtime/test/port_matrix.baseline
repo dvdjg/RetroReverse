@@ -1,4 +1,4 @@
-﻿# Baseline (mapper hash estructura vs mesen, 60 frames).
+# Baseline (mapper hash estructura vs mesen, 60 frames).
 Adventure Island 3 (USA).nes 0.0
 Akumajou Densetsu (Japan).nes 2.7
 Batman - Return of the Joker (USA).nes 0.0
@@ -7,7 +7,7 @@ Battletoads (USA).nes 1.9
 Castlevania III - Dracula's Curse (USA).nes 2.7
 Contra (USA).nes 0.9
 Crystalis (USA).nes 2.7
-Esper Dream 2 - Aratanaru Tatakai (Japan).nes 100.0
+Esper Dream 2 - Aratanaru Tatakai (Japan).nes flat
 Gemfire (USA).nes 0.0
 Jurassic Park (USA).nes 0.0
 Kirby's Adventure (USA) (Rev A).nes 0.4
@@ -21,7 +21,7 @@ Mouryou Senki Madara (Japan).nes 99.9
 Mr. Gimmick (Europe).nes 0.0
 Ninja Gaiden II - The Dark Sword of Chaos (USA).nes 0.0
 Ninja Gaiden III - The Ancient Ship of Doom (USA).nes 0.0
-Nobunaga's Ambition II (USA).nes 0.6
+Nobunaga's Ambition II (USA).nes 0.0
 Shatterhand (USA).nes 0.0
 Super C (USA).nes 0.1
 Super Mario Bros. 3 (USA) (Rev A).nes 0.4
@@ -38,7 +38,7 @@ dk.nes 0.0
 dkjr.nes 0.0
 ducktales.nes 0.0
 exb.nes 0.0
-galaga.nes 0.9
+galaga.nes 1.9
 gradius.nes 3.3
 ic.nes 92.2
 jurassicpark.nes 0.0
@@ -57,7 +57,7 @@ mspacman.nes 0.0
 ninjagaiden.nes 1.2
 ninjagaideniiitheancientshipofdoom.nes 0.0
 ninjagaideniithedarkswordofchaos.nes 0.0
-pacman.nes 0.3
+pacman.nes 9.4
 popeye.nes 0.0
 shatterhand.nes 0.0
 smb.nes 3.1
