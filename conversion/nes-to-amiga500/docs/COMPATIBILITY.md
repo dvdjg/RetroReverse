@@ -4,6 +4,10 @@ Por cada ROM de `runtime/build/*.nes`: **mapper**, **hash de framebuffer del or�
 determinista, `nes_frame`) y diff **estructural** (luminancia, tolerante a la paleta) contra `mesen`
 a 60 frames. Regenerar: `bash runtime/test/port_matrix.sh` (o `--subset`, `--gate`, `--update`).
 
+Las ROMs nuevas de mappers ampliados (VRC6/MMC5/AxROM/FME-7) se importan de
+`roms/nes/dificiles/*.zip` con `bash runtime/test/import-new-roms.sh` (el contenido de las ROMs no se
+versiona; `build/` está en `.gitignore`).
+
 Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-sync por PC) está en
 [`REFERENCE_TRACER.md`](REFERENCE_TRACER.md); las limitaciones reales, en [`RISKS.md`](RISKS.md).
 
