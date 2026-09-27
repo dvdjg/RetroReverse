@@ -110,6 +110,11 @@ struct Mapper {
 	bool mmc5_in_frame = false;         ///< La PPU está renderizando (para el contador).
 	eng::u8 mmc5_mult1 = 0;             ///< $5205: multiplicador (operando 1).
 	eng::u8 mmc5_mult2 = 0;             ///< $5206: multiplicador (operando 2).
+	// Split vertical ($5200-$5202). PENDIENTE: el render del split (nametable desde
+	// ExRAM por columnas + patrón del banco) no está implementado; se almacenan los regs.
+	eng::u8 mmc5_split_ctrl = 0;        ///< $5200: enable(bit7) + lado(bit6) + delimiter(0-4).
+	eng::u8 mmc5_split_scroll = 0;      ///< $5201: scroll del split.
+	eng::u8 mmc5_split_bank = 0;        ///< $5202: banco de CHR del split.
 
 	// --- FME-7 / Sunsoft 5B (mapper 69) ---
 	eng::u8 fme7_command = 0;        ///< $8000: comando (0-15).
@@ -772,9 +777,12 @@ private:
 				mmc5_irq_pending = false;
 			}
 			break;
+		case 0x5200u: mmc5_split_ctrl = value; break;
+		case 0x5201u: mmc5_split_scroll = value; break;
+		case 0x5202u: mmc5_split_bank = value; break;
 		case 0x5205u: mmc5_mult1 = value; break;
 		case 0x5206u: mmc5_mult2 = value; break;
-		default: break; // $5000-$5015 (audio), $5102/$5103 (protect), $5200-$5202 (split)
+		default: break; // $5000-$5015 (audio), $5102/$5103 (protección WRAM)
 		}
 	}
 
