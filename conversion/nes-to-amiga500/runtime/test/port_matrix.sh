@@ -52,7 +52,9 @@ rows() {
 		if [ "$MODE" = "--subset" ] && ! printf '%s' "$name" | grep -qE "$SUBSET_RE"; then
 			continue
 		fi
-		printf '%s %s %s %s\n' "$name" "$(mapper_of "$rom")" "$(hash_of "$rom")" "$(struct_of "$rom")"
+		# Tab como separador: los nombres de ROM traen espacios y `read` por
+		# espacios partiría el nombre (bug histórico del baseline).
+		printf '%s\t%s\t%s\t%s\n' "$name" "$(mapper_of "$rom")" "$(hash_of "$rom")" "$(struct_of "$rom")"
 	done
 }
 
@@ -60,7 +62,7 @@ case "$MODE" in
 --update)
 	: > "$BASELINE"
 	echo "# Baseline (mapper hash estructura vs mesen, $FRAMES frames)." >> "$BASELINE"
-	rows | while read -r n m h s; do printf '%s %s\n' "$n" "${s:-?}" >> "$BASELINE"; done
+	while IFS=$'\t' read -r n m h s; do printf '%s %s\n' "$n" "${s:-?}" >> "$BASELINE"; done < <(rows)
 	echo "baseline actualizado: $BASELINE"
 	;;
 --gate)
@@ -69,7 +71,7 @@ case "$MODE" in
 	# `rows` se evalúa UNA vez y como proceso sustituido (`< <(...)`) para que el
 	# bucle corra en el shell actual y `rc` se propague al `exit` (con `rows | while`
 	# el bucle va en un subshell y `rc` se pierde).
-	while read -r n m h s; do
+	while IFS=$'\t' read -r n m h s; do
 		want="$(awk -v x="$n" '$1==x{print $2}' "$BASELINE")"
 		flag=""
 		if [ -n "$want" ]; then
@@ -82,6 +84,6 @@ case "$MODE" in
 	;;
 *)
 	printf '| ROM | mapper | hash (oráculo) | estructura vs mesen |\n|---|---:|---|---:|\n'
-	rows | while read -r n m h s; do printf '| %s | %s | %s | %s%% |\n' "$n" "$m" "$h" "$s"; done
+	rows | while IFS=$'\t' read -r n m h s; do printf '| %s | %s | %s | %s%% |\n' "$n" "$m" "$h" "$s"; done
 	;;
 esac

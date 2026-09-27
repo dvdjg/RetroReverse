@@ -125,7 +125,21 @@ frame. El `budget` del ejecutor rápido pasa de "hasta fin de scanline" a "hasta
 
 ### Fase 4 — Lectura cycle-exacta de `$2002`
 
-> **Resultados negativos 2026 (acotan el problema).**
+> **Resultado negativo 2026 (muestreo temprano, medido).** Se probó muestrear `$2002`
+> **antes** de relojear la PPU el ciclo del acceso de datos (`N2A_VBL_SAMPLE_EARLY` en
+> `Interpreter::rd`) — acercando el instante de muestreo al ciclo real. Medido contra `mesen`
+> (estructura de luminancia) en 6 ROMs: **neutro total** (metalstorm 14.2%, gemfire 34.2%,
+> smb 3.1%, bf/dk 0.0%, ic 92.2%, idénticos al baseline). Confirma que el problema **no es
+> el valor/instante del flag**, sino la **resolución temporal** (fase CPU↔PPU sub-dot), como
+> ya concluía el análisis previo. Revertido; sin regresiones.
+>
+> **Resultado negativo 2026 (acotado por traza).** Con `trace_diff` sobre las ROMs de mappers
+> nuevos: **VRC6** (Akumajou: divergimos en el bucle y mesen ya en el NMI), **AxROM**
+> (Battletoads: `LDA/BPL` de espera), **FME-7** (Mr. Gimmick: `LDA/BPL` de espera) → **los tres
+> divergen por la misma causa** (timing de VBlank/NMI), no por bugs de mapper. Igual que MMC5.
+> Es decir: **un solo límite** transversal a todos los mappers nuevos.
+>
+> **Resultados negativos previos 2026 (acotan el problema).**
 > 1. **La fase es neutra.** Con Fase 2 activa (no-snap), adelantar la **fase del PPU en el reset**
 >    (`-DN2A_PPU_PHASE=0/5/7/9/10/12`) es **neutro total** (idx 43447): la lectura y el flag son
 >    función de la fase → cualquier desplazamiento mueve los dos por igual → la relación

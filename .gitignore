@@ -78,6 +78,8 @@ conversion/**/generated/*
 conversion/**/build/
 conversion/**/*.nes
 conversion/**/*.bin
+# Volcados de diagnóstico de `frame_probe` (se escriben en el CWD del runtime).
+conversion/**/frame_probe.*
 
 # --- ROMs propias: recepción central (contenido NUNCA versionado; se conserva la estructura) ---
 roms/*

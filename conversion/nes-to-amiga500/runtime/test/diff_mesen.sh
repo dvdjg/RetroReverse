@@ -24,17 +24,26 @@ fi
 [ -n "$ROM" ] && [ -f "$ROM" ] || { echo "diff_mesen: sin ROM; se omite."; exit 0; }
 command -v python3 >/dev/null 2>&1 || { echo "diff_mesen: sin python3; se omite."; exit 0; }
 
-mkdir -p "$ROOT/build/mesen"
-# Limpia capturas previas: si no, `find | sort | tail -1` puede elegir un frame
-# de una ejecución anterior (otra ROM o otro nº de frames) como referencia.
-rm -f "$ROOT/build/mesen/screenshots"/*.ppm
+# Directorio de salida limpio por ejecución: si se reutiliza, el orquestador
+# puede dejar ficheros de una ROM anterior y `find | sort | tail -1` elegiría un
+# frame equivocado (bug que rompía el baseline en lote).
+OUT="$ROOT/build/mesen/out"
+rm -rf "$OUT"
+mkdir -p "$OUT"
 echo "diff_mesen: ROM=$(basename "$ROM") frames=$FRAMES"
-"$CXX" -std=gnu++23 -O2 -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" \
-	"$ROOT/tools/nes_frame.cpp" -o "$ROOT/build/nes_frame"
+# Compila a un nombre temporal y sustituye de forma atómica: si se recompila
+# directamente sobre `nes_frame` en un bucle (`port_matrix` llama a esta script
+# N veces), en `/mnt/c` el binario queda bloqueado y la compilación falla →
+# se ejecuta un `nes_frame` viejo y `ours.ppm` sale de otra ROM (bug del baseline).
+if [ ! -x "$ROOT/build/nes_frame" ] || [ "$ROOT/tools/nes_frame.cpp" -nt "$ROOT/build/nes_frame" ]; then
+	"$CXX" -std=gnu++23 -O2 -I"$ENG_INC" -I"$ROOT/include" -I"$ROOT/fallback" \
+		"$ROOT/tools/nes_frame.cpp" -o "$ROOT/build/nes_frame.tmp" &&
+		mv -f "$ROOT/build/nes_frame.tmp" "$ROOT/build/nes_frame"
+fi
 "$ROOT/build/nes_frame" "$ROM" "$ROOT/build/ours.ppm" "$FRAMES" >/dev/null
-"$ORCH" --core "$MESEN" --rom "$ROM" --out "$ROOT/build/mesen" --frames "$FRAMES" --interval 0 \
+"$ORCH" --core "$MESEN" --rom "$ROM" --out "$OUT" --frames "$FRAMES" --interval 0 \
 	>/dev/null 2>&1 || { echo "diff_mesen: el orquestador falló; se omite."; exit 0; }
-REF="$(find "$ROOT/build/mesen/screenshots" -name '*.ppm' 2>/dev/null | sort | tail -1 || true)"
+REF="$(find "$OUT/screenshots" -name '*.ppm' 2>/dev/null | sort | tail -1 || true)"
 [ -n "$REF" ] || { echo "diff_mesen: mesen no dejó frame; se omite."; exit 0; }
 
 python3 - "$ROOT/build/ours.ppm" "$REF" "$THRESHOLD" <<'PY'

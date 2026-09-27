@@ -1,32 +1,32 @@
 # Baseline (mapper hash estructura vs mesen, 60 frames).
-Adventure (USA).nes 4 5d038b0a606c8533 0.0
-Akumajou 24  96.9
-Batman of the Joker (USA).nes 69  96.9
-Batman Video Game (USA).nes 4 fb3e71ebad8fa8f7 0.0
-Battletoads 6.7
-Castlevania Dracula's Curse (USA).nes 5  10.0
-Contra b43e93ee563b00f1 0.9
-Crystalis 8a8236eec0306f33 2.7
-Esper - Aratanaru Tatakai (Japan).nes 26  100.0
-Gemfire 100.0
-Jurassic 4 b4f6ffdae7208829 0.0
-Kirby's (Rev A).nes 4 328eec9c90919d81 0.4
-Laser 5  97.0
-Mega (USA).nes 4 4eb841b0583bbb83 0.0
-Mega (USA) (Rev A).nes 4 729624b8d3285f43 2.6
-Mega (USA).nes 4 335d4236a41e1cbd 0.0
-Mega (USA).nes 4 3843a7520e54c17d 0.0
-Metal 4 82679d2512b7c06b 14.2
-Mouryou (Japan).nes 26  34.5
-Mr. 69  33.9
-Ninja - The Dark Sword of Chaos (USA).nes 4 5262cb44d08ec383 0.0
-Ninja - The Ancient Ship of Doom (USA).nes 4 5262cb44d08ec383 0.0
-Nobunaga's (USA).nes 5  0.6
-Shatterhand 5012b52846c85bbd 0.0
-Super 4 d203d72fc6ccdcfd 0.1
-Super 3 (USA) (Rev A).nes 4 a950ee1dc1d5b483 0.4
-Tiny (USA).nes 4 4b838964cfde9dfd 0.0
-Uncharted 5  4.8
+Adventure Island 3 (USA).nes 0.0
+Akumajou Densetsu (Japan).nes 2.7
+Batman - Return of the Joker (USA).nes 0.0
+Batman - The Video Game (USA).nes 0.0
+Battletoads (USA).nes 1.9
+Castlevania III - Dracula's Curse (USA).nes 2.7
+Contra (USA).nes 0.9
+Crystalis (USA).nes 2.7
+Esper Dream 2 - Aratanaru Tatakai (Japan).nes 100.0
+Gemfire (USA).nes 0.0
+Jurassic Park (USA).nes 0.0
+Kirby's Adventure (USA) (Rev A).nes 0.4
+Laser Invasion (USA).nes 3.1
+Mega Man 3 (USA).nes 0.0
+Mega Man 4 (USA) (Rev A).nes 2.6
+Mega Man 5 (USA).nes 0.0
+Mega Man 6 (USA).nes 0.0
+Metal Storm (USA).nes 14.2
+Mouryou Senki Madara (Japan).nes 99.9
+Mr. Gimmick (Europe).nes 0.0
+Ninja Gaiden II - The Dark Sword of Chaos (USA).nes 0.0
+Ninja Gaiden III - The Ancient Ship of Doom (USA).nes 0.0
+Nobunaga's Ambition II (USA).nes 0.6
+Shatterhand (USA).nes 0.0
+Super C (USA).nes 0.1
+Super Mario Bros. 3 (USA) (Rev A).nes 0.4
+Tiny Toon Adventures (USA).nes 0.0
+Uncharted Waters (USA).nes 45.8
 adventureisland3.nes 0.0
 bf.nes 0.0
 bioniccommando.nes 0.0
@@ -34,11 +34,13 @@ blastermaster.nes 0.0
 castlevania.nes 0.0
 contra.nes 0.9
 crystalis.nes 2.7
+cv3_t.nes 2.7
 dk.nes 0.0
 dkjr.nes 0.0
 ducktales.nes 0.0
 exb.nes 0.0
-galaga.nes 36.7
+galaga.nes 0.9
+gemfire_t.nes 0.0
 gradius.nes 3.3
 ic.nes 92.2
 jurassicpark.nes 0.0
@@ -57,11 +59,11 @@ mspacman.nes 0.0
 ninjagaiden.nes 1.2
 ninjagaideniiitheancientshipofdoom.nes 0.0
 ninjagaideniithedarkswordofchaos.nes 0.0
-pacman.nes 13.2
+pacman.nes 0.3
 popeye.nes 0.0
 shatterhand.nes 0.0
 smb.nes 3.1
 smb3.nes 0.4
 superc.nes 0.1
 tinytoonadventures.nes 0.0
-xevious.nes 3.6
+xevious.nes 0.0
