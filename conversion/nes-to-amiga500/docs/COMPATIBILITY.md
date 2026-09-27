@@ -123,8 +123,12 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
 
 Pendientes reales (2026, tras la matriz corregida):
 
-- **VRC6b (26)**: **Esper Dream 2 (100%)** y **Mouryou Senki Madara (99.9%)** pintan mal → bug de la
-  variante b (detección/mapping). Prioridad alta (frames totalmente distintos a `mesen`).
+- **VRC6b (26)**: **Esper Dream 2 (100%)** y **Mouryou Senki Madara (99.9%)** pintan mal. Causa
+  probable identificada: usan **nametables por CHR ROM** (`$B003` bit 4), modo que el runtime
+  **no modela** (`nes_mapper.hpp::vrc6_update_mirroring` retorna sin efecto si `bit 4` está puesto;
+  ver `external/libretro-mesen/Core/VRC6.h::UpdatePpuBanking`, rama `if(_bankingMode & 0x10)`).
+  Akumajou Densetsu (VRC6/24, CIRAM normal) sí está a 2.7%. **Arreglo**: mapear los 4 nametables a
+  las páginas CHR indicadas por `_chrRegisters[4..7]` (nametable = 1 KB del CHR ROM).
 - **MMC5 (5)**: **Uncharted Waters 45.8%** divergencia notoria (¿PRG-RAM 512 KB / CHR 128 KB / split?).
   Gemfire, Laser Invasion y Nobunaga's ya están a 0.0–3.1%.
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).

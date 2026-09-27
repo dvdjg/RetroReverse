@@ -134,6 +134,15 @@ intérprete es la granularidad de bloque (vía 2).
 
 ### Estrategia considerada: *state-injection* (Test A, 2026) — **EN DIAGNÓSTICO**
 
+> **Actualización 2026 (corrección de medición).** Al arreglar `nes_frame` (que **no cargaba** los
+> mappers nuevos y devolvía un frame vacío), se descubrió que **galaga y pacman** —parte del
+> "límite" de esta sección— estaban en realidad a **0.9% / 0.3%** (no 36.7% / 13.2%): sus cifras
+> eran **basura de medición**, no el límite de timing. El límite real queda reducido a **ic 92.2%,
+> metalstorm 14.2%, gradius 3.3%, smb 3.1%**. La divergencia de CPU (VBlank/NMI) que muestra
+> `trace_diff` **sí existe**, pero **no siempre** se traduce en frame distinto a 60 frames. Esto
+> **reduce el valor** de la *state-injection* (afecta a menos juegos) y refuerza la conclusión de
+> "dejar en stand-by": con el baseline correcto el límite es menor de lo documentado.
+
 > Contexto de timing y alternativas descartadas: [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md) (Fases 0–6,
 > fase/residuo, IRQ MMC3, y por qué ningún ajuste de fase/flag/dot cierra el offset sin regresar un
 > juego ya a 0.0%).
