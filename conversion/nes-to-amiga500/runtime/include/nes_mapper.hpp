@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 /// \file nes_mapper.hpp
 /// Mapper de cartucho (bank switching) del runtime. Soporta los mappers más
