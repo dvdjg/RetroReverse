@@ -55,10 +55,21 @@ El *snap* de la frontera de frame **ya no es necesario para la equivalencia**:
 **Conclusión**: Fase 2 es ahora **equivalencia-safe** (gran avance) y ataca la **deriva entre frames**;
 se puede abordar sin el riesgo que tenía.
 
-> **Implementada (2026).** `kFrameSnap=false` por **defecto** (frontera de frame continua, sin snap;
-> el `#ifdef N2A_FRAME_SNAP` permite volver al snap). Suite verde (`equivalencia OK`) y
-> `port_matrix --gate` EXIT=0 (0 regresiones). Es más correcto (fase continua entre frames) y es la
-> base de Fase 3/4; de momento neutro en el % porque la primera divergencia está en frame 0.
+> **Implementada PARCIALMENTE (2026).** `kFrameSnap=false` por **defecto** (el *snap* del *scanline*
+> se desactiva; `#ifdef N2A_FRAME_SNAP` lo reactiva). Suite verde y gate EXIT=0.
+
+> **Fase 2 COMPLETA: bloqueada por el IRQ de la MMC3 (2026).** El commit anterior dejaba
+> **`ppu.dot = 0u` incondicional** al inicio de cada frame → la fase del PPU se **reseteaba cada
+> frame** y **cualquier ajuste de fase era inerte** (lo confirmó el probe: los gdots de la lectura de
+> `$2002` eran **idénticos** con fase 0 y 9). Al hacer el dot **condicional** (fase continua de
+> verdad):
+> - La **fase sí importa**: la lectura de `$2002` se mueve, y la salida del bucle de VBlank **se
+>   invierte** (fase ≥4 → salimos 1 iteración **antes**; fase ≤3 → **después**) → la alineación fina
+>   es **sub-ciclo** (entre 3 y 4 ciclos).
+> - **Pero regresiona `jurassicpark`** (13.7% → 16.6%): usa el **IRQ de raster de la MMC3**, sensible
+>   a la fase. → **Revertido** hasta que el IRQ (A12) sea exacto (Fase 3).
+> **Conclusión**: Fase 2 completa es la correcta, pero **requiere Fase 3** (IRQ MMC3 por ciclo) para
+> no regresionar; hacerlas **juntas**.
 
 ### Fase 1 — PPU **dot a dot**
 Sustituir el avance en bloque (`ppu.dot = end; while (dot>=341)`) por un lazo que llame
