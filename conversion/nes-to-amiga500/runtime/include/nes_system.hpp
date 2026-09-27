@@ -247,6 +247,15 @@ struct NesSystem {
 	/// Ejecuta un frame completo: corre la CPU a lo largo de las 262 líneas de la
 	/// PPU (incluido VBlank) hasta que la PPU vuelve a la línea 0. Así el juego ve
 	/// el flag de VBlank y ejecuta su rutina de actualización.
+	///
+	/// EXPERIMENTO Fase 0 (`docs/TIMING_ROADMAP.md`): con `kFrameSnap=false` el *snap*
+	/// de la frontera de frame se desactiva (para diagnosticar por qué rompe la
+	/// equivalencia intérprete↔codegen). Debe quedar en `true` salvo para el diagnóstico.
+#ifdef N2A_NO_FRAME_SNAP
+	static constexpr bool kFrameSnap = false;
+#else
+	static constexpr bool kFrameSnap = true;
+#endif
 	void run_frame() {
 		// Sin supresión de VBlank: mesen levanta el flag en (241,1) desde el frame 0
 		// (el antiguo `ppudead=2` de fceumm era un hack para Knight Rider y desalineaba
@@ -270,7 +279,7 @@ struct NesSystem {
 		// saltaría las líneas 0-239 y adelantaría el primer VBlank ~27000 ciclos, haciendo
 		// que el bucle `LDA $2002/BPL` del reset salga de inmediato). Desde el 2º frame la
 		// PPU ya está en la 240 y se fija una frontera nítida.
-		if (frames_done_ > 0) {
+		if (kFrameSnap && frames_done_ > 0) {
 			ppu.scanline = 240u;
 		}
 		++frames_done_;

@@ -43,6 +43,18 @@ Conclusión: el desfase no es "1 ciclo" arbitrario; es una **relación lectura�
 CPU↔PPU) que solo se corrige prediciendo el **ciclo exacto del acceso** (Fase 3/4), no moviendo el
 flag (adelantarlo "a lo bruto" rompe el arranque: lo probamos).
 
+### Fase 2 — hallazgo 2026 (desbloqueada)
+El *snap* de la frontera de frame **ya no es necesario para la equivalencia**:
+- Antes, quitarlo rompía `equivalencia` (`ram_diff=5`).
+- **Ahora es `ram_diff=0`** con `kFrameSnap=false` — el **corte del ejecutor rápido en accesos a
+  `$2000-$3FFF`** (`touches_ppu`, añadido para el bug de `$2002`) **fue lo que lo arregló**: sin el
+  snap, intérprete y codegen siguen coincidiendo.
+- Pero quitar el snap **no mueve la primera divergencia** (que está en **frame 0**, y el frame 0
+  nunca hacía snap): es un problema de **frame N>0** (deriva de fase). El primer desfase (frame 0) es
+  otra cosa: la relación lectura↔flag (ver Fase 0bis / Fase 4).
+**Conclusión**: Fase 2 es ahora **equivalencia-safe** (gran avance) y ataca la **deriva entre frames**;
+se puede abordar sin el riesgo que tenía.
+
 ### Fase 1 — PPU **dot a dot**
 Sustituir el avance en bloque (`ppu.dot = end; while (dot>=341)`) por un lazo que llame
 `tick_dot()` **una vez por dot** (3 por ciclo de CPU), resolviendo en ese punto: VBlank en `(241,1)`
