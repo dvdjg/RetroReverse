@@ -220,7 +220,10 @@ struct NesSystem {
 			--warmup_frames;
 		}
 		ppu.mirror_h = mapper.mirror_h; // la MMC3 cambia el mirroring en runtime
-		ppu.scanline = 0;
+		// Frontera de frame en la **pre-VBlank** (scanline 240), como `FCEUPPU_Loop`:
+		// así el flag de VBlank cae al principio del frame y los bucles de espera del
+		// juego coinciden con la referencia (fceumm).
+		ppu.scanline = 240u;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
 		ppu.dot = 0u;
@@ -233,8 +236,8 @@ struct NesSystem {
 			if (ppu.scanline == 241u) {
 				seen_vblank = true;
 			}
-			if (seen_vblank && ppu.scanline == 0u) {
-				break; // el frame se ha completado (la PPU volvió a la línea 0)
+			if (seen_vblank && ppu.scanline == 240u) {
+				break; // frame completo: la PPU volvió a la pre-VBlank
 			}
 			if (guard > 120000) {
 				break; // salvaguarda anti-cuelgue
