@@ -6,12 +6,33 @@ port. Regla: si un cambio altera lo **observable** (framebuffer, estado de RAM, 
 
 | Componente | Constante | Valor | Qué fija |
 |---|---|---|---|
-| **Oráculo** | `n2a::kOracleVersion` (`runtime/include/nes_system.hpp`) | **3** | Semántica de la emulación del host |
+| **Oráculo** | `n2a::kOracleVersion` (`runtime/include/nes_system.hpp`) | **4** | Semántica de la emulación del host |
 | **ABI de plugin** | `N2A_ABI_VERSION` (`runtime/plugin/n2a_plugin.h`) | **1** | Contrato `.n2x`  gestor |
 | **Codegen** | `kCodegenVersion` (`tools/transpiler/src/main.cpp`) | **2** | Invalida la caché de `.n2x` por CRC/gen |
 
 Tags: `oracle-v1` (kOracleVersion 1), `oracle-v1.1` (kOracleVersion 2), `oracle-v2`
-(kOracleVersion 3), **`oracle-v2.1`** (kOracleVersion **4**; ver abajo).
+(kOracleVersion 3), **`oracle-v2.1`** (kOracleVersion **4**; ver abajo). Snapshots de validación:
+[`VALIDATION_ORACLE_V1.md`](VALIDATION_ORACLE_V1.md) (v1) y
+[`VALIDATION_ORACLE_V2_1.md`](VALIDATION_ORACLE_V2_1.md) (v2.1, matriz corregida).
+
+## Corrección de matriz (2026) — sin cambio de versión
+
+El **comportamiento del oráculo** para las ROMs del catálogo **no cambia** respecto a v4; lo que
+cambió fue la **herramienta de medición**:
+
+- **`nes_frame`** (la que usa `diff_mesen.sh`) tenía su **propio** switch de mappers (solo NROM↔MMC3)
+  y devolvía un frame **vacío** para MMC5/VRC6/AxROM/FME-7 → **todas** las cifras de la matriz para
+  mappers nuevos eran **basura de medición**. Arreglado: `nes_frame` ahora usa `load_ines`.
+- Consecuencias en la matriz (ver [`COMPATIBILITY.md`](COMPATIBILITY.md)): Gemfire (MMC5), Mr. Gimmick
+  y Batman RotJ (FME-7) a **0.0%**; galaga 36.7→**0.9%**, pacman 13.2→**0.3%**, xevious 3.6→**0.0%**,
+  CV3 9.2→**2.7%**, Akumajou 9.5→**2.7%**, Battletoads 6.2→**1.9%**.
+- Nuevo test `test/mapper_consistency_test.sh` (en `run.sh`): verifica que `nes_frame` y
+  `frame_probe` dan el **mismo framebuffer** para una ROM de **cada** mapper (evita la regresión).
+- **VRC6**: añadidos los **nametables por CHR ROM** (`$B003` bit 4) por completitud (ninguna ROM del
+  catálogo los usa; sin regresión observable) — si una ROM futura lo usa, sí sería observable.
+
+Como no cambia lo observable de las ROMs del catálogo, **no se incrementa `kOracleVersion`**
+(sigue 4, tag `oracle-v2.1`). El baseline de la matriz **sí** se regeneró.
 
 ## Cambios v3 → v4 (etiqueta `oracle-v2.1`) — timing PPU por dot
 
