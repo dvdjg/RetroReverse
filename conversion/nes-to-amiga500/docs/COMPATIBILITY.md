@@ -19,8 +19,14 @@ a 60 frames, por ROM de `runtime/build/*.nes`. Regenerar: `bash runtime/test/por
   (Xevious).
 - **pacman 12.9% / galaga 36.4%**: conocidos por **deriva de frames** (nuestro emulador no es
   dot-exacto sub-ciclo); a más frames, la comparación se desalinea.
-- **ic 92.2%**: **anómalo** → candidato a **bug real** de render (tiles/sprites/nametable) o a
-  deriva severa. Pendiente de investigar.
+- **ic 92.2%**: **bug real confirmado**. El framebuffer sale de **un solo color** (fondo): la
+  **paleta no se carga**. Evidencia (traza `$2007` a 60 frames): solo se escribe `palette[0x1F]`;
+  el juego escribe a `$3F1F,$3F3F,…` (paso `$20`) con valor `$5F` — un run de relleno de la
+  nametable (`$3D5F+0x20k`) que **desborda hacia `$3F00+`** (paleta) y a `$4000+` (patrón). El
+  render es correcto dado una paleta vacía; el fallo está en la **carga de paleta** (la rutina que
+  fija `v=$3F00` en `$80A8` hace un "warm-up" y luego `v=$0000`; el cargador real no llega a
+  escribir `$3F00-$3F1E`). Pendiente de trazar `$2006` para localizar el cargador y ver por qué no
+  corre.
 
 ## Por qué esta matriz importa para el Amiga
 

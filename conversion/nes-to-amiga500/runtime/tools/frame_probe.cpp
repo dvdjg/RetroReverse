@@ -94,6 +94,10 @@ int main(int argc, char** argv) {
 		std::fwrite(sys.ppu.vram, 1, sizeof(sys.ppu.vram), fp);
 		std::fclose(fp);
 	}
+	if (FILE* fp = std::fopen("frame_probe.pal", "wb")) {
+		std::fwrite(sys.ppu.palette, 1, sizeof(sys.ppu.palette), fp);
+		std::fclose(fp);
+	}
 	if (FILE* fp = std::fopen("frame_probe.ram", "wb")) {
 		std::fwrite(sys.mem.ram, 1, sizeof(sys.mem.ram), fp);
 		std::fclose(fp);

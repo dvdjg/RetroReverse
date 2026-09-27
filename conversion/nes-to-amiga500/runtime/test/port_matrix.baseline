@@ -1,0 +1,15 @@
+# Baseline de la matriz de compatibilidad (estructura(lum) vs mesen, 60 frames).
+# Generado con `port_matrix.sh --update`. Formato: <rom> <pct>.
+bf.nes 0.0
+dk.nes 0.0
+dkjr.nes 0.0
+exb.nes 0.0
+galaga.nes 36.4
+ic.nes 92.2
+kungfu.nes 0.0
+mariobros.nes 0.0
+mspacman.nes 0.0
+pacman.nes 12.9
+popeye.nes 0.0
+smb.nes 3.1
+xevious.nes 4.4

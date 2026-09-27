@@ -9,6 +9,7 @@
 // Diseño: docs/TRANSPILER.md y tools/transpiler/README.md.
 
 #include "host_io.hpp"
+#include "raster_idioms.hpp"
 #include "transpiler.hpp"
 
 #include <cstdio>
@@ -624,6 +625,54 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 
 } // namespace
 
+/// Escribe el **mapeo de idiomas de raster** de `roms` a `out_path` (JSON), que
+/// consumirá el codegen/backend Amiga para emitir las primitivas HLE (ver
+/// `docs/TIMING_AMIGA.md`). \return `true` si se escribió el fichero.
+static bool write_raster_json(const std::vector<std::string>& roms, const char* out_path) {
+	std::FILE* f = std::fopen(out_path, "wb");
+	if (f == nullptr) {
+		return false;
+	}
+	std::fprintf(f, "{\n");
+	bool first = true;
+	for (const std::string& rom : roms) {
+		n2a::ByteBuffer b;
+		if (!n2a::read_whole_file(rom.c_str(), b) || b.size() < 16u) {
+			continue;
+		}
+		const eng::u8* h = b.data();
+		if (h[0] != 'N' || h[1] != 'E' || h[2] != 'S') {
+			continue;
+		}
+		const eng::usize trainer = (h[6] & 0x04u) ? 512u : 0u;
+		const eng::usize prg = static_cast<eng::usize>(h[4]) * 0x4000u;
+		if (16u + trainer + prg > b.size()) {
+			continue;
+		}
+		n2a::RasterIdioms r;
+		n2a::scan_raster_idioms(b.data() + 16u + trainer, prg, r);
+		char base[256];
+		base_name(rom.c_str(), base, sizeof base);
+		std::fprintf(f, "  %s\"%s\": {\"counts\": [%d,%d,%d]", first ? "" : ",\n", base,
+			     r.counts[0], r.counts[1], r.counts[2]);
+		const auto emit = [&](const char* key, const unsigned* v, int n) {
+			std::fprintf(f, ", \"%s\": [", key);
+			for (int i = 0; i < n && i < 4; ++i) {
+				std::fprintf(f, "%s\"0x%04X\"", i != 0 ? "," : "", v[i]);
+			}
+			std::fprintf(f, "]");
+		};
+		emit("vblank", r.vblank, r.counts[0]);
+		emit("sprite0", r.sprite0, r.counts[1]);
+		emit("delay", r.delay, r.counts[2]);
+		std::fprintf(f, "}");
+		first = false;
+	}
+	std::fprintf(f, "\n}\n");
+	std::fclose(f);
+	return true;
+}
+
 /// Punto de entrada del transpilador. Interpreta los argumentos, y o bien emite
 /// una ROM de prueba, o bien transpila la ROM indicada al `.cpp` de salida.
 ///
@@ -646,6 +695,7 @@ int main(int argc, char** argv) {
 	const char* sevenzip = sevenzip_env != nullptr ? sevenzip_env : "7zr";
 	bool use_7z = true;           // empaquetar el .n2x en .7z por defecto
 	const char* bundle = nullptr; // nombre del .7z que agrupa varias ROMs
+	const char* raster_json = nullptr; // fichero del mapeo de idiomas de raster
 	bool emit_lib = false;
 	int emit = 0; // 0 = transpilar, 1..7 = ROMs de prueba
 	eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc> incs {};
@@ -715,6 +765,10 @@ int main(int argc, char** argv) {
 			bundle = argv[++i];
 			continue;
 		}
+		if (arg == "--raster-json" && i + 1 < argc) {
+			raster_json = argv[++i];
+			continue;
+		}
 		if (arg == "--no-cycles") {
 			g_no_cycles = true;
 			continue;
@@ -779,6 +833,16 @@ int main(int argc, char** argv) {
 	if (in_paths.empty()) {
 		n2a::err_line("error: no hay ROMs de entrada");
 		return 1;
+	}
+
+	// Mapeo de idiomas de raster (para el codegen/backend Amiga): escribe y sale.
+	if (raster_json != nullptr) {
+		if (!write_raster_json(in_paths, raster_json)) {
+			n2a::err_line("error: no se pudo escribir el mapeo de raster");
+			return 1;
+		}
+		n2a::out_line("mapeo de raster escrito.");
+		return 0;
 	}
 
 	// Modo biblioteca: una o más ROMs -> .cpp (fuente) + .n2x (plugin compilado).

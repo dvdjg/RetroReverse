@@ -49,10 +49,13 @@ cambiar los 8 bytes ni los diffs. (f) SMB **no lee `$4015`** → no es el frame 
 los headers previos, `dk`/`galaga` divergen igual → **no es regresión** de estos arreglos.
 
 **Causa.** Todo el timing temporal (eventos de PPU dot-exactos, acceso por ciclo, longitud de frame)
-está descartado. La divergencia es de **estado/CPU**: un contador de arranque (`$0001`, que mesen
-incrementa cada frame) y unos bytes de pila. Candidatos restantes: una **nuance de un opcode** no
-cubierta por nestest, o el **estado de power-up** (RAM/PPU/APU). No rompe el juego (llega al mismo
-título) y **no bloquea el Amiga** (timing por hardware; ver [`TIMING_AMIGA.md`](TIMING_AMIGA.md)).
+está descartado, y el **power-up** también: la RAM es **idéntica a mesen en el frame 1** (el `` `diff` ``
+**es 0**); la divergencia aparece y desaparece entre los frames 2 y 14, en código sensible al timing
+(`$0001` es un puntero/scratch; el bucle de `$8719` lo usa como bytes altos de una lectura de
+`$2007`). Candidato restante: una **nuance de CPU/APU** (p. ej. el frame counter del APU) no cubierta
+por nestest. No rompe el juego (llega al mismo título) y **no bloquea el Amiga** (timing por
+hardware; ver [`TIMING_AMIGA.md`](TIMING_AMIGA.md)). El lockstep interno (intérprete ↔ codegen) ya
+pasa (`ram_diff=0`), así que no es una inconsistencia entre nuestros dos motores.
 
 **Impacto en el codegen.** El mismo efecto aparece entre el **plugin** (bloques) y el **intérprete**
 (instrucción a instrucción): al verificar los 13 `.n2x`, 5 coinciden (RAM 0/2048) y 8 difieren en
