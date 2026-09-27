@@ -135,7 +135,7 @@ struct NesSystem {
 			if (ppu.nmi_occurred) {
 				ppu.nmi_occurred = false;
 				trigger_nmi();
-			} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq)) {
+			} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq || mapper.irq_line())) {
 				trigger_irq();
 			}
 			if (out_instrs != nullptr) {
@@ -201,8 +201,8 @@ struct NesSystem {
 		if (ppu.nmi_occurred) {
 			ppu.nmi_occurred = false; // el NMI se toma en frontera de instrucción
 			trigger_nmi();
-		} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq)) {
-			trigger_irq(); // IRQ (frame counter del APU / DMC), si no está enmascarada
+		} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq || mapper.irq_line())) {
+			trigger_irq(); // IRQ (frame counter del APU / DMC / MMC3), si no enmascarada
 		}
 		return cyc;
 	}
@@ -211,6 +211,7 @@ struct NesSystem {
 	/// PPU (incluido VBlank) hasta que la PPU vuelve a la línea 0. Así el juego ve
 	/// el flag de VBlank y ejecuta su rutina de actualización.
 	void run_frame() {
+		ppu.mirror_h = mapper.mirror_h; // la MMC3 cambia el mirroring en runtime
 		ppu.scanline = 0;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
@@ -295,6 +296,9 @@ private:
 			if (!strobe) shift2 = static_cast<eng::u8>(shift2 >> 1u);
 			return static_cast<eng::u8>(b | 0x40u);
 		}
+		if (a >= 0x6000u && a < 0x8000u) {
+			return mem.prg_ram[a - 0x6000u]; // PRG-RAM del cartucho (MMC1/MMC3)
+		}
 		if (a >= 0x4020u) {
 			return mapper.cpu_read(a);
 		}
@@ -325,6 +329,10 @@ private:
 		}
 		if (a >= 0x4000u && a <= 0x4017u) {
 			apu.write_reg(a, v);
+			return;
+		}
+		if (a >= 0x6000u && a < 0x8000u) {
+			mem.prg_ram[a - 0x6000u] = v; // PRG-RAM del cartucho (MMC1/MMC3)
 			return;
 		}
 		if (a >= 0x4020u) {
@@ -364,6 +372,9 @@ private:
 			ppu.tick_scanline();
 			if (ppu.scanline != before) {
 				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
+				if (ppu.scanline < 240u) {
+					mapper.on_scanline(); // MMC3: contador de scanlines (IRQ por raster)
+				}
 				if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot < ppu.dot) {
 					ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
 				}

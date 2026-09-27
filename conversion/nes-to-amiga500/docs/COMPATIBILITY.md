@@ -79,6 +79,27 @@ Diagnóstico añadido: `NesInterpreter::jam_op`/`jam_pc` (frame_probe lo imprime
 
 Siguiente: cerrar MMC1 con la referencia (filtro de 1 ciclo + modo CHR) antes de MMC3.
 
+## MMC3 (mapper 4) — IMPLEMENTADO
+
+Se añadió **MMC3** a `nes_mapper.hpp` (PRG en 4 ventanas de 8 KB, CHR con modos 2/1 KB,
+mirroring por `$A000`, IRQ por scanline) + **PRG-RAM** (`$6000-$7FFF`) en `NesSystem` (era la
+clave: sin ella SMB3/Crystalis se colgaban) + IRQ de CPU reutilizada. Resultados (estructura vs
+mesen, 60 frames):
+
+| ROM | estructura | notas |
+|---|---:|---|
+| ninjagaiden2 / ninjagaiden3 / megaman6 | **0.0%** | perfecto |
+| megaman4 / tinytoon / superc / crystalis | 2–3% | perfecto (paleta/1 frame) |
+| shatterhand | 6.6% | |
+| adventureisland3 | 17.2% | color 98% (paleta) |
+| megaman5 / jurassicpark | 25–28% | usa IRQ por raster |
+| megaman3 / metalstorm | 36–38% | usa IRQ por raster |
+| smb3 | 53.6% | usa IRQ por raster (status bar) |
+
+Es decir, **el núcleo MMC3 es correcto** (varios a 0.0%); lo que queda alto son juegos que usan el
+**IRQ de raster de la MMC3** (nuestro contador es por scanline y aproxima el A12, y hay deriva de
+frames), más el PRG/CHR mode en algunos casos.
+
 ## Juegos "difíciles" para Mega Drive
 
 Ver [`HARD_GAMES.md`](HARD_GAMES.md): inventario de los 28 juegos traídos de `F:\roms\nes` (MMC3=4,

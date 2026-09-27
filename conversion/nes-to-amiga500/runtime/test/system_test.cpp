@@ -44,6 +44,7 @@ bool load_ines(const char* path, n2a::Mapper& mapper, unsigned& mapper_no) {
 	case 1u: mapper.kind = n2a::MapperKind::Mmc1; break;
 	case 2u: mapper.kind = n2a::MapperKind::Uxrom; break;
 	case 3u: mapper.kind = n2a::MapperKind::Cnrom; break;
+	case 4u: mapper.kind = n2a::MapperKind::Mmc3; break;
 	default: return false;
 	}
 	if (chr_size != 0u && chr_off + chr_size <= n) {

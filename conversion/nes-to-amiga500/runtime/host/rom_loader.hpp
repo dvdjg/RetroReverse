@@ -15,7 +15,7 @@ namespace n2a {
 
 /// ROM cargada: bytes en memoria + mapper listo para `NesSystem::load_mapper`.
 struct LoadedRom {
-	eng::u8 rom[0x40000] = {};    ///< Fichero iNES completo (hasta 256 KB).
+	eng::u8 rom[0x100000] = {};   ///< Fichero iNES completo (hasta 1 MB; SMB3 = 384 KB).
 	eng::u8 chr_ram[0x2000] = {}; ///< CHR RAM si la ROM no trae CHR-ROM.
 	Mapper mapper;                ///< Cartucho configurado.
 	unsigned mapper_no = 0;       ///< Número de mapper detectado.
@@ -60,6 +60,7 @@ inline bool parse_ines(eng::usize size, LoadedRom& out) {
 	case 1u: out.mapper.kind = MapperKind::Mmc1; break;
 	case 2u: out.mapper.kind = MapperKind::Uxrom; break;
 	case 3u: out.mapper.kind = MapperKind::Cnrom; break;
+	case 4u: out.mapper.kind = MapperKind::Mmc3; break;
 	default: return false;
 	}
 	if (chr_size != 0u && chr_off + chr_size <= size) {

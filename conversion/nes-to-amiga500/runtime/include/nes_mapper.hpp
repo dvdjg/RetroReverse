@@ -21,6 +21,7 @@ enum class MapperKind : eng::u8 {
 	Mmc1 = 1,  ///< Shift register (parcial).
 	Uxrom = 2, ///< PRG conmutable (16 KB), CHR fija.
 	Cnrom = 3, ///< PRG fija, CHR conmutable (8 KB).
+	Mmc3 = 4,  ///< PRG/CHR por bancos + IRQ por scanline.
 };
 
 /// Estado del cartucho: PRG/CHR y registros de bancos.
@@ -47,6 +48,39 @@ struct Mapper {
 	/// Hook de **diagnóstico** opcional: `(registro 0..3, valor)` en cada commit del
 	/// MMC1 (ctrl/chr/prg). No afecta al comportamiento.
 	void (*write_trace)(eng::u8 reg, eng::u8 value) = nullptr;
+
+	// --- MMC3 ---
+	eng::u8 mmc3_bank_select = 0;   ///< Registro seleccionado ($8000).
+	eng::u8 mmc3_regs[8] = {0};     ///< R0..R7 ($8001).
+	eng::u8 mmc3_prg_mode = 0;      ///< Modo PRG (bit 6 de $8000).
+	eng::u8 mmc3_chr_mode = 0;      ///< Modo CHR (bit 7 de $8000).
+	eng::u8 mmc3_irq_latch = 0;     ///< Recarga del contador IRQ ($C000).
+	eng::u8 mmc3_irq_counter = 0;   ///< Contador de scanlines del IRQ.
+	bool mmc3_irq_reload = false;   ///< Recargar el contador en el próximo scanline.
+	bool mmc3_irq_enable = false;   ///< IRQ habilitada ($E001/$E000).
+	bool mmc3_irq_pending = false;  ///< IRQ pedida (se limpia al escribir $E000).
+
+	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
+	[[nodiscard]] bool irq_line() const noexcept {
+		return kind == MapperKind::Mmc3 && mmc3_irq_pending;
+	}
+
+	/// Reloj de **una scanline** (lo llama el sistema durante el render). La MMC3
+	/// decrementa su contador y pide IRQ al llegar a 0.
+	void on_scanline() {
+		if (kind != MapperKind::Mmc3) {
+			return;
+		}
+		if (mmc3_irq_counter == 0u || mmc3_irq_reload) {
+			mmc3_irq_counter = mmc3_irq_latch;
+			mmc3_irq_reload = false;
+		} else {
+			--mmc3_irq_counter;
+		}
+		if (mmc3_irq_counter == 0u && mmc3_irq_enable) {
+			mmc3_irq_pending = true;
+		}
+	}
 
 	/// Lee el byte de la CPU en `addr` (zona de cartucho `$4020-$FFFF`).
 	/// \param addr Dirección de 16 bits.
@@ -85,6 +119,26 @@ struct Mapper {
 			}
 			return prg_at(static_cast<eng::u32>(mmc1_prg) * 0x4000u + off);
 		}
+		case MapperKind::Mmc3: {
+			// 4 ventanas de 8 KB. R6/R7 conmutan; las dos últimas fijas.
+			const eng::u32 n8 = prg_size / 0x2000u; // nº de bancos de 8 KB
+			const eng::u32 fixed_last = n8 != 0u ? n8 - 1u : 0u;
+			const eng::u32 fixed_2nd = n8 >= 2u ? n8 - 2u : 0u;
+			eng::u32 bank8;
+			if (addr < 0xA000u) {
+				bank8 = (mmc3_prg_mode == 0u) ? mmc3_regs[6] : fixed_2nd;
+			} else if (addr < 0xC000u) {
+				bank8 = mmc3_regs[7];
+			} else if (addr < 0xE000u) {
+				bank8 = (mmc3_prg_mode == 0u) ? fixed_2nd : mmc3_regs[6];
+			} else {
+				bank8 = fixed_last;
+			}
+			if (n8 != 0u) {
+				bank8 %= n8;
+			}
+			return prg_at(bank8 * 0x2000u + (off & 0x1FFFu));
+		}
 		}
 		return 0u;
 	}
@@ -109,6 +163,9 @@ struct Mapper {
 		case MapperKind::Mmc1:
 			mmc1_write(addr, value);
 			break;
+		case MapperKind::Mmc3:
+			mmc3_write(addr, value);
+			break;
 		}
 	}
 
@@ -123,6 +180,8 @@ struct Mapper {
 			} else if (kind == MapperKind::Mmc1) {
 				const eng::u8 bk = (mmc1_ctrl & 0x10u) ? 0u : mmc1_chr;
 				off += static_cast<eng::u32>(bk) * 0x1000u;
+			} else if (kind == MapperKind::Mmc3) {
+				off = mmc3_chr_addr(addr);
 			}
 			return chr[off % chr_size];
 		}
@@ -181,6 +240,63 @@ private:
 			}
 			mmc1_shift = 0u;
 			mmc1_count = 0u;
+		}
+	}
+
+	/// Dirección CHR (1 KB) para una dirección de PPU según el modo CHR de la MMC3.
+	/// \param addr Dirección de PPU (0..$1FFF).
+	/// \return Offset dentro de la CHR.
+	[[nodiscard]] eng::u32 mmc3_chr_addr(eng::u16 addr) const {
+		if (mmc3_chr_mode == 0u) {
+			// 2 KB en $0000 (R0) y $0800 (R1); 1 KB en $1000..$1C00 (R2..R5).
+			if (addr < 0x0800u) {
+				return static_cast<eng::u32>(mmc3_regs[0] & 0xFEu) * 0x400u + addr;
+			}
+			if (addr < 0x1000u) {
+				return static_cast<eng::u32>(mmc3_regs[1] & 0xFEu) * 0x400u + (addr - 0x0800u);
+			}
+			const eng::u32 r = static_cast<eng::u32>((addr - 0x1000u) >> 10u);
+			return static_cast<eng::u32>(mmc3_regs[2u + r]) * 0x400u + (addr & 0x3FFu);
+		}
+		// 1 KB en $0000..$0C00 (R2..R5); 2 KB en $1000 (R0) y $1800 (R1).
+		if (addr < 0x1000u) {
+			const eng::u32 r = static_cast<eng::u32>(addr >> 10u);
+			return static_cast<eng::u32>(mmc3_regs[2u + r]) * 0x400u + (addr & 0x3FFu);
+		}
+		if (addr < 0x1800u) {
+			return static_cast<eng::u32>(mmc3_regs[0] & 0xFEu) * 0x400u + (addr - 0x1000u);
+		}
+		return static_cast<eng::u32>(mmc3_regs[1] & 0xFEu) * 0x400u + (addr - 0x1800u);
+	}
+
+	/// Escrituras de registro de la MMC3 (`$8000-$FFFF`).
+	void mmc3_write(eng::u16 addr, eng::u8 value) {
+		if (addr < 0xA000u) {                       // $8000-$9FFF
+			if ((addr & 1u) == 0u) {
+				mmc3_bank_select = static_cast<eng::u8>(value & 0x07u);
+				mmc3_prg_mode = (value & 0x40u) ? 1u : 0u;
+				mmc3_chr_mode = (value & 0x80u) ? 1u : 0u;
+			} else {
+				mmc3_regs[mmc3_bank_select] = value;
+			}
+		} else if (addr < 0xC000u) {                // $A000-$BFFF: mirroring
+			if ((addr & 1u) == 0u) {
+				mirror_h = (value & 1u) != 0u; // 0 = vertical, 1 = horizontal
+			}
+			// $A001: protección de PRG-RAM (sin efecto aquí).
+		} else if (addr < 0xE000u) {                // $C000-$DFFF: IRQ
+			if ((addr & 1u) == 0u) {
+				mmc3_irq_latch = value;
+			} else {
+				mmc3_irq_reload = true;
+			}
+		} else {                                    // $E000-$FFFF: habilitar/limpiar
+			if ((addr & 1u) == 0u) {
+				mmc3_irq_enable = false;
+				mmc3_irq_pending = false;
+			} else {
+				mmc3_irq_enable = true;
+			}
 		}
 	}
 };

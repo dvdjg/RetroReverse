@@ -128,6 +128,7 @@ struct TranspiledGame {
 		switch (fn_mapper()) {
 		case 2: m.kind = MapperKind::Uxrom; break;
 		case 3: m.kind = MapperKind::Cnrom; break;
+		case 4: m.kind = MapperKind::Mmc3; break;
 		case 1: m.kind = MapperKind::Mmc1; break;
 		default: m.kind = MapperKind::Nrom; break;
 		}

@@ -16,7 +16,7 @@
 
 namespace {
 
-eng::u8 g_rom[0x40000];   ///< ROM iNES (hasta 256 KB).
+eng::u8 g_rom[0x100000];  ///< ROM iNES (hasta 1 MB; SMB3 = 384 KB).
 eng::u8 g_chr_ram[0x2000]; ///< CHR RAM si la ROM no trae CHR-ROM.
 
 eng::usize load_file(const char* path) {
@@ -77,6 +77,7 @@ int main(int argc, char** argv) {
 	case 1u: mapper.kind = n2a::MapperKind::Mmc1; break;
 	case 2u: mapper.kind = n2a::MapperKind::Uxrom; break;
 	case 3u: mapper.kind = n2a::MapperKind::Cnrom; break;
+	case 4u: mapper.kind = n2a::MapperKind::Mmc3; break;
 	default:
 		std::printf("ERROR: mapper %u no soportado todavía\n", mapper_no);
 		return 2;
