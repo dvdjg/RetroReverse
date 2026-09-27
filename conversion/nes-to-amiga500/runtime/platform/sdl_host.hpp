@@ -35,6 +35,9 @@ struct SdlHost : Host {
 	void shutdown() override;
 	void present(const eng::u8* rgb) override;
 	void audio_write(const eng::s16* frames, int count) override;
+	/// Pausa/reanuda el audio; al pausar **vacía** el stream (evita que siga sonando
+	/// lo ya encolado al volver al menú).
+	void audio_pause(bool paused);
 	bool poll(InputState& in) override;
 	/// Entrada del **gestor** (menú): teclas crudas de navegación.
 	/// \param action 0=nada, 1=arriba, 2=abajo, 3=Enter, 4=V(verificar), 5=Salir.

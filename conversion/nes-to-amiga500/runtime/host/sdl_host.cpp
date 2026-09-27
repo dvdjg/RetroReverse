@@ -84,6 +84,19 @@ void SdlHost::present(const eng::u8* rgb) {
 	SDL_RenderPresent(ren);
 }
 
+/// Pausa/reanuda el audio; al pausar vacía lo encolado (corta el sonido residual).
+void SdlHost::audio_pause(bool paused) {
+	if (stream == nullptr) {
+		return;
+	}
+	if (paused) {
+		SDL_ClearAudioStream(stream);
+		SDL_PauseAudioStreamDevice(stream);
+	} else {
+		SDL_ResumeAudioStreamDevice(stream);
+	}
+}
+
 /// Encola muestras mono S16 en el stream de audio (sin bloquear).
 void SdlHost::audio_write(const eng::s16* frames, int count) {
 	if (stream == nullptr || count <= 0) {

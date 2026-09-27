@@ -20,6 +20,8 @@ struct N2AConfig {
 	std::string shader_prev = "F2";      ///< Tecla para el shader anterior.
 	std::string shaderglass_exe;         ///< Ruta a `ShaderGlass.exe` (opcional).
 	std::string shaderglass_profile;     ///< Perfil `.sgp` a cargar en ShaderGlass (opcional).
+	std::string sevenzip_exe = "7zr";    ///< Ejecutable 7z (para leer juegos `.7z`).
+	std::string shaderglass_shader = "newpixie-crt"; ///< Shader CRT elegido en ShaderGlass.
 
 	/// Carga `path`. Los campos ausentes conservan su valor por defecto.
 	/// \return `true` si el fichero existía y se leyó.
@@ -59,6 +61,10 @@ struct N2AConfig {
 				shaderglass_exe = val;
 			} else if (key == "shaderglass_profile") {
 				shaderglass_profile = val;
+			} else if (key == "sevenzip_exe") {
+				sevenzip_exe = val;
+			} else if (key == "shaderglass_shader") {
+				shaderglass_shader = val;
 			}
 		}
 		std::fclose(f);
@@ -83,6 +89,10 @@ struct N2AConfig {
 		std::fprintf(f, "# ShaderGlass (opcional): lanzar al arrancar con un perfil\n");
 		std::fprintf(f, "shaderglass_exe = %s\n", shaderglass_exe.c_str());
 		std::fprintf(f, "shaderglass_profile = %s\n", shaderglass_profile.c_str());
+		std::fprintf(f, "# 7z (7zr.exe) para leer juegos .7z\n");
+		std::fprintf(f, "sevenzip_exe = %s\n", sevenzip_exe.c_str());
+		std::fprintf(f, "# Shader Grafico elegido en ShaderGlass (libreria RetroArch)\n");
+		std::fprintf(f, "shaderglass_shader = %s\n", shaderglass_shader.c_str());
 		std::fclose(f);
 		return true;
 	}

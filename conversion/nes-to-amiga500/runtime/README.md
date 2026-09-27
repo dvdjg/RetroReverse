@@ -52,8 +52,13 @@ El núcleo es **agnóstico** y corre sobre la interfaz `Host` ([`platform/host.h
 - **ShaderGlass** ([`external/ShaderGlass`](../../../external/ShaderGlass), GPLv3): overlay externo
   que captura la ventana (modo *Window Clone*) y aplica shaders de RetroArch. Configura
   `shaderglass_exe` (y opcionalmente `shaderglass_profile` `.sgp`); el host lo **lanza** al arrancar.
-  Dentro de ShaderGlass, elige un shader CRT (p. ej. `crt/crt-geom` o `crt/crt-interlaced-halation`,
-  con *beam*/scanlines) — la librería ya viene en el clon.
+  Shader CRT por defecto en la config: `shaderglass_shader = newpixie-crt` (de la librería del clon).
+- **Juegos `.7z`**: el transpilador empaqueta por defecto cada plugin en
+  `<rom>.<plataforma>.7z` (y `--bundle <nombre>` agrupa varias ROMs en **un solo** `.7z`); el
+  gestor extrae los `.7z` a `.n2x_cache/` y lista su contenido (deduplicado). También se pueden
+  **transpilar ROMs dentro de un `.7z`** (entrada comprimida). Requiere `7zr.exe` (`sevenzip_exe`;
+  se copia junto al ejecutable).
+- **Audio**: al volver al menú se **pausa y vacía** el stream (no sigue sonando).
 - **Amiga 500**: [`platform/amiga/README.md`](platform/amiga/README.md) (Copper/Blitter/Paula).
 - **RetroArch (libretro)**: core en [`retroarch/`](retroarch/README.md) (`nes_libretro.so`) con
   plugins de vídeo/audio; se carga desde RetroArch y transpila/ejecuta la ROM.

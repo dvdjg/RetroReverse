@@ -74,6 +74,13 @@ nes_transpiler --emit-cnrom-rom  ../../generated/cnrom.nes
 Acepta **NROM (mapper 0) y CNROM (3)**, ambos con PRG fija (CNROM solo conmuta CHR, vía el mapper del
 runtime). UxROM/MMC1 (bancos de PRG) no se pueden decodificar estáticamente todavía.
 
+### 7z (entrada y salida)
+
+- **Salida**: por defecto cada plugin se empaqueta en `<rom>.<plataforma>.7z` (con el `.n2x` y su
+  sidecar). `--no-7z` lo desactiva; `--bundle <nombre>` agrupa **varias ROMs en un solo**
+  `<nombre>.<plataforma>.7z`; `--7z <7zr.exe>` fija la herramienta (o `N2A_7Z`).
+- **Entrada**: se admiten `.7z` que contengan `.nes` (se extraen y se transpilan cada una).
+
 ### Bibliotecas `.n2x` (`--emit-lib`, una o varias ROMs)
 
 Genera, por ROM, el `.cpp` **y** (si encuentra compilador) la biblioteca cargable `.n2x`:

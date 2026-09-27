@@ -13,6 +13,10 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <string>
+#include <vector>
 
 #include <eng/core/types/types.hpp>
 #include <eng/core/util/dynamic_string.hpp>
@@ -317,6 +321,8 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     nes_transpiler <rom1.nes> [rom2.nes ...] --emit-lib --outdir <dir> \\");
 	n2a::out_line("         --entry <plugin_entry.cpp> --inc <dir> [--inc <dir> ...] \\");
 	n2a::out_line("         [--cxx g++] [--target x64nt|x64linux|a500|a1200|wasm]");
+	n2a::out_line("         [--7z <7zr.exe>] [--no-7z] [--bundle <nombre>]");
+	n2a::out_line("   (la entrada tambien admite .7z con varias .nes dentro)");
 }
 
 /// Extrae el nombre base (sin directorio ni extensión) de `path` en `out`.
@@ -338,6 +344,47 @@ void base_name(const char* path, char* out, eng::usize cap) {
 void join_path(const eng::util::StringView& dir, const char* base, const char* ext, char* out,
 	       eng::usize cap) {
 	std::snprintf(out, cap, "%.*s/%s%s", static_cast<int>(dir.size()), dir.data(), base, ext);
+}
+
+/// \return `true` si `s` termina con `suf`.
+bool str_ends_with(const std::string& s, const char* suf) {
+	const std::size_t n = std::strlen(suf);
+	return s.size() >= n && s.compare(s.size() - n, n, suf) == 0;
+}
+
+/// Empaqueta `files` en el archivo 7z `archive` (crea/reemplaza). \return `true` si ok.
+bool pack_7z(const char* sevenzip, const std::string& archive, const std::vector<std::string>& files) {
+	auto bs = [](std::string s) {
+		for (char& c : s) {
+			if (c == '/') {
+				c = '\\';
+			}
+		}
+		return s;
+	};
+	std::string cmd = "call \"" + std::string(sevenzip) + "\" a -t7z -y \"" + bs(archive) + "\"";
+	for (std::size_t i = 0; i < files.size(); ++i) {
+		cmd += " \"" + bs(files[i]) + "\"";
+	}
+	n2a::out_line(eng::util::StringView(cmd.c_str()));
+	return std::system(cmd.c_str()) == 0;
+}
+
+/// Extrae `archive` a `dest` (crea el directorio). \return `true` si ok.
+bool extract_7z(const char* sevenzip, const std::string& archive, const std::string& dest) {
+	std::error_code ec;
+	std::filesystem::create_directories(dest, ec);
+	auto bs = [](std::string s) {
+		for (char& c : s) {
+			if (c == '/') {
+				c = '\\';
+			}
+		}
+		return s;
+	};
+	const std::string cmd = "call \"" + std::string(sevenzip) + "\" x -y -o\"" + bs(dest) +
+				"\" \"" + bs(archive) + "\"";
+	return std::system(cmd.c_str()) == 0;
 }
 
 /// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
@@ -407,6 +454,32 @@ bool rom_info(const char* path, RomInfo& out) {
 	out.chr = static_cast<eng::u32>(b[5]) * 8192u;
 	out.mapper = static_cast<int>((b[6] >> 4u) | (b[7] & 0xF0u));
 	return true;
+}
+
+/// Escribe el sidecar de metadatos `.n2x.json` (name/arch/abi/mapper/PRG/CHR/CRC).
+void write_sidecar(const char* json, const char* base, const char* tag, const char* rom,
+		   eng::u32 crc) {
+	RomInfo ri;
+	(void)rom_info(rom, ri);
+	Dyn js;
+	js.append("{\n  \"name\": \"");
+	js.append(base);
+	js.append("\",\n  \"arch\": \"");
+	js.append(tag);
+	js.append("\",\n  \"abi\": ");
+	js.append_s32(1);
+	js.append(",\n  \"mapper\": ");
+	js.append_s32(ri.mapper);
+	js.append(",\n  \"prg_size\": ");
+	js.append_u32(ri.prg);
+	js.append(",\n  \"chr_size\": ");
+	js.append_u32(ri.chr);
+	js.append(",\n  \"rom_crc32\": \"0x");
+	js.append_hex(crc, 8u, true);
+	js.append("\",\n  \"source\": \"");
+	js.append(eng::util::StringView(rom));
+	js.append("\"\n}\n");
+	(void)n2a::write_whole_file(json, js.view());
 }
 
 /// CRC32 (IEEE) del contenido de `path` (0 si no se pudo leer).
@@ -526,6 +599,10 @@ int main(int argc, char** argv) {
 	const char* entry = nullptr;
 	const char* cxx = "g++";
 	const char* target = nullptr; // plataforma destino (etiqueta del nombre del .n2x)
+	const char* sevenzip_env = std::getenv("N2A_7Z");
+	const char* sevenzip = sevenzip_env != nullptr ? sevenzip_env : "7zr";
+	bool use_7z = true;           // empaquetar el .n2x en .7z por defecto
+	const char* bundle = nullptr; // nombre del .7z que agrupa varias ROMs
 	bool emit_lib = false;
 	int emit = 0; // 0 = transpilar, 1..7 = ROMs de prueba
 	eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc> incs {};
@@ -583,6 +660,18 @@ int main(int argc, char** argv) {
 			target = argv[++i];
 			continue;
 		}
+		if (arg == "--7z" && i + 1 < argc) {
+			sevenzip = argv[++i];
+			continue;
+		}
+		if (arg == "--no-7z") {
+			use_7z = false;
+			continue;
+		}
+		if (arg == "--bundle" && i + 1 < argc) {
+			bundle = argv[++i];
+			continue;
+		}
 		(void)inputs.push_back(arg);
 	}
 
@@ -609,6 +698,34 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	// Lista final de ROMs: expande las entradas `.7z` (extrae sus `.nes`).
+	std::vector<std::string> in_paths;
+	for (eng::usize k = 0; k < inputs.size(); ++k) {
+		const std::string s(inputs[k].data(), inputs[k].size());
+		if (use_7z && str_ends_with(s, ".7z")) {
+			char base[256];
+			base_name(s.c_str(), base, sizeof base);
+			const std::string dest = std::string(outdir.data(), outdir.size()) + "/_extract_" + base;
+			if (!extract_7z(sevenzip, s, dest)) {
+				n2a::err_line("error: no se pudo extraer el .7z");
+				return 1;
+			}
+			std::error_code ec;
+			for (const auto& e : std::filesystem::directory_iterator(dest, ec)) {
+				const std::string p = e.path().string();
+				if (str_ends_with(p, ".nes")) {
+					in_paths.push_back(p);
+				}
+			}
+		} else {
+			in_paths.push_back(s);
+		}
+	}
+	if (in_paths.empty()) {
+		n2a::err_line("error: no hay ROMs de entrada");
+		return 1;
+	}
+
 	// Modo biblioteca: una o más ROMs -> .cpp (fuente) + .n2x (plugin compilado).
 	if (emit_lib) {
 		if (entry == nullptr) {
@@ -620,10 +737,12 @@ int main(int argc, char** argv) {
 #else
 		const char* tag = target != nullptr ? target : "x64linux";
 #endif
+		std::vector<std::string> n2x_list; // para --bundle
 		int rc = 0;
-		for (eng::usize k = 0; k < inputs.size(); ++k) {
+		for (std::size_t k = 0; k < in_paths.size(); ++k) {
+			const char* rom = in_paths[k].c_str();
 			char base[256];
-			base_name(inputs[k].data(), base, sizeof base);
+			base_name(rom, base, sizeof base);
 			char stem[320];
 			std::snprintf(stem, sizeof stem, "%s.%s", base, tag);
 			char cpp[1024];
@@ -634,69 +753,69 @@ int main(int argc, char** argv) {
 			join_path(outdir, stem, ".n2x", n2x, sizeof n2x);
 			char json[1024];
 			join_path(outdir, stem, ".n2x.json", json, sizeof json);
+			char arc[1024];
+			join_path(outdir, stem, ".7z", arc, sizeof arc);
 
 			// Caché: si el plugin existe y el CRC de la ROM no cambió, no se rehace.
-			const eng::u32 crc = crc32_file(inputs[k].data());
+			const eng::u32 crc = crc32_file(rom);
 			ByteBuffer existing;
-			if (n2a::read_whole_file(n2x, existing) && read_cached_crc(json) == crc) {
+			const bool cached =
+				n2a::read_whole_file(n2x, existing) && read_cached_crc(json) == crc;
+			if (cached) {
 				Dyn s;
 				s.append("sin cambios, reutilizo ");
 				s.append(n2x);
 				n2a::out_line(s.view());
-				continue;
+				write_sidecar(json, base, tag, rom, crc); // asegura el sidecar
+			} else {
+				if (!transpile_rom(rom, cpp, facts_path)) {
+					rc = 1;
+					continue;
+				}
+				// Copia el transpilado a `n2a_game_impl.cpp` (nombre que incluye el entry).
+				ByteBuffer src;
+				if (!n2a::read_whole_file(cpp, src) ||
+				    !n2a::write_whole_file(impl,
+							   eng::util::StringView(
+								   reinterpret_cast<const char*>(src.data()),
+								   src.size()))) {
+					n2a::err_line("error: no se pudo preparar n2a_game_impl.cpp");
+					rc = 1;
+					continue;
+				}
+				if (!build_plugin_lib(cxx, entry, outdir.data(), n2x, incs)) {
+					n2a::err_line("error: la compilacion del plugin fallo (revisa --cxx/--inc)");
+					rc = 1;
+					continue;
+				}
+				// Sidecar de metadatos (título/arch/mapper/CRC) para el gestor.
+				write_sidecar(json, base, tag, rom, crc);
+				Dyn ok;
+				ok.append("plugin -> ");
+				ok.append(n2x);
+				n2a::out_line(ok.view());
 			}
-
-			if (!transpile_rom(inputs[k].data(), cpp, facts_path)) {
-				rc = 1;
-				continue;
+			n2x_list.push_back(n2x);
+			// Empaquetado por defecto: `<rom>.<plataforma>.7z` con el `.n2x` (+ sidecar).
+			if (use_7z) {
+				(void)pack_7z(sevenzip, arc, std::vector<std::string> {n2x, json});
 			}
-			// Copia el transpilado a `n2a_game_impl.cpp` (nombre que incluye el entry).
-			ByteBuffer src;
-			if (!n2a::read_whole_file(cpp, src) ||
-			    !n2a::write_whole_file(impl, eng::util::StringView(
-							 reinterpret_cast<const char*>(src.data()),
-							 src.size()))) {
-				n2a::err_line("error: no se pudo preparar n2a_game_impl.cpp");
-				rc = 1;
-				continue;
-			}
-			if (!build_plugin_lib(cxx, entry, outdir.data(), n2x, incs)) {
-				n2a::err_line("error: la compilacion del plugin fallo (revisa --cxx/--inc)");
-				rc = 1;
-				continue;
-			}
-			// Sidecar de metadatos (título/arch/mapper/CRC) para el gestor.
-			RomInfo ri;
-			(void)rom_info(inputs[k].data(), ri);
-			Dyn js;
-			js.append("{\n  \"name\": \"");
-			js.append(base);
-			js.append("\",\n  \"arch\": \"");
-			js.append(tag);
-			js.append("\",\n  \"abi\": ");
-			js.append_s32(1);
-			js.append(",\n  \"mapper\": ");
-			js.append_s32(ri.mapper);
-			js.append(",\n  \"prg_size\": ");
-			js.append_u32(ri.prg);
-			js.append(",\n  \"chr_size\": ");
-			js.append_u32(ri.chr);
-			js.append(",\n  \"rom_crc32\": \"0x");
-			js.append_hex(crc, 8u, true);
-			js.append("\",\n  \"source\": \"");
-			js.append(inputs[k]);
-			js.append("\"\n}\n");
-			(void)n2a::write_whole_file(json, js.view());
-			Dyn ok;
-			ok.append("plugin -> ");
-			ok.append(n2x);
-			n2a::out_line(ok.view());
+		}
+		// Un mismo `.7z` puede contener varias ROMs (`--bundle <nombre>`).
+		if (bundle != nullptr && use_7z) {
+			const std::string barc =
+				std::string(outdir.data(), outdir.size()) + "/" + bundle + "." + tag + ".7z";
+			(void)pack_7z(sevenzip, barc, n2x_list);
+			Dyn s;
+			s.append("bundle -> ");
+			s.append(eng::util::StringView(barc.c_str()));
+			n2a::out_line(s.view());
 		}
 		return rc;
 	}
 
 	// Modo simple: una ROM -> un .cpp.
-	if (!transpile_rom(inputs[0].data(), output.data(), facts_path)) {
+	if (!transpile_rom(in_paths[0].c_str(), output.data(), facts_path)) {
 		return 1;
 	}
 	return 0;

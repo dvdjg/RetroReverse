@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -179,6 +180,7 @@ static void post_init_shaders() {
 	N2A_LOGI("shader='%s' teclas: next=%s(%d) prev=%s(%d)", n2a::kShaderNames[g_shader],
 		 g_cfg.shader_next.c_str(), g_shader_next_sc, g_cfg.shader_prev.c_str(),
 		 g_shader_prev_sc);
+	N2A_LOGI("ShaderGlass shader por defecto: '%s'", g_cfg.shaderglass_shader.c_str());
 	launch_shaderglass();
 }
 
@@ -224,13 +226,40 @@ static int verify_n2x(const char* path, int frames) {
 	return (ram == 0 && fb == 0) ? 0 : 2;
 }
 
+/// \return El directorio de `path` (sin el nombre del fichero).
+static void file_dir(const char* path, char* out, eng::usize cap) {
+	eng::usize cut = 0u;
+	for (eng::usize i = 0; path[i] != '\0'; ++i) {
+		if (path[i] == '/' || path[i] == '\\') {
+			cut = i;
+		}
+	}
+	eng::usize j = 0u;
+	for (eng::usize i = 0; i < cut && j + 1u < cap; ++i) {
+		out[j++] = path[i];
+	}
+	out[j] = '\0';
+}
+
+/// \return La etiqueta de plataforma del host (`x64nt`, `x64linux`, …).
+static const char* host_tag() {
+	switch (n2a::n2a_host_arch()) {
+	case N2A_ARCH_X64_NT: return "x64nt";
+	case N2A_ARCH_X64_LINUX: return "x64linux";
+	case N2A_ARCH_M68K: return "a500";
+	case N2A_ARCH_WASM: return "wasm";
+	default: return "?";
+	}
+}
+
 // --- Gestor: lista de `.n2x` y su sidecar ---
 /// Entrada del gestor (un `.n2x` y metadatos del sidecar).
 struct MenEntry {
-	std::string path; ///< Ruta del `.n2x`.
-	std::string name; ///< Nombre del fichero.
-	std::string arch; ///< Plataforma (del sidecar).
-	std::string crc;  ///< CRC32 de la ROM (del sidecar).
+	std::string path;   ///< Ruta del `.n2x` (o del temporal extraído de un `.7z`).
+	std::string name;   ///< Nombre mostrado.
+	std::string arch;   ///< Plataforma (del sidecar).
+	std::string crc;    ///< CRC32 de la ROM (del sidecar).
+	std::string mapper; ///< Mapper iNES (del sidecar).
 };
 
 /// Lee el campo `"key"` del sidecar JSON `path` (cadena o número). Vacío si no está.
@@ -269,20 +298,86 @@ static std::string json_field(const std::string& path, const char* key) {
 	return v;
 }
 
-/// Escanea `dir` buscando `.n2x` y lee su sidecar (arch/CRC).
+/// Añade a `out` los `.n2x` de `d` (filtra por plataforma del host, lee sidecar).
+static void add_n2x_from_dir(const std::filesystem::path& d, const std::string& host,
+			     const std::set<std::string>* skip, std::set<std::string>& seen,
+			     std::vector<MenEntry>& out) {
+	std::error_code ec;
+	std::filesystem::directory_iterator it(d, ec);
+	const std::filesystem::directory_iterator end;
+	for (; !ec && it != end; it.increment(ec)) {
+		const std::filesystem::path& p = it->path();
+		if (p.extension() != ".n2x") {
+			continue;
+		}
+		if (skip != nullptr && skip->count(p.stem().string()) != 0u) {
+			continue; // hay un .7z con ese nombre: preferimos el comprimido
+		}
+		if (seen.count(p.filename().string()) != 0u) {
+			continue; // ya listado (p. ej. también dentro de un .7z)
+		}
+		MenEntry m;
+		m.path = p.string();
+		m.name = p.filename().string();
+		m.arch = json_field(m.path + ".json", "arch");
+		if (!m.arch.empty() && m.arch != host) {
+			N2A_LOGD("omito '%s' (arch %s != %s)", m.name.c_str(), m.arch.c_str(), host.c_str());
+			continue;
+		}
+		m.crc = json_field(m.path + ".json", "rom_crc32");
+		m.mapper = json_field(m.path + ".json", "mapper");
+		seen.insert(m.name);
+		out.push_back(std::move(m));
+	}
+}
+
+/// Escanea `dir`: `.n2x` sueltos y `.7z` (que se extraen a `.n2x_cache/`).
 static void scan_n2x(const char* dir, std::vector<MenEntry>& out) {
+	const std::string host = host_tag();
+	// .n2x sueltos (saltando los que vengan en un .7z).
+	std::set<std::string> zstems;
+	{
+		std::error_code ec;
+		std::filesystem::directory_iterator it(dir, ec);
+		const std::filesystem::directory_iterator end;
+		for (; !ec && it != end; it.increment(ec)) {
+			if (it->path().extension() == ".7z") {
+				zstems.insert(it->path().stem().string());
+			}
+		}
+	}
+	std::set<std::string> seen;
+	add_n2x_from_dir(dir, host, &zstems, seen, out);
 	std::error_code ec;
 	std::filesystem::directory_iterator it(dir, ec);
 	const std::filesystem::directory_iterator end;
 	for (; !ec && it != end; it.increment(ec)) {
 		const std::filesystem::path& p = it->path();
-		if (p.extension() == ".n2x") {
-			MenEntry m;
-			m.path = p.string();
-			m.name = p.filename().string();
-			m.arch = json_field(m.path + ".json", "arch");
-			m.crc = json_field(m.path + ".json", "rom_crc32");
-			out.push_back(std::move(m));
+		if (p.extension() != ".7z") {
+			continue;
+		}
+		const std::string cache = std::string(dir) + "/.n2x_cache/" + p.stem().string();
+		std::error_code ec2;
+		std::filesystem::create_directories(cache, ec2);
+		auto bs = [](std::string s) {
+			for (char& c : s) {
+				if (c == '/') {
+					c = '\\';
+				}
+			}
+			return s;
+		};
+		// Empezar por `call` evita el enredo de comillas de cmd.exe cuando el
+		// comando empieza por una ruta entrecomillada.
+		const std::string cmd = "call \"" + bs(g_cfg.sevenzip_exe) + "\" x -y -o\"" +
+					bs(cache) + "\" \"" + bs(p.string()) + "\"";
+		N2A_LOGD("7z: %s", cmd.c_str());
+		const int rc = std::system(cmd.c_str());
+		if (rc == 0) {
+			add_n2x_from_dir(cache, host, nullptr, seen, out);
+		} else {
+			N2A_LOGW("no se pudo extraer '%s' (rc=%d, sevenzip_exe='%s')",
+				 p.filename().string().c_str(), rc, g_cfg.sevenzip_exe.c_str());
 		}
 	}
 }
@@ -327,6 +422,9 @@ static void draw_manager(n2a::SdlHost& host, const std::vector<MenEntry>& list, 
 	if (!list.empty()) {
 		const MenEntry& e = list[static_cast<std::size_t>(sel)];
 		std::string det = "arch=" + (e.arch.empty() ? std::string("?") : e.arch);
+		if (!e.mapper.empty()) {
+			det += " m=" + e.mapper;
+		}
 		if (!e.crc.empty()) {
 			det += "  crc=" + e.crc;
 		}
@@ -386,7 +484,10 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
-	// Configuración del host (archivo editable; se crea con valores por defecto).
+	// Configuración del host (archivo editable; por defecto **junto al ejecutable**).
+	char exedir[480];
+	file_dir(argv[0], exedir, sizeof exedir);
+	std::snprintf(g_cfg_path, sizeof g_cfg_path, "%s/nes_sdl.cfg", exedir);
 	for (int i = 1; i < argc; ++i) {
 		if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
 			std::snprintf(g_cfg_path, sizeof g_cfg_path, "%s", argv[++i]);
@@ -398,6 +499,15 @@ int main(int argc, char** argv) {
 	}
 	g_shader = n2a::shader_index(g_cfg.shader.c_str());
 	g_host.initial_scale = g_cfg.scale;
+	// `7zr.exe` por defecto: junto al ejecutable si está.
+	if (g_cfg.sevenzip_exe == "7zr") {
+		char cand[520];
+		std::snprintf(cand, sizeof cand, "%s\\7zr.exe", exedir);
+		std::error_code ec;
+		if (std::filesystem::exists(cand, ec)) {
+			g_cfg.sevenzip_exe = cand;
+		}
+	}
 
 	N2A_LOGI("nes_sdl arrancando (log=%d) config='%s'%s scale=%d shader=%s", n2a::log_level(),
 		 g_cfg_path, had_cfg ? "" : " (nuevo)", g_cfg.scale, g_cfg.shader.c_str());
@@ -492,9 +602,11 @@ int main(int argc, char** argv) {
 				g_frame = 0;
 				g_host.quit_window = false;
 				g_host.escape_menu = false;
+				g_host.audio_pause(false);
 				while (emu_tick_once() != 0) {
 					g_host.delay_ms(16);
 				}
+				g_host.audio_pause(true); // corta el audio al volver al menú
 				N2A_LOGI("fin de '%s': %d frames", list[sel].path.c_str(), g_frame);
 				if (g_host.quit_window) {
 					break;
