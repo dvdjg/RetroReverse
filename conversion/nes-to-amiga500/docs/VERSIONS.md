@@ -6,11 +6,26 @@ port. Regla: si un cambio altera lo **observable** (framebuffer, estado de RAM, 
 
 | Componente | Constante | Valor | Qué fija |
 |---|---|---|---|
-| **Oráculo** | `n2a::kOracleVersion` (`runtime/include/nes_system.hpp`) | **2** | Semántica de la emulación del host |
-| **ABI de plugin** | `N2A_ABI_VERSION` (`runtime/plugin/n2a_plugin.h`) | **1** | Contrato `.n2x` ↔ gestor |
+| **Oráculo** | `n2a::kOracleVersion` (`runtime/include/nes_system.hpp`) | **3** | Semántica de la emulación del host |
+| **ABI de plugin** | `N2A_ABI_VERSION` (`runtime/plugin/n2a_plugin.h`) | **1** | Contrato `.n2x`  gestor |
 | **Codegen** | `kCodegenVersion` (`tools/transpiler/src/main.cpp`) | **2** | Invalida la caché de `.n2x` por CRC/gen |
 
-Tags: `oracle-v1` (congelado inicial), **`oracle-v1.1`** (añade CHR-RAM, MMC3 + PRG-RAM, IRQ de CPU).
+Tags: `oracle-v1` (congelado inicial), `oracle-v1.1` (CHR-RAM, MMC3 + PRG-RAM, IRQ de CPU),
+**`oracle-v2`** (timing del VBlank alineado con mesen).
+
+## Cambios v2 → v3 (timing del VBlank alineado con mesen)
+
+Referencia cambiada a **mesen** (cycle-accurate) tras corregir el diff de trazas (leía 6/8 B en vez
+de 10/12 B). Cambios observables:
+
+- **Sin supresión de VBlank**: `warmup_frames` eliminado (mesen levanta el flag en `(241,1)` desde el
+  frame 0; el `ppudead=2` de fceumm era un hack).
+- **+8 ciclos de reset** modelados (`mesen CPU.cpp:150`).
+- **Frame 0 sin forzar la frontera**: la PPU arranca en la línea 0; el primer VBlank cae en su sitio
+  (antes se adelantaba ~27000 ciclos).
+- **Ejecutor rápido dot-exacto en `$2002`**: los bloques se cortan antes de acceso a `$2000-$3FFF`.
+- Efecto: IC/SMB/bioniccommando pasan de divergir en idx 36-42 a idx ~7800-9100 (el VBlank real).
+  Residuo: **±1 ciclo** sub-instrucción en el cruce del VBlank.
 
 ## Cambios v1 → v1.1
 
