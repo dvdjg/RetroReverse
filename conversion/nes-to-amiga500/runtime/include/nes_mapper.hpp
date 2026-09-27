@@ -100,6 +100,7 @@ struct Mapper {
 	eng::u8 mmc5_fill_tile = 0;         ///< $5106: tile de relleno.
 	eng::u8 mmc5_fill_color = 0;        ///< $5107: color de relleno.
 	eng::u8 mmc5_exram[0x400] = {0};    ///< ExRAM ($5C00-$5FFF, 1 KB).
+	eng::u8 mmc5_fill[0x400] = {0};     ///< Nametable de fill-mode (32×30 tiles + 64 attr), R-only.
 
 	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
 	[[nodiscard]] bool irq_line() const noexcept {
@@ -660,8 +661,22 @@ private:
 		case 0x5101u: mmc5_chr_mode = static_cast<eng::u8>(value & 0x03u); break;
 		case 0x5104u: mmc5_exram_mode = static_cast<eng::u8>(value & 0x03u); break;
 		case 0x5105u: mmc5_nametable = value; break; // pendiente: mapeo real de nametables
-		case 0x5106u: mmc5_fill_tile = value; break;
-		case 0x5107u: mmc5_fill_color = static_cast<eng::u8>(value & 0x03u); break;
+		case 0x5106u:
+			mmc5_fill_tile = value;
+			for (eng::u32 i = 0; i < 32u * 30u; ++i) {
+				mmc5_fill[i] = value; // 32 tiles/fila × 30 filas
+			}
+			break;
+		case 0x5107u: {
+			mmc5_fill_color = static_cast<eng::u8>(value & 0x03u);
+			const eng::u8 ab = static_cast<eng::u8>(mmc5_fill_color | (mmc5_fill_color << 2u) |
+								(mmc5_fill_color << 4u) |
+								(mmc5_fill_color << 6u));
+			for (eng::u32 i = 0; i < 64u; ++i) {
+				mmc5_fill[32u * 30u + i] = ab; // tabla de atributos (64 B)
+			}
+			break;
+		}
 		case 0x5130u: mmc5_chr_upper = static_cast<eng::u8>(value & 0x03u); break;
 		default: break; // $5000-$5015 (audio), $5102/$5103 (protect), $5200+ (split)
 		}

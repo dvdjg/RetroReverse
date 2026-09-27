@@ -49,6 +49,13 @@ struct Ppu {
 	/// `mirror_h`); `0` = solo pantalla A (banco 0); `1` = solo pantalla B (banco 1).
 	/// Toda la VRAM de nametables apunta al mismo banco de 1 KB.
 	int nt_single = -1;
+	/// **Mapeo de nametables por cartucho** (MMC5 `$5105`): `nt_map[i]` ∈ {0,1 = CIRAM
+	/// página, 2 = ExRAM, 3 = fill-mode}. Lo fija el sistema; si `nt_map_on` es false se
+	/// usa el mirroring normal (`nt_bank`).
+	eng::u8 nt_map[4] = {0, 1, 0, 1};
+	eng::u8* nt_exram = nullptr;      ///< Fuente 2 (ExRAM de la MMC5, 1 KB R/W).
+	const eng::u8* nt_fill = nullptr; ///< Fuente 3 (nametable de relleno, 1 KB sólo lectura).
+	bool nt_map_on = false;           ///< Usar `nt_map` en vez del mirroring.
 	/// Proveedor de tiles opcional (**ajustes por ROM**: otro grupo de tiles o
 	/// mayor profundidad, 3/4 bpp). Si es `nullptr`, se usa la CHR 2 bpp normal.
 	/// Lectura de CHR **con la conmutación de bancos del mapper** (MMC1/MMC3). Lo fija
@@ -168,6 +175,9 @@ struct Ppu {
 			const int ni = nametable_index(v);
 			if ((v & 0x3F00u) == 0x3F00u) {
 				r = static_cast<eng::u8>(palette[palette_index(v)] & 0x3Fu);
+			} else if (nt_map_on && v >= 0x2000u && v < 0x3F00u) {
+				// Nametable por mapeo del cartucho (MMC5): CIRAM/ExRAM/fill.
+				r = nt_src_byte(((v & 0x0FFFu) >> 10) & 3, v);
 			} else if (ni >= 0) {
 				r = vram[static_cast<eng::usize>(ni)];
 			} else {
@@ -228,7 +238,18 @@ struct Ppu {
 				palette[palette_index(v)] = static_cast<eng::u8>(value & 0x3Fu);
 			} else {
 				const int ni = nametable_index(v);
-				if (ni >= 0) {
+				if (nt_map_on && v >= 0x2000u && v < 0x3F00u) {
+					// Nametable por mapeo del cartucho (MMC5): CIRAM/ExRAM (el fill es
+					// de sólo lectura → se ignora la escritura).
+					const int nt = ((v & 0x0FFFu) >> 10) & 3;
+					const int s = nt_map[nt];
+					if (s == 2 && nt_exram != nullptr) {
+						nt_exram[v & 0x3FFu] = value;
+					} else if (s <= 1) {
+						vram[(static_cast<eng::usize>(s) & 1u) * 0x400u + (v & 0x3FFu)] =
+							value;
+					}
+				} else if (ni >= 0) {
 					vram[static_cast<eng::usize>(ni)] = value; // nametables ($2000-$3EFF)
 				} else if (chr_ram != nullptr && v < 0x2000u) {
 					// $0000-$1FFF: carga de **CHR-RAM** (los cartuchos con CHR-ROM,
@@ -324,7 +345,11 @@ struct Ppu {
 				const int nt_v = (base_v + (ty_abs / 30)) & 1; // vertical: 30 filas
 				const eng::u16 nt_base = static_cast<eng::u16>(nt_bank(nt_h, nt_v) * 0x400);
 				const eng::u16 nt_off = static_cast<eng::u16>(nt_base + (cy & 31) * 32 + (cx & 31));
-				const eng::u8 tile = vram[nt_off & 0x7FFu];
+				// Mapeo por cartucho (MMC5): CIRAM/ExRAM/fill según `nt_map`.
+				const int nt = nt_h | (nt_v << 1);
+				const eng::u8 tile =
+					nt_map_on ? nt_src_byte(nt, static_cast<eng::u16>((cy & 31) * 32 + (cx & 31)))
+						  : vram[nt_off & 0x7FFu];
 				const eng::u8 attr = attr_bits(nt_base, cx, cy);
 
 				const eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
@@ -511,6 +536,22 @@ private:
 			return nt_single; // 1 pantalla (MMC1 modos 0/1): banco A/B constante.
 		}
 		return mirror_h ? nt_v : nt_h;
+	}
+
+	/// Byte de nametable por el **mapeo del cartucho** (`nt_map`, MMC5 `$5105`): CIRAM
+	/// página, ExRAM o fill-mode. Sólo se usa si `nt_map_on`.
+	/// \param nt Índice de nametable 0..3. \param off Offset dentro de la nametable (0..$3FF).
+	/// \return Byte del origen mapeado.
+	[[nodiscard]] eng::u8 nt_src_byte(int nt, eng::u16 off) const noexcept {
+		off = static_cast<eng::u16>(off & 0x3FFu);
+		const int s = nt_map[nt & 3];
+		if (s == 2) {
+			return nt_exram != nullptr ? nt_exram[off] : 0u;
+		}
+		if (s == 3) {
+			return nt_fill != nullptr ? nt_fill[off] : 0u;
+		}
+		return vram[(static_cast<eng::usize>(s) & 1u) * 0x400u + off];
 	}
 
 	/// Dirección física (0..0x7FF) en los 2 KB de VRAM para una dirección de PPU

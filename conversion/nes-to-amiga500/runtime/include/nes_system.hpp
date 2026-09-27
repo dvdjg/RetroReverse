@@ -254,6 +254,17 @@ struct NesSystem {
 		ppu.vblank_suppress = false;
 		ppu.mirror_h = mapper.mirror_h; // la MMC3/MMC1 cambian el mirroring en runtime
 		ppu.nt_single = mapper.mirror_single;
+		// MMC5: mapeo de nametables por cartucho ($5105) hacia CIRAM/ExRAM/fill.
+		if (mapper.kind == MapperKind::Mmc5) {
+			for (int i = 0; i < 4; ++i) {
+				ppu.nt_map[i] = static_cast<eng::u8>((mapper.mmc5_nametable >> (i * 2)) & 0x03u);
+			}
+			ppu.nt_exram = mapper.mmc5_exram;
+			ppu.nt_fill = mapper.mmc5_fill;
+			ppu.nt_map_on = true;
+		} else {
+			ppu.nt_map_on = false;
+		}
 		// Frontera de frame en la pre-VBlank (scanline 240). El PRIMER frame **no** se fuerza:
 		// la PPU arranca en la línea 0 y llega a la 241 por sí sola (forzar la 240 aquí
 		// saltaría las líneas 0-239 y adelantaría el primer VBlank ~27000 ciclos, haciendo
