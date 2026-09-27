@@ -32,6 +32,8 @@ inline constexpr int kOracleVersion = 3;
 struct NesSystem {
 	static constexpr int kScreenW = 256;
 	static constexpr int kScreenH = 240;
+	/// Dot de la línea en que A12 sube (fetch de sprites) → flanco del contador IRQ MMC3.
+	static constexpr eng::u16 kA12Dot = 257u;
 
 	Mapper mapper;   ///< Cartucho (bancos y CHR).
 	NESMemory mem;   ///< Memoria/bus (RAM + hooks).
@@ -386,6 +388,13 @@ private:
 		if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot >= start && ppu.sprite0_dot < end) {
 			ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
 		}
+		// MMC3: A12 sube en el fetch de sprites (dot ~257) de cada línea renderizada; el
+		// contador IRQ avanza ahí, no en la frontera de scanline (~257 dots / 86 ciclos
+		// antes). Es el flanco dominante con el render activo.
+		if (mapper.kind == MapperKind::Mmc3 && ppu.scanline < 240u && (ppu.mask & 0x18u) != 0u &&
+		    kA12Dot >= start && kA12Dot < end) {
+			mapper.on_scanline();
+		}
 		ppu.dot = end;
 		while (ppu.dot >= 341u) {
 			ppu.dot = static_cast<eng::u16>(ppu.dot - 341u);
@@ -393,11 +402,8 @@ private:
 			ppu.tick_scanline();
 			if (ppu.scanline != before) {
 				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
-				if (ppu.scanline < 240u && (ppu.mask & 0x18u) != 0u) {
-					// MMC3: el contador IRQ avanza con los flancos de A12, que solo
-					// ocurren con el render activo (BG o sprites).
-					mapper.on_scanline();
-				}
+				// Cruce de la frontera de línea a mitad de tramo: el A12 de la nueva línea
+				// (dot 257) queda por delante, se dispara en la siguiente llamada.
 				if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot < ppu.dot) {
 					ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
 				}
