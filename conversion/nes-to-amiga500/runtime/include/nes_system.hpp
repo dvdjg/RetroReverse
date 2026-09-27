@@ -83,6 +83,7 @@ struct NesSystem {
 		ppu.chr_size = m.chr_size;
 		ppu.chr_ram = m.chr_ram;
 		ppu.mirror_h = m.mirror_h;
+		ppu.nt_single = m.mirror_single;
 		mem.prg = m.prg;
 		mem.prg_size = m.prg_size;
 	}
@@ -110,6 +111,7 @@ struct NesSystem {
 		ppu.chr_size = mapper.chr_size;
 		ppu.chr_ram = mapper.chr_ram;
 		ppu.mirror_h = mapper.mirror_h;
+		ppu.nt_single = mapper.mirror_single;
 		ppu.scanline = 0;
 		ppu.vblank_suppress = false; // mesen activa el flag en (241,1) desde el frame 0
 		frames_done_ = 0;
@@ -226,7 +228,8 @@ struct NesSystem {
 		// (el antiguo `ppudead=2` de fceumm era un hack para Knight Rider y desalineaba
 		// los bucles de espera del reset).
 		ppu.vblank_suppress = false;
-		ppu.mirror_h = mapper.mirror_h; // la MMC3 cambia el mirroring en runtime
+		ppu.mirror_h = mapper.mirror_h; // la MMC3/MMC1 cambian el mirroring en runtime
+		ppu.nt_single = mapper.mirror_single;
 		// Frontera de frame en la pre-VBlank (scanline 240). El PRIMER frame **no** se fuerza:
 		// la PPU arranca en la línea 0 y llega a la 241 por sí sola (forzar la 240 aquí
 		// saltaría las líneas 0-239 y adelantaría el primer VBlank ~27000 ciclos, haciendo

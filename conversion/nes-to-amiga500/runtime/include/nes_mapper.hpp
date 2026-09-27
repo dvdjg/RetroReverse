@@ -47,6 +47,7 @@ struct Mapper {
 	eng::u8 mmc1_chr1 = 0;       ///< Registro CHR 1 ($C000).
 	eng::u8 mmc1_prg = 0;        ///< Registro de banco de PRG ($E000).
 	bool mmc1_last_chr1 = false; ///< El último registro CHR escrito fue $C000 (para CHR de 4 KB).
+	int mirror_single = -1;      ///< 1 pantalla: -1 = no; 0 = banco A; 1 = banco B (MMC1 modos 0/1).
 	bool mmc1_wram_enabled = true; ///< WRAM de $6000-$7FFF habilitada ($E000 bit 4 = 0).
 	eng::u32 mmc1_last_write = 0; ///< Ciclo de la última escritura (filtro de 2 ciclos de MMC1).
 	eng::u32 cpu_cycle = 0;       ///< Ciclo de CPU actual (lo fija el sistema antes de `cpu_write`).
@@ -228,6 +229,27 @@ private:
 		return prg[off % prg_size];
 	}
 
+	/// Actualiza el mirroring del MMC1 desde `mmc1_ctrl` bits 0-1 (mesen MMC1.h
+	/// `UpdateState`): 0 = 1 pantalla A, 1 = 1 pantalla B, 2 = vertical, 3 = horizontal.
+	void mmc1_update_mirroring() {
+		switch (mmc1_ctrl & 0x03u) {
+		case 0u:
+			mirror_single = 0;
+			break;
+		case 1u:
+			mirror_single = 1;
+			break;
+		case 2u:
+			mirror_single = -1;
+			mirror_h = false;
+			break;
+		default:
+			mirror_single = -1;
+			mirror_h = true;
+			break;
+		}
+	}
+
 	/// Escritura serial (5 bits) del MMC1 a los registros de control/CHR/PRG, fiel a
 	/// `mesen MMC1.h::WriteRegister`:
 	/// - Si bit 7 (`r`) = 1: resetea el buffer y pone bits 2,3 de $8000 (16K, $8000).
@@ -249,6 +271,7 @@ private:
 			mmc1_shift = 0u;
 			mmc1_count = 0u;
 			mmc1_ctrl = static_cast<eng::u8>(mmc1_ctrl | 0x0Cu);
+			mmc1_update_mirroring();
 			return;
 		}
 		mmc1_shift = static_cast<eng::u8>(mmc1_shift | ((value & 1u) << mmc1_count));
@@ -260,6 +283,7 @@ private:
 		switch (which) {
 		case 0u:
 			mmc1_ctrl = reg;
+			mmc1_update_mirroring();
 			break;
 		case 1u:
 			mmc1_chr0 = static_cast<eng::u8>(reg & ~0x01u);

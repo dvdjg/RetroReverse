@@ -45,6 +45,10 @@ struct Ppu {
 	/// Xevious). `false` = vertical (lado a lado, típico de scroll horizontal como
 	/// SMB). Determina qué bit de la dirección NN selecciona la mitad de los 2 KB.
 	bool mirror_h = false;
+	/// Mirroring de **1 sola pantalla** (MMC1 modos 0/1): `-1` = desactivado (usar
+	/// `mirror_h`); `0` = solo pantalla A (banco 0); `1` = solo pantalla B (banco 1).
+	/// Toda la VRAM de nametables apunta al mismo banco de 1 KB.
+	int nt_single = -1;
 	/// Proveedor de tiles opcional (**ajustes por ROM**: otro grupo de tiles o
 	/// mayor profundidad, 3/4 bpp). Si es `nullptr`, se usa la CHR 2 bpp normal.
 	const enhance::ITileProvider* tile_provider = nullptr;
@@ -453,7 +457,12 @@ private:
 	/// Banco de nametable (0/1 de los 2 KB) según el **mirroring** del cartucho.
 	/// \param nt_h Bit horizontal de nametable efectivo; \param nt_v Bit vertical.
 	/// \return Banco CIRAM (0/1).
-	[[nodiscard]] int nt_bank(int nt_h, int nt_v) const noexcept { return mirror_h ? nt_v : nt_h; }
+	[[nodiscard]] int nt_bank(int nt_h, int nt_v) const noexcept {
+		if (nt_single >= 0) {
+			return nt_single; // 1 pantalla (MMC1 modos 0/1): banco A/B constante.
+		}
+		return mirror_h ? nt_v : nt_h;
+	}
 
 	/// Dirección física (0..0x7FF) en los 2 KB de VRAM para una dirección de PPU
 	/// `$2000-$3EFF`, aplicando el **mirroring** (CIRAM A10). El offset es A0-A9.
