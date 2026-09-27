@@ -42,13 +42,17 @@ diff **estructural** restante ("MARIO BROS.", menú y suelo ya coinciden).
 
 **Qué se probó.** (a) Se hizo **dot-exacto** el sprite-0 (`sprite0_line`/`sprite0_dot`; el flag se
 activa al alcanzar la columna del primer píxel del hit) — *no cambió* el 3.1%: el sprite-0 no es
-la causa principal. (b) El offset de 1 frame se descartó. (c) Con los headers previos al cambio de
-timing, `dk`/`galaga` divergen igual → **no es una regresión** de estos arreglos.
+la causa principal. (b) El offset de 1 frame se descartó. (c) Se añadió el **pre-reloj por ciclo del
+acceso a datos** (`NesSystem::ppu_pre_cycles`: la `LDA $2002` ve el estado en su ciclo real) —
+*tampoco* cambió los 8 bytes: la lectura de `$2002` no era la causa. (d) Con los headers previos al
+cambio de timing, `dk`/`galaga` divergen igual → **no es una regresión** de estos arreglos.
 
-**Causa.** Es la **granularidad de eventos**: el 6502 se ejecuta por instrucciones/bloques y la
-PPU se sincroniza a esa frontera, mientras `mesen` es dot-exacto. Los pocos ciclos de diferencia en
-NMI/VBlank y en la secuencia de arranque hacen que un contador de init del juego difiera y no se
-recupere. Se necesitaría un **sincronismo dot-exacto del 6502** (sub-instrucción) para cerrarlo.
+**Causa.** Los ciclos por instrucción ya son exactos (los valida `cycles_test`) y los eventos de PPU
+son dot-exactos; el pre-reloj cubre el orden intra-instrucción de los accesos a PPU. Lo que queda
+es la **granularidad de la propia ejecución del 6502** dentro de una instrucción (actividad de bus
+por ciclo y muestreo de IRQ/NMI en el ciclo exacto). Cerrarlo exigiría un **intérprete dirigido por
+ciclo** (bus ciclo a ciclo), un refactor mayor; se recomienda como hito dedicado. **No bloquea el
+Amiga**, donde ese timing se resuelve por hardware (ver [`TIMING_AMIGA.md`](TIMING_AMIGA.md)).
 
 **Impacto en el codegen.** El mismo efecto aparece entre el **plugin** (bloques) y el **intérprete**
 (instrucción a instrucción): al verificar los 13 `.n2x`, 5 coinciden (RAM 0/2048) y 8 difieren en

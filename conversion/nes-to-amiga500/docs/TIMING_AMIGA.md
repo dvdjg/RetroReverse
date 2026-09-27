@@ -100,5 +100,66 @@ y la **Copper list** del punto 2.
 | Retardos por ciclos | precalculados en compilación | 0 |
 | Lecturas de registros PPU | registros sombra | 1 lectura |
 
+## 7. Reconocedor de idiomas (prototipo) y resultados
+
+[`tools/transpiler/src/raster_idioms.cpp`](../tools/transpiler/src/raster_idioms.cpp) escanea la PRG
+y localiza los tres idiomas (VBlank / sprite-0 / retardo) con sus direcciones, para **cuantificar**
+lo que habrá que mapear a hardware. Escaneo lineal (sin seguir el flujo), así que puede haber algún
+falso positivo; sirve como cota.
+
+```
+nes_transpiler build ... (compilar raster_idioms)
+raster_idioms build/*.nes
+```
+
+Resultado con las 13 ROMs de prueba:
+
+| ROM | VBlank | sprite-0 | retardos |
+|---|---:|---:|---:|
+| smb | 2 | 2 | 8 |
+| bf | 4 | 0 | 8 |
+| dk / dkjr / popeye / ic | 0 | 0 | 7–11 |
+| exb | 0 | 2 | 16 |
+| kungfu | 0 | 3 | 10 |
+| galaga | 2 | 0 | 8 |
+| mariobros | 1 | 0 | 10 |
+| mspacman | 2 | 0 | 4 |
+| pacman | 4 | 0 | 2 |
+| xevious | 1 | 0 | 9 |
+
+**Lectura:** cada juego tiene un **puñado** de idiomas (≈10–20 en total, 0–4 de cada tipo). Es
+decir, el mapeo a hardware no necesita un motor genérico: basta con **reconocer ~15 patrones por
+juego** en compilación y emitir las primitivas. En SMB, por ejemplo, el sprite-0 de `$813D` (el bucle
+que lo colgaba al principio) es uno de los dos detectados. Esto valida que la estrategia es
+**acotada y tratable**, no un problema abierto.
+
+### Primitivas objetivo (contrato)
+
+El reconocedor alimenta la emisión de estas primitivas (interfaz; implementación host ya disponible,
+Amiga pendiente):
+
+| Primitiva | Host (prototipo) | Amiga (futuro) |
+|---|---|---|
+| `n2a_wait_vblank()` | lee el flag de VBlank del PPU software | lee flag sombra / IRQ VBL |
+| `n2a_wait_sprite0()` | usa `ppu.sprite0_line` | `WAIT` del Copper + flag sombra |
+| `n2a_delay(n)` | `n` ciclos emulados | retardo baked (compilación) / `VHPOSR` |
+
+## 8. Presupuesto y cobertura HLE (medido)
+
+[`runtime/tools/bench_hle.cpp`](../runtime/tools/bench_hle.cpp) mide, por frame, los ciclos de CPU
+6502 gastados y el ratio HLE (escrituras de PPU resueltas por el clasificador, candidatas a
+Copper/Blitter en el Amiga):
+
+| ROM | ciclos 6502/frame | vs NTSC 29780 | vs PAL 33247 | ratio HLE |
+|---|---:|---:|---:|---:|
+| smb | 29668 | 100% | 89% | **90.0%** |
+| bf | 29669 | 100% | 89% | **95.6%** |
+
+**Lectura:** el juego usa prácticamente todo el frame NTSC de CPU (como es de esperar: el 6502 iba
+al límite). En el Amiga, ese trabajo se reparte entre el **68000** (la lógica transpilada) y el
+**Copper/Blitter** (el ~90–96% de escrituras de PPU que clasifica el HLE) — que corren **en
+paralelo**. Es decir, cuanto mayor sea el ratio HLE, más trabajo de vídeo se saca del 68000. El
+modo software (PPU en 68000) queda solo como red de seguridad.
+
 La idea audaz, en una frase: **"compila el tiempo y que lo toque el Copper"** — el 68000 solo corre
 la lógica del juego.
