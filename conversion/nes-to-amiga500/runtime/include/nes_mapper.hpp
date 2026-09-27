@@ -1,15 +1,18 @@
 #pragma once
 
 /// \file nes_mapper.hpp
-/// Mapper de cartucho (bank switching) del runtime. Soporta los mappers más
-/// comunes de juegos NROM/UxROM/CNROM y un MMC1 básico; expone lectura/escritura
-/// para la CPU y para la PPU (CHR).
+/// Mapper de cartucho (bank switching) del runtime. Soporta los mappers de los
+/// juegos del catálogo: NROM (0), MMC1 (1), UxROM (2), CNROM (3), MMC3 (4),
+/// MMC5 (5), AxROM (7), VRC6 (24/26, incl. variante b) y FME-7 (69); expone
+/// lectura/escritura para la CPU y para la PPU (CHR).
 ///
 /// No usa herencia ni memoria dinámica: un solo `struct` con un discriminante
 /// (`kind`) y el estado de cada mapper, para compilar igual en host y en 68000.
 ///
-/// Alcance (F9 en curso): NROM (0), UxROM (2) y CNROM (3) completos; MMC1 (1)
-/// parcial. MMC3 y otros quedan para después.
+/// Alcance (F9 en curso): NROM/UxROM/CNROM/MMC1 **completos**; MMC3 con IRQ por
+/// A12; MMC5 **subconjunto** (falta audio y banco CHR del split); AxROM/VRC6/
+/// FME-7 implementados. Bug abierto documentado: VRC6b (26) pinta mal
+/// (Esper Dream 2 / Mouryou); ver `docs/COMPATIBILITY.md`.
 
 #include <eng/core/types/types.hpp>
 
