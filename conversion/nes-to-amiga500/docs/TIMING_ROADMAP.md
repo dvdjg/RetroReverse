@@ -152,6 +152,19 @@ Re-tag `oracle-v2.1`, regenerar `port_matrix.baseline` + `COMPATIBILITY.md` + sn
   pero como **tarea dedicada** (Fase 3), no mezclado con el trabajo de mappers (donde el % por
   turno era muy superior: 38→71 ROMs en pocos turnos).
 
+### ✅ Fase 1+2 JUNTAS — WIN (2026)
+
+Implementadas **Fase 1 (PPU dot a dot)** **y Fase 2 (fase continua, dot sin resetear)**:
+- **jurassicpark 13.7% → 0.0%** (el raster MMC3). Antes el dot-continuo *solo* regresionaba
+  jurassicpark; **con el dot a dot** el IRQ A12 se dispara en su dot exacto y **se arregla**.
+- **El primer bucle de VBlank de metalstorm ALINEA** (desaparece el `resync #0`; la primera
+  divergencia pasa de idx 7828 a **16336**, el *segundo* bucle).
+- Sin regresiones: `gate EXIT=0`; bf/dk/megaman3 a 0.0%; contra 0.9%; smb3 0.4%.
+
+**Lo que queda**: la **deriva entre frames**. El largo de frame **varía** (29778–29783 ciclos,
+media 29780.6 correcta) porque la **frontera de frame se cierra en frontera de instrucción**, no
+en el dot exacto. Esa varianza hace que el *segundo* bucle de VBlank (y siguientes) diverjan.
+
 ### Diagnóstico de Fase 3 (2026): el dot-continuo acerca pero regresa por el IRQ
 
 Con **dot-continuo** (Fase 2 completa) y `trace_diff` de **jurassicpark** vs mesen: el bucle de
