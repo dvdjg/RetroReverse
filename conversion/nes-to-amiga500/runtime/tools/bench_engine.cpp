@@ -103,8 +103,12 @@ int main(int argc, char** argv) {
 
 	// Comparación de estado final.
 	int ram_diff = 0;
+	int first_diff = -1;
 	for (unsigned i = 0; i < 0x800u; ++i) {
 		if (interp_sys.mem.ram[i] != fast_sys.mem.ram[i]) {
+			if (first_diff < 0) {
+				first_diff = static_cast<int>(i);
+			}
 			++ram_diff;
 		}
 	}
@@ -139,6 +143,10 @@ int main(int argc, char** argv) {
 	std::printf("aceleracion  : %.2fx\n", ms_interp / ms_fast);
 	std::printf("equivalencia : %s (ram_diff=%d fb_diff=%d regs=%s)\n", equal ? "OK" : "FALLO",
 			ram_diff, fb_diff, regs_eq ? "ok" : "distintos");
+	if (first_diff >= 0) {
+		std::printf("  primera RAM distinta: $%04X  interp=%02X fast=%02X\n", first_diff,
+			    interp_sys.mem.ram[first_diff], fast_sys.mem.ram[first_diff]);
+	}
 
 	// Motor de CPU puro (sin render): mismo flujo de instrucciones en ambos.
 	const int budget = 3000000;
