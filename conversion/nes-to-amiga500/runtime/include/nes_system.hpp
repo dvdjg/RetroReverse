@@ -60,6 +60,8 @@ struct NesSystem {
 		mem.io_user = this;
 		mem.io_read = &NesSystem::io_read_cb;
 		mem.io_write = &NesSystem::io_write_cb;
+		mem.cycle_user = this;
+		mem.cycle_tick = &NesSystem::cycle_tick_cb; // PPU dot-exacta por acceso de bus
 		apu.set_reader(&NesSystem::apu_read_cb, this); // DMC: leer samples de la PRG
 		hle.ppu = &ppu;
 	}
@@ -102,10 +104,13 @@ struct NesSystem {
 			int n = 0;
 			int cyc = fast_run(fast_ctx, cpu, mem, budget, &n);
 			if (cyc <= 0) {
-				cyc = interp.step(); // primera instrucción no cubierta/bloque vacío
+				// Bloque vacío/no cubierto: una instrucción por el intérprete, que ya
+				// reloja la PPU por acceso (no hay que relojar aquí).
+				cyc = interp.step();
 				n = 1;
+			} else {
+				clock_ppu(cyc); // la PRG transpilada no reloja por acceso
 			}
-			clock_ppu(cyc);
 			if (ppu.nmi_occurred) {
 				ppu.nmi_occurred = false;
 				trigger_nmi();
@@ -145,22 +150,27 @@ struct NesSystem {
 	/// instrucción a instrucción).
 	/// \return Ciclos de CPU consumidos por la instrucción.
 	int step_instruction() {
-		const int pre = ppu_pre_cycles();
-		if (pre > 0) {
-			clock_ppu(pre); // sitúa la PPU en el ciclo del acceso a datos
-		}
 		int cyc;
 		if (fast_step != nullptr) {
+			// El ejecutor rápido no reloja por acceso: se pre-reloja al ciclo del
+			// acceso a datos y se completa tras la instrucción.
+			const int pre = ppu_pre_cycles();
+			if (pre > 0) {
+				clock_ppu(pre);
+			}
 			cyc = fast_step(fast_ctx, cpu, mem);
 			if (cyc <= 0) {
-				cyc = interp.step(); // opcode no cubierto: cae al intérprete
+				cyc = interp.step(); // el intérprete ya reloja por acceso (pre de más)
+			} else {
+				const int post = cyc - pre;
+				if (post > 0) {
+					clock_ppu(post);
+				}
 			}
 		} else {
+			// El intérprete reloja la PPU en cada acceso de bus y completa los ciclos
+			// internos: no hay que relojar aquí ni pre-relojar.
 			cyc = interp.step();
-		}
-		const int post = cyc - pre;
-		if (post > 0) {
-			clock_ppu(post);
 		}
 		if (ppu.nmi_occurred) {
 			ppu.nmi_occurred = false; // el NMI se toma en frontera de instrucción
@@ -235,6 +245,9 @@ private:
 	static void io_write_cb(void* u, eng::u16 a, eng::u8 v) {
 		static_cast<NesSystem*>(u)->io_write(a, v);
 	}
+
+	/// Hook de reloj de bus: avanza la PPU `n` ciclos (3 dots cada uno).
+	static void cycle_tick_cb(void* u, int n) { static_cast<NesSystem*>(u)->clock_ppu(n); }
 
 	/// Lee `$2000-$FFFF` (PPU espejada, APU, mandos, cartucho).
 	eng::u8 io_read(eng::u16 a) {

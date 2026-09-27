@@ -45,11 +45,25 @@ struct Interpreter {
 	[[nodiscard]] static eng::u8 opcode_cycles(eng::u8 op) noexcept;
 
 private:
-	eng::u8 rd(eng::u16 a) const { return mem.read(a); }
-	void wr(eng::u16 a, eng::u8 v) { mem.write(a, v); }
-	eng::u8 fetch() { return mem.read(cpu.PC++); }
-	void push(eng::u8 v) { mem.write(static_cast<eng::u16>(0x0100u | cpu.SP), v); --cpu.SP; }
-	eng::u8 pull() { ++cpu.SP; return mem.read(static_cast<eng::u16>(0x0100u | cpu.SP)); }
+	/// Ciclos de **bus** consumidos por la instrucción en curso (cada acceso suma 1).
+	/// Sirve para relojear la PPU en el ciclo exacto: al final se avanzan los ciclos
+	/// internos restantes (`cyc - bus_cycles_`).
+	mutable int bus_cycles_ = 0;
+	eng::u8 rd(eng::u16 a) const { mem.tick(); ++bus_cycles_; return mem.read(a); }
+	void wr(eng::u16 a, eng::u8 v) { mem.tick(); ++bus_cycles_; mem.write(a, v); }
+	eng::u8 fetch() { mem.tick(); ++bus_cycles_; return mem.read(cpu.PC++); }
+	void push(eng::u8 v) {
+		mem.tick();
+		++bus_cycles_;
+		mem.write(static_cast<eng::u16>(0x0100u | cpu.SP), v);
+		--cpu.SP;
+	}
+	eng::u8 pull() {
+		mem.tick();
+		++bus_cycles_;
+		++cpu.SP;
+		return mem.read(static_cast<eng::u16>(0x0100u | cpu.SP));
+	}
 	eng::u16 read16(eng::u16 a) const {
 		return static_cast<eng::u16>(rd(a) | (static_cast<eng::u16>(rd(static_cast<eng::u16>(a + 1u))) << 8u));
 	}
@@ -191,10 +205,12 @@ inline eng::u8 Interpreter::opcode_cycles(eng::u8 op) noexcept { return base_cyc
 
 inline int Interpreter::step() {
 	if (jammed) {
+		mem.tick(1);
 		return 1;
 	}
 	page_crossed_ = false;
 	branch_taken_ = false;
+	bus_cycles_ = 0;
 	const eng::u8 op = fetch();
 	eng::u8 cyc = base_cycles(op);
 
@@ -520,6 +536,12 @@ inline int Interpreter::step() {
 	}
 	if (page_crossed_ && (branch_taken_ || read_indexed_penalty(op))) {
 		cyc = static_cast<eng::u8>(cyc + 1u);
+	}
+	// Avanza los ciclos **internos** restantes (los no gastados en accesos de bus):
+	// así la PPU acaba la instrucción en el ciclo correcto y los accesos de bus ya
+	// se relojearon en su ciclo exacto (dot-exacto).
+	if (cyc > bus_cycles_) {
+		mem.tick(cyc - bus_cycles_);
 	}
 	cycles += cyc;
 	return cyc;

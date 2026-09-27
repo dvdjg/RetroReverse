@@ -76,6 +76,23 @@ struct NESMemory {
 	/// Si no es `nullptr`, atiende las escrituras de `$2000-$FFFF`.
 	void (*io_write)(void*, eng::u16, eng::u8) = nullptr;
 
+	/// Hook opcional de **avance de reloj de bus**: si no es `nullptr`, el
+	/// intérprete lo llama con el nº de ciclos antes de cada acceso de bus
+	/// (`fetch`/`rd`/`wr`/`push`/`pull`) y con los ciclos internos restantes al
+	/// final de la instrucción. Así la PPU se reloja **en el ciclo exacto** de cada
+	/// acceso (dot-exacto), no tras terminar la instrucción.
+	void (*cycle_tick)(void*, int) = nullptr;
+	/// Cookie pasada a `cycle_tick`.
+	void* cycle_user = nullptr;
+
+	/// Avanza el reloj de bus `n` ciclos (no hace nada si no hay hook).
+	/// \param n Ciclos a avanzar (>= 0; por defecto 1).
+	void tick(int n = 1) const {
+		if (cycle_tick != nullptr && n > 0) {
+			cycle_tick(cycle_user, n);
+		}
+	}
+
 	/// Lee el byte de la dirección `addr` del espacio de 64 KB, imitando el bus de
 	/// la NES:
 	/// - `$0000-$1FFF`: RAM interna (espejo de 2 KB);
