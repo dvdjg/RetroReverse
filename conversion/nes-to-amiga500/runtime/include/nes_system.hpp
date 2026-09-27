@@ -371,6 +371,21 @@ private:
 			if (!strobe) shift2 = static_cast<eng::u8>(shift2 >> 1u);
 			return static_cast<eng::u8>(b | 0x40u);
 		}
+		if (mapper.kind == MapperKind::Mmc5 && a >= 0x5204u && a <= 0x5206u) {
+			// Registros de la MMC5: $5204 (in-frame + IRQ pendiente, se limpia al leer),
+			// $5205/$5206 (multiplicador, bajo/alto).
+			if (a == 0x5204u) {
+				const eng::u8 v = static_cast<eng::u8>(
+					(mapper.mmc5_in_frame ? 0x40u : 0u) |
+					(mapper.mmc5_irq_pending ? 0x80u : 0u));
+				mapper.mmc5_irq_pending = false;
+				return v;
+			}
+			const eng::u8 p = static_cast<eng::u8>(mapper.mmc5_mult1 * mapper.mmc5_mult2);
+			return (a == 0x5205u) ? p
+					      : static_cast<eng::u8>((mapper.mmc5_mult1 *
+								      mapper.mmc5_mult2) >> 8);
+		}
 		if (a >= 0x5C00u && a < 0x6000u && mapper.kind == MapperKind::Mmc5) {
 			return mapper.mmc5_exram[(a - 0x5C00u) & 0x3FFu]; // ExRAM de la MMC5
 		}
@@ -488,6 +503,13 @@ private:
 			ppu.tick_scanline();
 			if (ppu.scanline != before) {
 				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
+				// MMC5: contador de scanlines para el IRQ ($5203/$5204). Se reinicia en
+				// la pre-render (261); avanza en cada línea renderizada.
+				if (ppu.scanline == 261u) {
+					mapper.reset_mmc5_frame();
+				} else if (ppu.scanline < 240u) {
+					mapper.mmc5_on_scanline();
+				}
 				// Cruce de la frontera de línea a mitad de tramo: el A12 de la nueva línea
 				// (dot 257) queda por delante, se dispara en la siguiente llamada.
 				if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot < ppu.dot) {

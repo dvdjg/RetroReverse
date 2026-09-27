@@ -103,6 +103,13 @@ struct Mapper {
 	eng::u8 mmc5_fill_color = 0;        ///< $5107: color de relleno.
 	eng::u8 mmc5_exram[0x400] = {0};    ///< ExRAM ($5C00-$5FFF, 1 KB).
 	eng::u8 mmc5_fill[0x400] = {0};     ///< Nametable de fill-mode (32×30 tiles + 64 attr), R-only.
+	eng::u8 mmc5_irq_target = 0;        ///< $5203: scanline objetivo del IRQ.
+	bool mmc5_irq_enable = false;       ///< $5204 bit7: IRQ habilitada.
+	bool mmc5_irq_pending = false;      ///< IRQ pedida (se limpia al leer $5204).
+	eng::u16 mmc5_scanline = 0;         ///< Contador de scanlines (para el IRQ).
+	bool mmc5_in_frame = false;         ///< La PPU está renderizando (para el contador).
+	eng::u8 mmc5_mult1 = 0;             ///< $5205: multiplicador (operando 1).
+	eng::u8 mmc5_mult2 = 0;             ///< $5206: multiplicador (operando 2).
 
 	// --- FME-7 / Sunsoft 5B (mapper 69) ---
 	eng::u8 fme7_command = 0;        ///< $8000: comando (0-15).
@@ -125,7 +132,37 @@ struct Mapper {
 		if (kind == MapperKind::Fme7) {
 			return fme7_irq_pending;
 		}
+		if (kind == MapperKind::Mmc5) {
+			return mmc5_irq_pending && mmc5_irq_enable;
+		}
 		return false;
+	}
+
+	/// Reloj de **una scanline renderizada** para el contador del IRQ de la MMC5
+	/// (mesen `MMC5::DetectScanlineStart`): la primera detección del frame pone el
+	/// contador a 0; las siguientes incrementan y comparan con `$5203`. El primer
+	/// ciclo del frame (`reset_mmc5_frame`) baja `in_frame`.
+	void mmc5_on_scanline() {
+		if (kind != MapperKind::Mmc5) {
+			return;
+		}
+		if (!mmc5_in_frame) {
+			mmc5_in_frame = true;
+			mmc5_scanline = 0;
+		} else {
+			++mmc5_scanline;
+			if (mmc5_scanline == mmc5_irq_target) {
+				mmc5_irq_pending = true;
+			}
+		}
+	}
+
+	/// Marca el final de frame de la MMC5 (el contador se reinicia en el próximo
+	/// `mmc5_on_scanline`). Lo llama el sistema en la pre-render.
+	void reset_mmc5_frame() {
+		if (kind == MapperKind::Mmc5) {
+			mmc5_in_frame = false;
+		}
 	}
 
 	/// Reloj del mapper por **ciclos de CPU** (lo llama el sistema). Hoy: IRQ de la
@@ -728,7 +765,16 @@ private:
 			break;
 		}
 		case 0x5130u: mmc5_chr_upper = static_cast<eng::u8>(value & 0x03u); break;
-		default: break; // $5000-$5015 (audio), $5102/$5103 (protect), $5200+ (split)
+		case 0x5203u: mmc5_irq_target = value; break;
+		case 0x5204u:
+			mmc5_irq_enable = (value & 0x80u) != 0u;
+			if (!mmc5_irq_enable) {
+				mmc5_irq_pending = false;
+			}
+			break;
+		case 0x5205u: mmc5_mult1 = value; break;
+		case 0x5206u: mmc5_mult2 = value; break;
+		default: break; // $5000-$5015 (audio), $5102/$5103 (protect), $5200-$5202 (split)
 		}
 	}
 
