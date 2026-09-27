@@ -10,7 +10,7 @@
 #include "opcodes.hpp"
 
 namespace {
-eng::u8 g_prg[0x10000];
+eng::u8 g_prg[0x40000];
 eng::usize g_n = 0;
 
 eng::u8 at(eng::usize off) { return off < g_n ? g_prg[off] : 0u; }
@@ -38,12 +38,20 @@ int main(int argc, char** argv) {
 
 	const unsigned addr = static_cast<unsigned>(std::strtoul(argv[2], nullptr, 16));
 	int count = (argc > 3) ? std::atoi(argv[3]) : 24;
+	bool last16k = false;
+	for (int i = 3; i < argc; ++i) {
+		if (std::strcmp(argv[i], "--last16k") == 0) last16k = true;
+	}
 	eng::usize off = addr - 0x8000u;
+	if (last16k && addr >= 0xC000u && g_n >= 0x4000u) {
+		off = g_n - 0x4000u + (addr - 0xC000u); // ultimo banco de 16 KB
+	}
+	unsigned pc = addr;
 	for (int k = 0; k < count && off < g_n; ++k) {
 		const eng::u8 op = at(off);
 		const n2a::OpcodeInfo& info = n2a::kOpcodeTable[op];
 		const eng::u8 sz = info.size != 0u ? info.size : 1u;
-		std::printf("%04X: %02X", static_cast<unsigned>(0x8000u + off), op);
+		std::printf("%04X: %02X", pc, op);
 		for (eng::u8 b = 1; b < sz; ++b) {
 			std::printf(" %02X", at(off + b));
 		}
@@ -58,6 +66,7 @@ int main(int argc, char** argv) {
 		}
 		std::printf("\n");
 		off += sz;
+		pc += sz;
 	}
 	return 0;
 }
