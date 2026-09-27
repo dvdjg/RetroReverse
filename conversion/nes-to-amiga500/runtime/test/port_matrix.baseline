@@ -1,14 +1,24 @@
-# Baseline de la matriz de compatibilidad (estructura(lum) vs mesen, 60 frames).
-# Generado con `port_matrix.sh --update`. Formato: <rom> <pct>.
+# Baseline (mapper hash estructura vs mesen, 60 frames).
 bf.nes 0.0
+bioniccommando.nes ?
+blastermaster.nes 100.0
+castlevania.nes 0.0
+contra.nes 0.0
 dk.nes 0.0
 dkjr.nes 0.0
+ducktales.nes 0.0
 exb.nes 0.0
 galaga.nes 36.4
+gradius.nes 5.4
 ic.nes 92.2
 kungfu.nes 0.0
+legendofzeldathe.nes 80.9
 mariobros.nes 0.0
+megaman.nes 0.0
+megaman2.nes ?
+metroid.nes 12.9
 mspacman.nes 0.0
+ninjagaiden.nes 99.2
 pacman.nes 12.9
 popeye.nes 0.0
 smb.nes 3.1
