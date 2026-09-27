@@ -152,6 +152,15 @@ Re-tag `oracle-v2.1`, regenerar `port_matrix.baseline` + `COMPATIBILITY.md` + sn
   pero como **tarea dedicada** (Fase 3), no mezclado con el trabajo de mappers (donde el % por
   turno era muy superior: 38→71 ROMs en pocos turnos).
 
+### Diagnóstico de Fase 3 (2026): el dot-continuo acerca pero regresa por el IRQ
+
+Con **dot-continuo** (Fase 2 completa) y `trace_diff` de **jurassicpark** vs mesen: el bucle de
+VBlank `$E509` deja de estar "1 iteración tarde" y pasa a **alternar** (`O+0 R+2` / `O+2 R+0`) —
+es decir, la fase queda **casi alineada**. **Pero** el **%** de jurassicpark regresa (13.7→16.6%):
+el **IRQ de raster de la MMC3** (que se pide en el dot `kA12Dot` de cada línea) se desplaza con la
+fase y su reparto de pantalla se desalinea. → Confirma que **Fase 2 completa y Fase 3 (IRQ MMC3 por
+ciclo) deben hacerse juntas**: el dot-continuo por sí solo alinea el VBlank pero **rompe** el raster.
+
 ## Orden de valor / riesgo
 
 | Fase | Valor | Riesgo | Toca |
