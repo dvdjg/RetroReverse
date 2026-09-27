@@ -62,8 +62,45 @@ divergencia pero **no la eliminan**: el problema no es el **valor** del flag, si
 temporal** de la sincronización. Un parche por juego sería inviable (6 juegos, cada uno con su punto
 interno de divergencia).
 
-**La solución (real, no un remiendo).** Hacer la sincronización PPU↔CPU **por ciclo** en los puntos
-sensibles. Dos vías equivalentes, de menor a mayor alcance:
+**La solución (real, no un remiendo) — arquitectura acordada.** Tras contrastar el análisis con una
+segunda opinión independiente, la conclusión es **la misma**: no existe un workaround genérico y
+robusto que conserve a la vez (a) granularidad de instrucción, (b) PPU en bloque, (c) frontera de
+frame *snapada* a instrucción y (d) equivalencia intérprete↔codegen. La divergencia es **estructural**.
+
+El arreglo correcto y **genérico** (sin tablas por juego) es un **catch-up dirigido por eventos**,
+que conserva la equivalencia porque intérprete y codegen comparten el mismo scheduler:
+
+1. **Contador absoluto** de ciclos/dots desde un epoch (fase **continua**, sin snap).
+2. Antes de ejecutar una instrucción/bloque, **predecir el ciclo absoluto del próximo evento
+   crítico**: flag de VBlank set `(241,1)` y clear `(261,1)`, sprite-0, overflow, IRQ de mapper,
+   fin de frame.
+3. Si el evento cae **dentro** del intervalo de ciclos de esa instrucción/bloque → **bajar a
+   granularidad de ciclo (o de acceso de bus) solo en esa ventana**, o **predecir el ciclo exacto
+   del acceso `$2002`** (según el *addressing mode*) y decidir el valor del flag **antes** de
+   completar la instrucción.
+4. **Arrastrar el residuo de fase entre frames** (la frontera no es un snap duro; el frame dura
+   `89342` dots ≈ `29780⅔` ciclos, ± el skip de 1 dot en frames impares). El **codegen debe respetar
+   el mismo residuo** (esto es lo que hoy rompe la equivalencia, `ram_diff=5`).
+5. **NMI**: muestrear al final de la instrucción, o en la **fase 2 del último ciclo** (modelo de
+   *half-cycle*): partir el ciclo de CPU en dos mitades alrededor del dot 1 de la 241 (lo que hacen
+   los emuladores que pasan `vbl_nmi_timing`).
+
+**Lockstep mínimo suficiente**: **scheduler de eventos + frontera exacta con residuo**, con el
+**render *lazy*** (dibujar el frame al final). **No** hace falta una PPU cycle-accurate pixel a pixel
+mientras los *efectos observables* (status flags, NMI, sprite-0, IRQs) estén temporizados al ciclo
+correcto desde el contador absoluto. Ese es el punto de equilibrio de los emuladores "buenos pero no
+mesen".
+
+**Plan de implementación (bounded, con criterio de aborto):**
+1. Convertir el avance de la PPU a un **contador absoluto de dots** (no resetear en la frontera);
+   `run_frame` corta en el **dot exacto** (no en frontera de instrucción).
+2. **Scheduler de eventos**: exponer `next_event_cycle` (VBlank/NMI/sprite-0/IRQ A12) y usarlo como
+   presupuesto del bloque (en vez de `cycles_to_scanline`), cayendo a ciclo/bus en la ventana crítica.
+3. Replicar exactamente en el **codegen** (mismo scheduler) y verificar `equivalencia ram_diff=0`.
+4. Criterio de aborto: si el paso 3 no cuadra la equivalencia sin romper los **30+ juegos a 0%**,
+   revertir y dejar el límite documentado (el oráculo sigue válido para todo lo demás).
+
+Las dos vías "de libro" equivalentes, de menor a mayor alcance:
 
 1. **Muestreo cycle-exacto de `$2002`** (mínimo, localizado). Hoy `Interpreter::rd()` hace
    `mem.tick()` **antes** de `mem.read()`, así que la lectura ve el dot del ciclo **siguiente**; de
