@@ -94,6 +94,16 @@ frame. El `budget` del ejecutor rápido pasa de "hasta fin de scanline" a "hasta
 *Verificación*: equivalencia + `gate`; `trace_diff` de los 6 juegos.
 
 ### Fase 4 — Lectura cycle-exacta de `$2002`
+
+> **Resultado negativo 2026 (descarta la fase).** Con **Fase 2** ya activa (no-snap), probamos
+> adelantar la **fase del PPU en el reset** (`-DN2A_PPU_PHASE=0/5/7/9/10/12` ciclos): **neutro total**
+> (misma divergencia en idx 43447). Motivo: la **lectura** y el **flag** son ambos función de la fase
+> del PPU, así que **cualquier desplazamiento de fase mueve los dos por igual** y la relación
+> lectura↔flag queda **invariante**. → El desfase **no es de fase**, sino de **cómo muestrea la
+> lectura** (instante del acceso de datos). Esto **acota el arreglo** al punto exacto: el instante en
+> que `rd()` lee `$2002` respecto al ciclo (hoy `mem.tick()` **antes** de `mem.read()` → ve el dot
+> del ciclo siguiente). El fix debe actuar **ahí**, no en el flag ni en la fase.
+
 En el intérprete, para la instrucción que **lee `$2002`** (según su *addressing mode*), calcular el
 **ciclo exacto del acceso de datos** y evaluar el flag con la PPU en **ese** dot (no en el
 siguiente). Es el punto que hoy desplaza el bucle `LDA $2002; BPL`.
