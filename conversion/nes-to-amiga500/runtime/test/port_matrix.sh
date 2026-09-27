@@ -66,17 +66,18 @@ case "$MODE" in
 --gate)
 	rc=0
 	printf '| ROM | estructura | baseline |\n|---|---:|---:|\n'
-	rows | while read -r n m h s; do
+	# `rows` se evalúa UNA vez y como proceso sustituido (`< <(...)`) para que el
+	# bucle corra en el shell actual y `rc` se propague al `exit` (con `rows | while`
+	# el bucle va en un subshell y `rc` se pierde).
+	while read -r n m h s; do
 		want="$(awk -v x="$n" '$1==x{print $2}' "$BASELINE")"
-		flag="$(awk -v g="$s" -v w="$want" -v t="$TOL" 'BEGIN{print(w!=""&&g+0>w+0+t)?" REGRESION":""}')"
+		flag=""
+		if [ -n "$want" ]; then
+			flag="$(awk -v g="$s" -v w="$want" -v t="$TOL" 'BEGIN{print(g+0>w+0+t)?" REGRESION":""}')"
+		fi
 		[ -n "$flag" ] && rc=1
 		printf '| %s | %s%% | %s%%%s |\n' "$n" "$s" "${want:-?}" "$flag"
-	done
-	# `rc` no sale del subshell; recomprueba en un segundo pase.
-	rows | while read -r n m h s; do
-		want="$(awk -v x="$n" '$1==x{print $2}' "$BASELINE")"
-		awk -v g="$s" -v w="$want" -v t="$TOL" 'BEGIN{exit !(w!=""&&g+0>w+0+t)}' && exit 1
-	done || rc=1
+	done < <(rows)
 	exit "$rc"
 	;;
 *)

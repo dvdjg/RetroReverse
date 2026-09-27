@@ -40,11 +40,16 @@ struct Mapper {
 	eng::u8 prg_bank = 0; ///< Banco de PRG seleccionado (UxROM/MMC1).
 	eng::u8 chr_bank = 0; ///< Banco de CHR seleccionado (CNROM/MMC1).
 	// --- MMC1 (shift register) ---
-	eng::u8 mmc1_shift = 0; ///< Registro de desplazamiento del MMC1.
-	eng::u8 mmc1_count = 0; ///< Bits recibidos.
-	eng::u8 mmc1_ctrl = 0x0Cu; ///< Registro de control.
-	eng::u8 mmc1_chr = 0;    ///< Registro de banco de CHR.
-	eng::u8 mmc1_prg = 0;    ///< Registro de banco de PRG.
+	eng::u8 mmc1_shift = 0;      ///< Registro de desplazamiento del MMC1.
+	eng::u8 mmc1_count = 0;      ///< Bits recibidos.
+	eng::u8 mmc1_ctrl = 0x0Cu;   ///< Registro de control ($8000); al power-on bits 2,3 = 1.
+	eng::u8 mmc1_chr0 = 0;       ///< Registro CHR 0 ($A000).
+	eng::u8 mmc1_chr1 = 0;       ///< Registro CHR 1 ($C000).
+	eng::u8 mmc1_prg = 0;        ///< Registro de banco de PRG ($E000).
+	bool mmc1_last_chr1 = false; ///< El último registro CHR escrito fue $C000 (para CHR de 4 KB).
+	bool mmc1_wram_enabled = true; ///< WRAM de $6000-$7FFF habilitada ($E000 bit 4 = 0).
+	eng::u32 mmc1_last_write = 0; ///< Ciclo de la última escritura (filtro de 2 ciclos de MMC1).
+	eng::u32 cpu_cycle = 0;       ///< Ciclo de CPU actual (lo fija el sistema antes de `cpu_write`).
 	/// Hook de **diagnóstico** opcional: `(registro 0..3, valor)` en cada commit del
 	/// MMC1 (ctrl/chr/prg). No afecta al comportamiento.
 	void (*write_trace)(eng::u8 reg, eng::u8 value) = nullptr;
@@ -101,28 +106,28 @@ struct Mapper {
 		case MapperKind::Cnrom:
 			return prg_at(off);
 		case MapperKind::Mmc1: {
-			// NOTA: la referencia (MAME `nes_sxrom`) define los modos PRG (ctrl bits
-			// 2-3): 0/1 = 32 KB; 2 = `$8000` fijo banco 0 / `$C000` conmutable;
-			// 3 = `$8000` conmutable / `$C000` último fijo. Con esa lógica **metroid se
-			// cuelga** (m1p=0x10 fuera de rango) => hay otro factor (filtro de
-			// escritura de 1 ciclo del MMC1, o el banco CHR) aún sin resolver. Hasta
-			// cotejarlo con la referencia, se mantiene el comportamiento que hace
-			// funcionar Metroid/Mega Man 2 (modo >=2 = `$8000` conmutable, `$C000`
-			// último) y MMC1 queda **parcial** (ver docs/COMPATIBILITY.md).
-			const eng::u32 mode = (mmc1_ctrl >> 2u) & 3u;
-			if (mode < 2u) {
-				const eng::u32 base = (static_cast<eng::u32>(mmc1_prg & 0x0Eu)) * 0x4000u;
+			// Modos PRG (mesen MMC1.h: `_prgMode`=16K si ctrl bit 3; `_slotSelect`=
+			// $8000 si ctrl bit 2; si no, $C000):
+			//  - 32K (bit3=0): ventana única de 32K = banco (`prg & 0x0E`).
+			//  - 16K (bit3=1): banco conmutable (prg & 0x0F) en $8000 o $C000 según
+			//    slot; el otro es fijo (0 en $8000.., o el último en $C000..).
+			const bool mode16 = (mmc1_ctrl & 0x08u) != 0u;
+			const bool slot8000 = (mmc1_ctrl & 0x04u) != 0u;
+			const eng::u32 last = (prg_size >= 0x4000u) ? prg_size - 0x4000u : 0u;
+			if (!mode16) {
+				const eng::u32 base = static_cast<eng::u32>(mmc1_prg & 0x0Eu) * 0x4000u;
 				return prg_at(base + off);
 			}
-			// NOTA: el modo 2 "correcto" de MAME ($8000 banco 0 / $C000 conmutable)
-			// REGRESA Metroid (que usa modo 3 y pasa por modo 2). Hay un factor no
-			// resuelto (probablemente el latch compartido / filtro de escritura de 1
-			// ciclo). Se mantiene el modo ≥2 = `$8000` conmutable / `$C000` último,
-			// que hace funcionar Metroid. MMC1 = parcial (ver COMPATIBILITY.md).
-			if (addr >= 0xC000u) {
-				return prg_at((prg_size >= 0x4000u ? prg_size - 0x4000u : 0u) + (addr - 0xC000u));
+			if (slot8000) {
+				if (addr >= 0xC000u) {
+					return prg_at(last + (addr - 0xC000u));
+				}
+				return prg_at(static_cast<eng::u32>(mmc1_prg & 0x0Fu) * 0x4000u + off);
 			}
-			return prg_at(static_cast<eng::u32>(mmc1_prg) * 0x4000u + off);
+			if (addr >= 0xC000u) {
+				return prg_at(static_cast<eng::u32>(mmc1_prg & 0x0Fu) * 0x4000u + (addr - 0xC000u));
+			}
+			return prg_at(off); // $8000-$BFFF = banco 0 fijo
 		}
 		case MapperKind::Mmc3: {
 			// 4 ventanas de 8 KB. R6/R7 conmutan; las dos últimas fijas.
@@ -183,8 +188,16 @@ struct Mapper {
 			if (kind == MapperKind::Cnrom) {
 				off += static_cast<eng::u32>(chr_bank) * 0x2000u;
 			} else if (kind == MapperKind::Mmc1) {
-				const eng::u8 bk = (mmc1_ctrl & 0x10u) ? 0u : mmc1_chr;
-				off += static_cast<eng::u32>(bk) * 0x1000u;
+				// mesen MMC1.h: 8K (ctrl bit4=0) usa chr0&0x1E (par) en dos mitades; 4K
+				// usa chr0 en $0000-$0FFF y chr1 en $1000-$1FFF.
+				if ((mmc1_ctrl & 0x10u) == 0u) {
+					// 8 KB: `off` (=addr) ya recorre 0..$1FFF; añade el banco 8K par.
+					off += ((mmc1_chr0 & 0x1Fu) & ~1u) * 0x1000u;
+				} else if (addr >= 0x1000u) {
+					off += static_cast<eng::u32>(mmc1_chr1 & 0x1Fu) * 0x1000u;
+				} else {
+					off += static_cast<eng::u32>(mmc1_chr0 & 0x1Fu) * 0x1000u;
+				}
 			} else if (kind == MapperKind::Mmc3) {
 				off = mmc3_chr_addr(addr);
 			}
@@ -215,37 +228,58 @@ private:
 		return prg[off % prg_size];
 	}
 
-	/// Escritura serial (5 bits) del MMC1 a los registros de control/CHR/PRG.
+	/// Escritura serial (5 bits) del MMC1 a los registros de control/CHR/PRG, fiel a
+	/// `mesen MMC1.h::WriteRegister`:
+	/// - Si bit 7 (`r`) = 1: resetea el buffer y pone bits 2,3 de $8000 (16K, $8000).
+	/// - Si no: desplaza 1 bit; al 5º, escribe el registro según `(addr>>13)&3`
+	///   (0=$8000, 1=$A000, 2=$C000, 3=$E000).
+	/// - Registros 0/1 (`$8000`/`$A000`) ignoran el bit 0.
+	/// - Se ignora la escritura si ocurre < 2 ciclos tras la anterior (dummy write),
+	///   salvo que traiga el bit de reset.
+	/// \param addr Dirección de escritura ($8000-$FFFF).
+	/// \param value Byte escrito.
 	void mmc1_write(eng::u16 addr, eng::u8 value) {
-		if ((value & 0x80u) != 0u) {
+		const bool reset = (value & 0x80u) != 0u;
+		if (!reset && (cpu_cycle - mmc1_last_write) < 2u) {
+			mmc1_last_write = cpu_cycle;
+			return; // escritura "dummy" pegada a otra: se ignora
+		}
+		mmc1_last_write = cpu_cycle;
+		if (reset) {
 			mmc1_shift = 0u;
 			mmc1_count = 0u;
 			mmc1_ctrl = static_cast<eng::u8>(mmc1_ctrl | 0x0Cu);
 			return;
 		}
 		mmc1_shift = static_cast<eng::u8>(mmc1_shift | ((value & 1u) << mmc1_count));
-		if (++mmc1_count == 5u) {
-			eng::u8 reg = mmc1_shift;
-			const eng::u32 which = (addr >> 13u) & 3u;
-			switch (which) {
-			case 0u:
-				mmc1_ctrl = reg;
-				break;
-			case 1u:
-				mmc1_chr = reg;
-				break;
-			case 2u:
-				mmc1_prg = reg;
-				break;
-			default:
-				break;
-			}
-			if (write_trace != nullptr) {
-				write_trace(static_cast<eng::u8>(which), reg); // diagnóstico
-			}
-			mmc1_shift = 0u;
-			mmc1_count = 0u;
+		if (++mmc1_count < 5u) {
+			return;
 		}
+		eng::u8 reg = mmc1_shift;
+		const eng::u32 which = (addr >> 13u) & 3u;
+		switch (which) {
+		case 0u:
+			mmc1_ctrl = reg;
+			break;
+		case 1u:
+			mmc1_chr0 = static_cast<eng::u8>(reg & ~0x01u);
+			mmc1_last_chr1 = false;
+			break;
+		case 2u:
+			mmc1_chr1 = static_cast<eng::u8>(reg & ~0x01u);
+			mmc1_last_chr1 = true;
+			break;
+		default:
+			mmc1_prg = reg;
+			// $E000 bit 4 = 1 deshabilita la WRAM de $6000-$7FFF.
+			mmc1_wram_enabled = (reg & 0x10u) == 0u;
+			break;
+		}
+		if (write_trace != nullptr) {
+			write_trace(static_cast<eng::u8>(which), reg); // diagnóstico
+		}
+		mmc1_shift = 0u;
+		mmc1_count = 0u;
 	}
 
 	/// Dirección CHR (1 KB) para una dirección de PPU según el modo CHR de la MMC3.

@@ -319,8 +319,14 @@ private:
 			if (!strobe) shift2 = static_cast<eng::u8>(shift2 >> 1u);
 			return static_cast<eng::u8>(b | 0x40u);
 		}
-		if (a >= 0x6000u && a < 0x8000u && mapper.kind == MapperKind::Mmc3) {
-			return mem.prg_ram[a - 0x6000u]; // PRG-RAM de la MMC3 (plana)
+		if (a >= 0x6000u && a < 0x8000u &&
+		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1)) {
+			// PRG-RAM/WRAM en $6000-$7FFF (MMC3 y MMC1). La MMC1 puede deshabilitarla
+			// ($E000 bit 4); ver `mapper.wram_enabled`.
+			if (mapper.kind == MapperKind::Mmc1 && !mapper.mmc1_wram_enabled) {
+				return 0u;
+			}
+			return mem.prg_ram[a - 0x6000u];
 		}
 		if (a >= 0x4020u) {
 			return mapper.cpu_read(a);
@@ -354,11 +360,15 @@ private:
 			apu.write_reg(a, v);
 			return;
 		}
-		if (a >= 0x6000u && a < 0x8000u && mapper.kind == MapperKind::Mmc3) {
-			mem.prg_ram[a - 0x6000u] = v; // PRG-RAM de la MMC3 (plana)
+		if (a >= 0x6000u && a < 0x8000u &&
+		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1)) {
+			if (mapper.kind != MapperKind::Mmc1 || mapper.mmc1_wram_enabled) {
+				mem.prg_ram[a - 0x6000u] = v;
+			}
 			return;
 		}
 		if (a >= 0x4020u) {
+			mapper.cpu_cycle = interp.cycles;
 			mapper.cpu_write(a, v);
 			return;
 		}
