@@ -44,6 +44,9 @@ struct Mapper {
 	eng::u8 mmc1_ctrl = 0x0Cu; ///< Registro de control.
 	eng::u8 mmc1_chr = 0;    ///< Registro de banco de CHR.
 	eng::u8 mmc1_prg = 0;    ///< Registro de banco de PRG.
+	/// Hook de **diagnóstico** opcional: `(registro 0..3, valor)` en cada commit del
+	/// MMC1 (ctrl/chr/prg). No afecta al comportamiento.
+	void (*write_trace)(eng::u8 reg, eng::u8 value) = nullptr;
 
 	/// Lee el byte de la CPU en `addr` (zona de cartucho `$4020-$FFFF`).
 	/// \param addr Dirección de 16 bits.
@@ -159,7 +162,8 @@ private:
 		mmc1_shift = static_cast<eng::u8>(mmc1_shift | ((value & 1u) << mmc1_count));
 		if (++mmc1_count == 5u) {
 			eng::u8 reg = mmc1_shift;
-			switch ((addr >> 13u) & 3u) {
+			const eng::u32 which = (addr >> 13u) & 3u;
+			switch (which) {
 			case 0u:
 				mmc1_ctrl = reg;
 				break;
@@ -171,6 +175,9 @@ private:
 				break;
 			default:
 				break;
+			}
+			if (write_trace != nullptr) {
+				write_trace(static_cast<eng::u8>(which), reg); // diagnóstico
 			}
 			mmc1_shift = 0u;
 			mmc1_count = 0u;
