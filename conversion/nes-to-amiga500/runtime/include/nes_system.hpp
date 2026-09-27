@@ -365,11 +365,7 @@ private:
 		if (a >= 0x5C00u && a < 0x6000u && mapper.kind == MapperKind::Mmc5) {
 			return mapper.mmc5_exram[(a - 0x5C00u) & 0x3FFu]; // ExRAM de la MMC5
 		}
-		if (a >= 0x6000u && a < 0x8000u &&
-		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1 ||
-		     mapper.kind == MapperKind::Mmc5)) {
-			// PRG-RAM/WRAM en $6000-$7FFF (MMC3/MMC1/MMC5). La MMC1 puede deshabilitarla
-			// ($E000 bit 4); ver `mapper.wram_enabled`.
+		if (a >= 0x6000u && a < 0x8000u && mapper_ram_at_6000()) {
 			if (mapper.kind == MapperKind::Mmc1 && !mapper.mmc1_wram_enabled) {
 				return 0u;
 			}
@@ -379,6 +375,21 @@ private:
 			return mapper.cpu_read(a);
 		}
 		return 0u;
+	}
+
+	/// ¿`$6000-$7FFF` es RAM del mapper (MMC3/MMC1/MMC5, o FME-7 con `$A000 cmd 8`
+	/// bit 6)? Si no, el mapper lo mapea como PRG-ROM (FME-7) o no existe.
+	[[nodiscard]] bool mapper_ram_at_6000() const noexcept {
+		switch (mapper.kind) {
+		case MapperKind::Mmc1:
+		case MapperKind::Mmc3:
+		case MapperKind::Mmc5:
+			return true;
+		case MapperKind::Fme7:
+			return (mapper.fme7_workram & 0x40u) != 0u;
+		default:
+			return false;
+		}
 	}
 
 	/// Escribe `$2000-$FFFF` (PPU/HLE, OAM DMA, APU, mandos, mapper).
@@ -407,9 +418,7 @@ private:
 			apu.write_reg(a, v);
 			return;
 		}
-		if (a >= 0x6000u && a < 0x8000u &&
-		    (mapper.kind == MapperKind::Mmc3 || mapper.kind == MapperKind::Mmc1 ||
-		     mapper.kind == MapperKind::Mmc5)) {
+		if (a >= 0x6000u && a < 0x8000u && mapper_ram_at_6000()) {
 			if (mapper.kind != MapperKind::Mmc1 || mapper.mmc1_wram_enabled) {
 				mem.prg_ram[a - 0x6000u] = v;
 			}

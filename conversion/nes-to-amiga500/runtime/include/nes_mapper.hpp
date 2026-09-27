@@ -23,7 +23,9 @@ enum class MapperKind : eng::u8 {
 	Cnrom = 3, ///< PRG fija, CHR conmutable (8 KB).
 	Mmc3 = 4,  ///< PRG/CHR por bancos + IRQ por scanline.
 	Mmc5 = 5,   ///< MMC5 (Castlevania III USA, etc.).
+	Axrom = 7,  ///< AxROM: PRG 32 KB conmutable, CHR-RAM, 1 pantalla.
 	Vrc6 = 24,  ///< Konami VRC6 (mapper 24; el 26 = VRC6b vía `vrc6_b`).
+	Fme7 = 69,  ///< Sunsoft FME-7 (Mr. Gimmick): comando/PRG/CHR/IRQ.
 };
 
 /// Estado del cartucho: PRG/CHR y registros de bancos.
@@ -102,6 +104,16 @@ struct Mapper {
 	eng::u8 mmc5_exram[0x400] = {0};    ///< ExRAM ($5C00-$5FFF, 1 KB).
 	eng::u8 mmc5_fill[0x400] = {0};     ///< Nametable de fill-mode (32×30 tiles + 64 attr), R-only.
 
+	// --- FME-7 / Sunsoft 5B (mapper 69) ---
+	eng::u8 fme7_command = 0;        ///< $8000: comando (0-15).
+	eng::u8 fme7_workram = 0;        ///< $A000 cmd 8: banco de $6000-$7FFF (bit6 = RAM).
+	eng::u8 fme7_prg[3] = {0};       ///< $A000 cmd 9/A/B: bancos PRG $8000/$A000/$C000.
+	eng::u8 fme7_chr[8] = {0};       ///< $A000 cmd 0-7: bancos CHR de 1 KB.
+	bool fme7_irq_enable = false;    ///< cmd D bit0.
+	bool fme7_irq_counter_enable = false; ///< cmd D bit7.
+	bool fme7_irq_pending = false;   ///< IRQ pedida.
+	eng::u16 fme7_irq_counter = 0;   ///< cmd E/F: contador (decrementa por ciclo de CPU).
+
 	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
 	[[nodiscard]] bool irq_line() const noexcept {
 		if (kind == MapperKind::Mmc3) {
@@ -110,13 +122,19 @@ struct Mapper {
 		if (kind == MapperKind::Vrc6) {
 			return vrc6_irq_pending;
 		}
+		if (kind == MapperKind::Fme7) {
+			return fme7_irq_pending;
+		}
 		return false;
 	}
 
 	/// Reloj del mapper por **ciclos de CPU** (lo llama el sistema). Hoy: IRQ de la
 	/// VRC6, que cuenta por ciclos. La MMC3 usa `on_scanline`.
 	/// \param cpu_cycles Ciclos de CPU desde la última llamada.
-	void clock(int cpu_cycles) { vrc6_clock(cpu_cycles); }
+	void clock(int cpu_cycles) {
+		vrc6_clock(cpu_cycles);
+		fme7_clock(cpu_cycles);
+	}
 
 	/// Reloj de **una scanline** (lo llama el sistema durante el render). La MMC3
 	/// decrementa su contador y pide IRQ al llegar a 0.
@@ -196,6 +214,28 @@ struct Mapper {
 			} else {
 				bank8 = fixed_last;
 			}
+			if (n8 != 0u) {
+				bank8 %= n8;
+			}
+			return prg_at(bank8 * 0x2000u + (off & 0x1FFFu));
+		}
+		case MapperKind::Axrom:
+			// 32 KB conmutables en $8000-$FFFF (mesen AXROM.h).
+			return prg_at((static_cast<eng::u32>(prg_bank) & 0x0Fu) * 0x8000u + off);
+		case MapperKind::Fme7: {
+			// 8 KB por ventana; $E000 = último fijo (mesen SunsoftFme7.h).
+			const eng::u32 n8 = prg_size / 0x2000u;
+			eng::u32 bank8;
+			if (addr < 0xA000u) {
+				bank8 = fme7_prg[0];
+			} else if (addr < 0xC000u) {
+				bank8 = fme7_prg[1];
+			} else if (addr < 0xE000u) {
+				bank8 = fme7_prg[2];
+			} else {
+				bank8 = n8 != 0u ? n8 - 1u : 0u;
+			}
+			bank8 &= 0x3Fu;
 			if (n8 != 0u) {
 				bank8 %= n8;
 			}
@@ -291,6 +331,14 @@ struct Mapper {
 		case MapperKind::Mmc5:
 			mmc5_write(addr, value);
 			break;
+		case MapperKind::Axrom:
+			// $8000-$FFFF: banco PRG de 32 KB (bits 0-3) + 1 pantalla (bit 4).
+			prg_bank = static_cast<eng::u8>(value & 0x0Fu);
+			mirror_single = ((value & 0x10u) != 0u) ? 1 : 0;
+			break;
+		case MapperKind::Fme7:
+			fme7_write(addr, value);
+			break;
 		}
 	}
 
@@ -322,6 +370,8 @@ struct Mapper {
 			} else if (kind == MapperKind::Mmc5) {
 				off = static_cast<eng::u32>(mmc5_chr_page(addr >> 10u)) * 0x400u +
 				      (addr & 0x3FFu);
+			} else if (kind == MapperKind::Fme7) {
+				off = static_cast<eng::u32>(fme7_chr[addr >> 10u]) * 0x400u + (addr & 0x3FFu);
 			}
 			return chr[off % chr_size];
 		}
@@ -679,6 +729,80 @@ private:
 		}
 		case 0x5130u: mmc5_chr_upper = static_cast<eng::u8>(value & 0x03u); break;
 		default: break; // $5000-$5015 (audio), $5102/$5103 (protect), $5200+ (split)
+		}
+	}
+
+	/// Escrituras de registro del FME-7: `$8000` = comando (0-15), `$A000` = parámetro
+	/// (mesen `SunsoftFme7.h`). El audio ($C000/$E000) se ignora.
+	/// \param addr Dirección. \param value Byte.
+	void fme7_write(eng::u16 addr, eng::u8 value) {
+		switch (addr & 0xE000u) {
+		case 0x8000u:
+			fme7_command = static_cast<eng::u8>(value & 0x0Fu);
+			break;
+		case 0xA000u:
+			switch (fme7_command) {
+			case 0u: case 1u: case 2u: case 3u:
+			case 4u: case 5u: case 6u: case 7u:
+				fme7_chr[fme7_command] = value; // bancos CHR de 1 KB
+				break;
+			case 8u:
+				fme7_workram = value; // banco de $6000-$7FFF (bit6 = RAM)
+				break;
+			case 9u:
+				fme7_prg[0] = static_cast<eng::u8>(value & 0x3Fu);
+				break;
+			case 0xAu:
+				fme7_prg[1] = static_cast<eng::u8>(value & 0x3Fu);
+				break;
+			case 0xBu:
+				fme7_prg[2] = static_cast<eng::u8>(value & 0x3Fu);
+				break;
+			case 0xCu:
+				switch (value & 0x03u) {
+				case 0u: mirror_single = -1; mirror_h = false; break; // vertical
+				case 1u: mirror_single = -1; mirror_h = true; break;  // horizontal
+				case 2u: mirror_single = 0; break;                    // 1 pantalla A
+				default: mirror_single = 1; break;                    // 1 pantalla B
+				}
+				break;
+			case 0xDu:
+				fme7_irq_enable = (value & 0x01u) != 0u;
+				fme7_irq_counter_enable = (value & 0x80u) != 0u;
+				fme7_irq_pending = false;
+				break;
+			case 0xEu:
+				fme7_irq_counter = static_cast<eng::u16>((fme7_irq_counter & 0xFF00u) | value);
+				break;
+			case 0xFu:
+				fme7_irq_counter =
+					static_cast<eng::u16>((fme7_irq_counter & 0x00FFu) | (value << 8u));
+				break;
+			default:
+				break;
+			}
+			break;
+		default:
+			break; // $C000/$E000: audio (ignorado)
+		}
+	}
+
+	/// IRQ del FME-7: el contador decrementa por **ciclo de CPU** (mesen
+	/// `SunsoftFme7::ProcessCpuClock`); al pasar de 0 a `$FFFF` pide IRQ.
+	/// \param cycles Ciclos de CPU desde la última llamada.
+	void fme7_clock(int cycles) {
+		if (kind != MapperKind::Fme7 || !fme7_irq_counter_enable) {
+			return;
+		}
+		for (int i = 0; i < cycles; ++i) {
+			if (fme7_irq_counter == 0u) {
+				fme7_irq_counter = 0xFFFFu;
+				if (fme7_irq_enable) {
+					fme7_irq_pending = true;
+				}
+			} else {
+				--fme7_irq_counter;
+			}
 		}
 	}
 };
