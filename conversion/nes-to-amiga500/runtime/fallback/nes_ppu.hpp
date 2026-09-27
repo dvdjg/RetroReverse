@@ -51,6 +51,11 @@ struct Ppu {
 	int nt_single = -1;
 	/// Proveedor de tiles opcional (**ajustes por ROM**: otro grupo de tiles o
 	/// mayor profundidad, 3/4 bpp). Si es `nullptr`, se usa la CHR 2 bpp normal.
+	/// Lectura de CHR **con la conmutación de bancos del mapper** (MMC1/MMC3). Lo fija
+	/// el sistema a `Mapper::ppu_read`. Si es `nullptr`, se lee la ROM lineal.
+	using ChrRead = eng::u8 (*)(void* ctx, eng::u16 addr);
+	ChrRead chr_read = nullptr;  ///< Callback de lectura de CHR con banking.
+	void* chr_ctx = nullptr;     ///< Contexto (el `Mapper`).
 	const enhance::ITileProvider* tile_provider = nullptr;
 	/// Paleta extendida opcional (hasta 256 colores `0x0RGB`) para packs de >2 bpp.
 	const eng::u16* ext_palette = nullptr;
@@ -454,6 +459,12 @@ private:
 	/// Lee un byte de la pattern table: de CHR-ROM si `chr` está puesto, o de
 	/// CHR-RAM si el cartucho la usa. \param off Offset en la CHR. \return El byte.
 	eng::u8 chr_byte(eng::u16 off) const {
+		// Banco de CHR del mapper (MMC1/MMC3): el render debe usar la CHR **conmutada**,
+		// no la ROM lineal. Antes se leía `chr[off % chr_size]` y los juegos con bancos
+		// de CHR (p. ej. el HUD de SMB3) renderizaban los tiles equivocados.
+		if (chr_read != nullptr) {
+			return chr_read(chr_ctx, off);
+		}
 		if (chr != nullptr && chr_size != 0u) {
 			return chr[off % chr_size];
 		}

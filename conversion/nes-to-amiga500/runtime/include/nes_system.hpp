@@ -77,11 +77,20 @@ struct NesSystem {
 
 	/// Asigna el cartucho (mapper y CHR) al sistema.
 	/// \param m Mapper ya inicializado con PRG/CHR.
+	/// Callback de lectura de CHR para el render: aplica la conmutación de bancos del
+	/// mapper (`Mapper::ppu_read`). \param ctx El `Mapper`; \param addr Offset PPU.
+	/// \return Byte de CHR conmutado.
+	static eng::u8 chr_read_cb(void* ctx, eng::u16 addr) {
+		return static_cast<Mapper*>(ctx)->ppu_read(addr);
+	}
+
 	void load_mapper(const Mapper& m) {
 		mapper = m;
 		ppu.chr = m.chr;
 		ppu.chr_size = m.chr_size;
 		ppu.chr_ram = m.chr_ram;
+		ppu.chr_read = &NesSystem::chr_read_cb;
+		ppu.chr_ctx = &mapper;
 		ppu.mirror_h = m.mirror_h;
 		ppu.nt_single = m.mirror_single;
 		mem.prg = m.prg;
@@ -110,6 +119,8 @@ struct NesSystem {
 		ppu.chr = mapper.chr;
 		ppu.chr_size = mapper.chr_size;
 		ppu.chr_ram = mapper.chr_ram;
+		ppu.chr_read = &NesSystem::chr_read_cb; // tras `ppu = Ppu{}` (que lo limpia)
+		ppu.chr_ctx = &mapper;
 		ppu.mirror_h = mapper.mirror_h;
 		ppu.nt_single = mapper.mirror_single;
 		ppu.scanline = 0;
