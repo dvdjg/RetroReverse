@@ -29,6 +29,8 @@ struct Interpreter {
 	CPU& cpu;             ///< Estado (registros y flags) que el intérprete actualiza.
 	NESMemory& mem;       ///< Memoria/bus sobre el que lee y escribe.
 	bool jammed = false;  ///< `true` tras un opcode KIL/JAM o desconocido.
+	eng::u8 jam_op = 0;   ///< Opcode que provocó el `jam` (diagnóstico).
+	eng::u16 jam_pc = 0;  ///< PC del opcode que provocó el `jam` (diagnóstico).
 	eng::u32 cycles = 0;  ///< Ciclos de CPU acumulados (conteo por instrucción).
 
 	/// Decodifica y ejecuta **una** instrucción, avanzando `cpu.PC` y actualizando
@@ -524,10 +526,14 @@ inline int Interpreter::step() {
 	case 0x02: case 0x12: case 0x22: case 0x32: case 0x42: case 0x52:
 	case 0x62: case 0x72: case 0x92: case 0xB2: case 0xD2: case 0xF2:
 		jammed = true;
+		jam_op = op;
+		jam_pc = static_cast<eng::u16>(cpu.PC - 1u);
 		break;
 
 	default:
 		jammed = true;
+		jam_op = op;
+		jam_pc = static_cast<eng::u16>(cpu.PC - 1u);
 		break;
 	}
 

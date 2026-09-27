@@ -61,9 +61,16 @@ patrones por `$2007`). Resultados a 60 frames (`structura` vs mesen):
 | blastermaster | 1 | RAM | 100% | **atascado** |
 | ninjagaiden | 1 | RAM | 99.2% | **`jam` (opcode ilegal)** |
 
-CHR-RAM desbloquea muchos; los fallos restantes son de **MMC1** (banking parcial: Zelda/Blaster
-Master/Ninja Gaiden se quedan en un bucle antes de habilitar render) y un **opcode** no cubierto
-(Ninja Gaiden `jam=1`). Siguiente: completar MMC1 (PRG banking 16/32 KB y CHR mode) y luego MMC3.
+CHR-RAM desbloquea muchos; los fallos restantes son de **MMC1** (banking parcial) y un **`jam`**.
+Diagnóstico añadido: `NesInterpreter::jam_op`/`jam_pc` (frame_probe lo imprime `op=XX@YYYY`).
+- **Ninja Gaiden**: el `jam` es un **KIL (`$22`) en `$A4D4`** → el CPU ejecuta **datos** (banking
+  MMC1 erróneo), no un opcode desconocido.
+- Se **probó** una corrección del **modo PRG 3** ($8000=primer banco, $C000=conmutable): **regresó**
+  Metroid (12.9→82.8%) y Mega Man 2 (10.5→100%), así que se **revirtió**. El comportamiento actual
+  (modo ≥2 = `$8000`=banco conmutable, `$C000`=último) es el que funciona para esos títulos; MMC1
+  sigue **parcial** y necesita cotejo con una referencia (no ir a ciegas).
+
+Siguiente: completar MMC1 con una referencia fiable y luego MMC3 (reutiliza el IRQ de CPU ya hecho).
 
 ## Juegos "difíciles" para Mega Drive
 
