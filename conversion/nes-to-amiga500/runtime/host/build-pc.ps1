@@ -67,4 +67,7 @@ if ($CxxDir -and (Test-Path -LiteralPath $CxxDir)) {
 		if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination $Build -Force }
 	}
 }
+# 7-Zip standalone (7zr.exe) junto al exe, para leer juegos `.7z`.
+$SevenZip = Join-Path $Here '..\..\..\..\external\7zip\7zr.exe'
+if (Test-Path -LiteralPath $SevenZip) { Copy-Item -LiteralPath $SevenZip -Destination $Build -Force }
 Write-Host "OK -> $Out"
