@@ -61,6 +61,8 @@ inline bool parse_ines(eng::usize size, LoadedRom& out) {
 	case 2u: out.mapper.kind = MapperKind::Uxrom; break;
 	case 3u: out.mapper.kind = MapperKind::Cnrom; break;
 	case 4u: out.mapper.kind = MapperKind::Mmc3; break;
+	case 24u: out.mapper.kind = MapperKind::Vrc6; out.mapper.vrc6_b = false; break;
+	case 26u: out.mapper.kind = MapperKind::Vrc6; out.mapper.vrc6_b = true; break;
 	default: return false;
 	}
 	if (chr_size != 0u && chr_off + chr_size <= size) {

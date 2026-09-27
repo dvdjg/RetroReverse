@@ -414,6 +414,7 @@ private:
 	/// `$2005` a mitad de frame (splits) afectan solo desde ese punto (scroll
 	/// mid-frame real, no el global de fin de frame).
 	void clock_ppu(int cpu_cycles) {
+		mapper.clock(cpu_cycles); // IRQ de la VRC6 (por ciclos de CPU)
 		const int dots = cpu_cycles * 3;
 		const eng::u16 start = ppu.dot;
 		const eng::u16 end = static_cast<eng::u16>(start + static_cast<eng::u16>(dots));

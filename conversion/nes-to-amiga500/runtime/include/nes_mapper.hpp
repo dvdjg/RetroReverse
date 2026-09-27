@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 /// \file nes_mapper.hpp
 /// Mapper de cartucho (bank switching) del runtime. Soporta los mappers más
@@ -22,6 +22,8 @@ enum class MapperKind : eng::u8 {
 	Uxrom = 2, ///< PRG conmutable (16 KB), CHR fija.
 	Cnrom = 3, ///< PRG fija, CHR conmutable (8 KB).
 	Mmc3 = 4,  ///< PRG/CHR por bancos + IRQ por scanline.
+	Mmc5 = 5,   ///< MMC5 (Castlevania III USA, etc.).
+	Vrc6 = 24,  ///< Konami VRC6 (mapper 24; el 26 = VRC6b vía `vrc6_b`).
 };
 
 /// Estado del cartucho: PRG/CHR y registros de bancos.
@@ -70,10 +72,35 @@ struct Mapper {
 	eng::u16 cur_scan = 0xFFFFu;     ///< Scanline actual (lo fija el sistema antes de `cpu_write`).
 	eng::u32 mmc3_chr_mid = 0;       ///< Escrituras a bancos CHR en pleno frame visible (<240).
 
+	// --- VRC6 (mapper 24/26) ---
+	eng::u8 vrc6_prg0 = 0;       ///< $8000-$8003: banco PRG de 16 KB en $8000-$BFFF.
+	eng::u8 vrc6_prg1 = 0;       ///< $C000-$C003: banco PRG de 8 KB en $C000-$DFFF.
+	eng::u8 vrc6_chr[8] = {0};   ///< $D000-$E003: 8 bancos CHR de 1 KB.
+	eng::u8 vrc6_banking = 0;    ///< $B003: modo (CHR/nametable).
+	bool vrc6_b = false;         ///< Variante VRC6b (mapper 26): intercambia bits 0/1 de la dirección.
+	eng::u8 vrc6_irq_latch = 0;  ///< $F000/$F001: valor de recarga (16 bits).
+	eng::u8 vrc6_irq_counter = 0;///< Contador del IRQ (cuenta 0→$FF).
+	eng::s16 vrc6_irq_prescaler = 0; ///< Prescaler (modo scanline: +341 cada paso).
+	bool vrc6_irq_enable = false;    ///< IRQ habilitada ($F001 bit1).
+	bool vrc6_irq_after_ack = false; ///< Valor de `enable` tras el ack ($F001 bit0).
+	bool vrc6_irq_cycle_mode = false;///< Modo por ciclo ($F001 bit2) vs por scanline.
+	bool vrc6_irq_pending = false;   ///< IRQ pedida.
+
 	/// ¿La MMC3 pide IRQ? \return `true` si hay IRQ pendiente.
 	[[nodiscard]] bool irq_line() const noexcept {
-		return kind == MapperKind::Mmc3 && mmc3_irq_pending;
+		if (kind == MapperKind::Mmc3) {
+			return mmc3_irq_pending;
+		}
+		if (kind == MapperKind::Vrc6) {
+			return vrc6_irq_pending;
+		}
+		return false;
 	}
+
+	/// Reloj del mapper por **ciclos de CPU** (lo llama el sistema). Hoy: IRQ de la
+	/// VRC6, que cuenta por ciclos. La MMC3 usa `on_scanline`.
+	/// \param cpu_cycles Ciclos de CPU desde la última llamada.
+	void clock(int cpu_cycles) { vrc6_clock(cpu_cycles); }
 
 	/// Reloj de **una scanline** (lo llama el sistema durante el render). La MMC3
 	/// decrementa su contador y pide IRQ al llegar a 0.
@@ -158,6 +185,25 @@ struct Mapper {
 			}
 			return prg_at(bank8 * 0x2000u + (off & 0x1FFFu));
 		}
+		case MapperKind::Vrc6: {
+			// $8000-$BFFF = 16 KB conmutable ($8000-$8003); $C000 = 8 KB conmutable
+			// ($C000-$C003); $E000 = último 8 KB fijo (mesen VRC6.h).
+			const eng::u32 n8 = prg_size / 0x2000u;
+			eng::u32 bank8;
+			if (addr < 0xA000u) {
+				bank8 = static_cast<eng::u32>(vrc6_prg0 & 0x0Fu) * 2u;
+			} else if (addr < 0xC000u) {
+				bank8 = static_cast<eng::u32>(vrc6_prg0 & 0x0Fu) * 2u + 1u;
+			} else if (addr < 0xE000u) {
+				bank8 = vrc6_prg1 & 0x1Fu;
+			} else {
+				bank8 = n8 != 0u ? n8 - 1u : 0u;
+			}
+			if (n8 != 0u) {
+				bank8 %= n8;
+			}
+			return prg_at(bank8 * 0x2000u + (off & 0x1FFFu));
+		}
 		}
 		return 0u;
 	}
@@ -185,6 +231,9 @@ struct Mapper {
 		case MapperKind::Mmc3:
 			mmc3_write(addr, value);
 			break;
+		case MapperKind::Vrc6:
+			vrc6_write(addr, value);
+			break;
 		}
 	}
 
@@ -209,6 +258,10 @@ struct Mapper {
 				}
 			} else if (kind == MapperKind::Mmc3) {
 				off = mmc3_chr_addr(addr);
+			} else if (kind == MapperKind::Vrc6) {
+				// 8 bancos de 1 KB con el modo de $B003 (mesen VRC6.h `UpdatePpuBanking`).
+				off = static_cast<eng::u32>(vrc6_chr_page(addr >> 10u)) * 0x400u +
+				      (addr & 0x3FFu);
 			}
 			return chr[off % chr_size];
 		}
@@ -370,6 +423,133 @@ private:
 				mmc3_irq_pending = false;
 			} else {
 				mmc3_irq_enable = true;
+			}
+		}
+	}
+
+	/// Banco CHR de 1 KB (`page` 0..7) de la VRC6 según el modo de `$B003`
+	/// (mesen `VRC6.h::UpdatePpuBanking`). En modo 1 (`bankingMode&3==1`) los registros
+	/// 0..3 dan bancos de 2 KB (par | bit); en modo 2/3, las mitades baja/alta.
+	/// \param page Índice 0..7 (1 KB).
+	/// \return Número de banco CHR de 1 KB.
+	[[nodiscard]] eng::u8 vrc6_chr_page(eng::u32 page) const noexcept {
+		const eng::u8 mask = (vrc6_banking & 0x20u) ? 0xFEu : 0xFFu;
+		const eng::u8 orm = (vrc6_banking & 0x20u) ? 1u : 0u;
+		switch (vrc6_banking & 0x03u) {
+		case 0u:
+			return vrc6_chr[page & 7u];
+		case 1u: {
+			const eng::u8 base = static_cast<eng::u8>(vrc6_chr[(page >> 1) & 3u] & mask);
+			return (page & 1u) != 0u ? static_cast<eng::u8>(base | orm) : base;
+		}
+		default: // 2 o 3
+			if (page < 4u) {
+				return vrc6_chr[page];
+			}
+			{
+				const eng::u8 base = static_cast<eng::u8>(vrc6_chr[4u + ((page - 4u) >> 1)] & mask);
+				return (page & 1u) != 0u ? static_cast<eng::u8>(base | orm) : base;
+			}
+		}
+	}
+
+	/// Fija el mirroring desde `$B003` (mesen VRC6.h). Sólo los modos de nametable por
+	/// CIRAM (bit 4 = 0); el modo de nametables por CHR ROM no se modela (raro).
+	void vrc6_update_mirroring() {
+		vrc6_banking &= 0xFFu;
+		if ((vrc6_banking & 0x10u) != 0u) {
+			return; // nametables por CHR ROM: sin efecto (no modelado)
+		}
+		switch (vrc6_banking & 0x2Fu) {
+		case 0x20u:
+		case 0x27u:
+			mirror_single = -1;
+			mirror_h = false; // vertical
+			break;
+		case 0x23u:
+		case 0x24u:
+			mirror_single = -1;
+			mirror_h = true; // horizontal
+			break;
+		case 0x28u:
+		case 0x2Fu:
+			mirror_single = 0; // 1 pantalla A
+			break;
+		case 0x2Bu:
+		case 0x2Cu:
+			mirror_single = 1; // 1 pantalla B
+			break;
+		default:
+			mirror_single = -1;
+			break;
+		}
+	}
+
+	/// Escrituras de registro de la VRC6 (`$8000-$FFFF`). El audio ($9000-$B002) se
+	/// ignora. En la variante **VRC6b** (mapper 26) los bits 0/1 de la dirección van
+	/// intercambiados (mesen VRC6.h).
+	/// \param addr Dirección de escritura. \param value Byte escrito.
+	void vrc6_write(eng::u16 addr, eng::u8 value) {
+		if (vrc6_b) {
+			addr = static_cast<eng::u16>((addr & 0xFFFCu) | ((addr & 1u) << 1u) |
+						      ((addr & 2u) >> 1u));
+		}
+		switch (addr & 0xF003u) {
+		case 0x8000u: case 0x8001u: case 0x8002u: case 0x8003u:
+			vrc6_prg0 = static_cast<eng::u8>(value & 0x0Fu);
+			break;
+		case 0xB003u:
+			vrc6_banking = value;
+			vrc6_update_mirroring();
+			break;
+		case 0xC000u: case 0xC001u: case 0xC002u: case 0xC003u:
+			vrc6_prg1 = static_cast<eng::u8>(value & 0x1Fu);
+			break;
+		case 0xD000u: case 0xD001u: case 0xD002u: case 0xD003u:
+			vrc6_chr[addr & 3u] = value;
+			break;
+		case 0xE000u: case 0xE001u: case 0xE002u: case 0xE003u:
+			vrc6_chr[4u + (addr & 3u)] = value;
+			break;
+		case 0xF000u:
+			vrc6_irq_latch = value;
+			break;
+		case 0xF001u:
+			vrc6_irq_after_ack = (value & 0x01u) != 0u;
+			vrc6_irq_enable = (value & 0x02u) != 0u;
+			vrc6_irq_cycle_mode = (value & 0x04u) != 0u;
+			if (vrc6_irq_enable) {
+				vrc6_irq_counter = vrc6_irq_latch;
+				vrc6_irq_prescaler = 341;
+			}
+			vrc6_irq_pending = false;
+			break;
+		case 0xF002u:
+			vrc6_irq_enable = vrc6_irq_after_ack;
+			vrc6_irq_pending = false;
+			break;
+		default:
+			break; // $9000-$B002: audio (ignorado)
+		}
+	}
+
+	/// Reloj de la VRC6 (IRQ por **ciclos de CPU**, mesen `VrcIrq::ProcessCpuClock`).
+	/// El prescaler resta 3 por ciclo; en modo scanline da un paso cada ~341/3 ciclos.
+	/// \param cycles Ciclos de CPU consumidos desde la última llamada.
+	void vrc6_clock(int cycles) {
+		if (kind != MapperKind::Vrc6 || !vrc6_irq_enable) {
+			return;
+		}
+		for (int i = 0; i < cycles; ++i) {
+			vrc6_irq_prescaler = static_cast<eng::s16>(vrc6_irq_prescaler - 3);
+			if (vrc6_irq_cycle_mode || vrc6_irq_prescaler <= 0) {
+				if (vrc6_irq_counter == 0xFFu) {
+					vrc6_irq_counter = vrc6_irq_latch;
+					vrc6_irq_pending = true;
+				} else {
+					++vrc6_irq_counter;
+				}
+				vrc6_irq_prescaler = static_cast<eng::s16>(vrc6_irq_prescaler + 341);
 			}
 		}
 	}
