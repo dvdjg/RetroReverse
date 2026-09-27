@@ -56,13 +56,24 @@ Referencia: **mesen** (cycle-accurate). El detalle de método (trazas de PC, re-
 
 ## Juegos nuevos (mappers ampliados: VRC6 / MMC5 / AxROM / FME-7)
 
-| ROM | mapper | estructura vs mesen |
+Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*.zip`).
+
+| Juego | mapper | estructura vs mesen |
 |---|---:|---:|
-| esperdream2.nes (Esper Dream 2) | 26 (VRC6b) | **4.6%** |
-| mrgimmick.nes (Mr. Gimmick) | 69 (FME-7) | **5.0%** |
-| battletoads.nes (Battletoads) | 7 (AxROM) | **6.2%** |
-| cv3.nes (Castlevania III USA) | 5 (MMC5) | **9.2%** |
-| akumajou.nes (Akumajou Densetsu) | 24 (VRC6) | **9.5%** |
+| Kirby's Adventure (Rev A) | 4 (MMC3) | **0.0%** |
+| Batman - The Video Game | — | **0.0%** |
+| Contra (USA) | 2 (UxROM) | 0.9% |
+| Gemfire | 5 (MMC5) | **4.6%** |
+| Batman - Return of the Joker | 69 (FME-7) | **4.6%** |
+| Esper Dream 2 | 26 (VRC6b) | **4.6%** |
+| Nobunaga's Ambition II | 5 (MMC5) | **5.0%** |
+| Mr. Gimmick | 69 (FME-7) | **5.0%** |
+| Mouryou Senki Madara | 26 (VRC6b) | **5.7%** |
+| Battletoads | 7 (AxROM) | **6.2%** |
+| Laser Invasion | 5 (MMC5) | **6.5%** |
+| Uncharted Waters | 5 (MMC5) | **7.3%** |
+| Castlevania III (USA) | 5 (MMC5) | **9.2%** |
+| Akumajou Densetsu | 24 (VRC6) | **9.5%** |
 
 ## Lectura
 
