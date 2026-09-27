@@ -60,7 +60,7 @@ struct NesSystem {
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
 	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
 	bool cycle_exact_ = true; ///< Reloj de bus por acceso activo (ver `set_cycle_exact`).
-	int warmup_frames = 0;    ///< Frames de warm-up del PPU restantes (sin VBlank; 2 al reset).
+	int warmup_frames = 0;    ///< Frames de warm-up del PPU restantes (sin VBlank; ya no se usa: mesen no suprime el flag).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
 	NesSystem() : interp(cpu, mem) {
@@ -109,8 +109,14 @@ struct NesSystem {
 		ppu.chr_ram = mapper.chr_ram;
 		ppu.mirror_h = mapper.mirror_h;
 		ppu.scanline = 0;
-		warmup_frames = 2; // warm-up del PPU (fceumm `ppudead`)
+		warmup_frames = 0; // sin supresión de VBlank: mesen activa el flag en (241,1) desde el frame 0 (fceumm `ppudead` era un hack para Knight Rider)
 		interp.jammed = false;
+		// La CPU tarda 8 ciclos en empezar a ejecutar tras el reset (mesen CPU.cpp:150:
+		// "the CPU takes 8 cycles before it starts executing the ROM's code"); durante
+		// ellos el PPU avanza con el master clock. Sin esto, nuestro contador de ciclos va
+		// 8 por detrás de mesen y el flag de VBlank cruza instrucciones distintas.
+		interp.cycles = 8;
+		clock_ppu(8);
 	}
 
 	/// Ejecuta un **bloque** (varias instrucciones) si hay ejecutor rápido por
@@ -220,9 +226,10 @@ struct NesSystem {
 			--warmup_frames;
 		}
 		ppu.mirror_h = mapper.mirror_h; // la MMC3 cambia el mirroring en runtime
-		// Frontera de frame en la **pre-VBlank** (scanline 240), como `FCEUPPU_Loop`:
-		// así el flag de VBlank cae al principio del frame y los bucles de espera del
-		// juego coinciden con la referencia (fceumm).
+		// Frontera de frame nítida en la **pre-VBlank** (scanline 240): el bucle del juego
+		// que espera el VBlank de la línea 241 converge en la misma frontera. Con `scanline
+		// = 240` y el flag activo en (241,1) (mesen), el primer VBlank cae tras ~341 dots y
+		// los bucles de espera del reset salen a tiempo (sin esto bioniccommando se colgaba).
 		ppu.scanline = 240u;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;

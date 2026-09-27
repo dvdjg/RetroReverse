@@ -317,3 +317,43 @@ Probado a fondo (ver `platforms/computers/amiga500/demos/arte/docs/GHIDRA_AMIGA_
 Reutilizar esta estructura en el próximo título:
 `README.md` (estado + inventario + cómo reproducir) + `docs/{ROADMAP,HALLAZGOS,LECCIONES_APRENDIDAS,TECNICAS}.md`
 + `tools/` (extracción, volcado, enganche) + `out/` (artefactos regenerables).
+
+## 10. Emulación / oráculo: la referencia de código fuente manda
+
+Aplicable a **cualquier plataforma emulada** (NES, Mega Drive, 68k, etc.), no solo a este proyecto.
+Es la lección más cara de este expediente (oráculo NES): se perdieron **muchas iteraciones por
+prueba y error** en algo que se resolvía **leyendo el código de un emulador**.
+
+- **No obcecarse con prueba/error cuando hay referencia**. Si el comportamiento a replicar existe
+  en software conocido, *la respuesta está en su código*, no en ajustar parámetros a ciegas.
+- **Prioridad de fuentes**: (1) **código fuente depurado y funcional** del emulador de referencia
+  —mejor aún si es *cycle-accurate*—; (2) **documentación oficial** del hardware; (3) sólo como
+  último recurso, observación/captura del comportamiento en vivo (que suele ser incompleta o de
+  transición, ver §6bis).
+- **Leer el código donde vive el comportamiento**, no adivinar: `grep` del nombre exacto del flag/
+  condición en la fuente de la referencia. Ejemplos reales (NES):
+  - `mesen` (`Core/PPU.cpp`): `_nmiScanline = 241`; el flag de VBlank se pone en
+    `if(_cycle == 1 && _scanline == _nmiScanline)` y **las lecturas de `$2002` en `(241, ciclo<3)`
+    devuelven bit7=0** (`if(_scanline == _nmiScanline && _cycle < 3) returnValue &= 0x7F`). Ese
+    *quirk* estaba **comentado en el propio fuente** — habría ahorrado días de ensayo-error.
+  - `fceumm` (`src/ppu.c`): el flag se pone tras `X6502_Run(256+85)` **redondeado a frontera de
+    instrucción** → su frame es *más largo* que el exacto. Diferencia de modelo, **no un bug**.
+- **Distinguir "referencia exacta" de "referencia aproximada"**. Un emulador *cycle-accurate*
+  (mesen) y uno de segmentos (fceumm) **no coinciden entre sí**; si persigues al aproximado,
+  "arreglas" el motor para que imite un **artefacto**. Elegir la referencia correcta ANTES de
+  tocar el motor.
+- **Hacer el oráculo observable al ciclo**: añadir una **traza de PC** a la referencia (parche de
+  ~10 líneas: escribir `PC, opcode, A, X, S` + timestamp a un fichero bajo una variable de entorno)
+  y **diffear instrucción a instrucción** contra la nuestra. El diff localiza la **primera
+  divergencia** y distingue "fase" de "conteo de ciclos" (si los ciclos coinciden pero el PC no,
+  es *timing de un evento del PPU*, no de la CPU).
+- **Verificar el FORMATO de la traza antes de sacar conclusiones**. El diff reportaba divergencias
+  en la instrucción 2 porque leía 6/8 B por registro cuando las herramientas escriben 10/12 B:
+  **todas las conclusiones previas eran ruido desalineado**. Comprobar la aritmética
+  (`bytes / tamaño == nº instrucciones`) y cruzar con la fuente que escribe la traza.
+- **Buscar los comentarios del código**: los emuladores documentan sus heurísticas y *quirks* en
+  los comentarios (p. ej. `/* Not sure if this is correct... */`, referencias a nesdev/Wiki). Leer
+  el contexto de la función, no solo la línea del flag.
+- **Regla de oro reutilizable**: antes de escribir prueba/error sobre un comportamiento observable,
+  dedicar una pasada a **localizar en fuente de referencia la condición exacta** que lo produce;
+  casi siempre está escrita de forma explícita y con la explicación al lado.

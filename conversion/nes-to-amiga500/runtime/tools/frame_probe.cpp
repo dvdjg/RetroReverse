@@ -74,6 +74,23 @@ void trace_ppu_write(eng::u16 addr, eng::u8 value) {
 }
 } // namespace
 
+// Probe de lecturas de $2002: lo usa `nes_ppu.hpp` cuando se compila con
+// -DN2A_PPU_READ_PROBE. Imprime (scanline, dot, status) de las N primeras
+// lecturas para comparar la posición exacta del flag de VBlank con la referencia.
+namespace n2a {
+void n2a_ppu_probe(unsigned scanline, unsigned dot, unsigned status) {
+	static unsigned long n = 0;
+	const unsigned long gdot = static_cast<unsigned long>(scanline) * 341UL + dot;
+	// Solo lecturas cerca de la zona de VBlank (scanline 239-243), suficientes para
+	// ver dónde aparece el flag respecto al bucle de espera del juego.
+	if (n < 200000UL && scanline >= 239u && scanline <= 243u) {
+		std::printf("[2002] n=%lu gdot=%lu sl=%u dot=%u st=%02X vbl=%u\n", n, gdot, scanline,
+			    dot, status, (status >> 7) & 1u);
+	}
+	++n;
+}
+} // namespace n2a
+
 int main(int argc, char** argv) {
 	if (argc < 2) {
 		std::printf("uso: frame_probe <rom.nes> [frames] [--fast-timing]\n");

@@ -111,7 +111,17 @@ struct Ppu {
 	eng::u8 read_reg(eng::u16 addr) {
 		switch (addr & 0x07u) {
 		case 2u: {  // PPUSTATUS
-			const eng::u8 r = static_cast<eng::u8>(status & 0xE0u);
+			eng::u8 r = static_cast<eng::u8>(status & 0xE0u);
+#ifdef N2A_PPU_READ_PROBE
+			{
+				extern void n2a_ppu_probe(unsigned scanline, unsigned dot, unsigned status);
+				n2a_ppu_probe(scanline, dot, status);
+			}
+#endif
+			// Quirk real (mesen PPU.cpp: `if(_scanline == _nmiScanline && _cycle < 3)
+			// returnValue &= 0x7F`): en los 3 primeros dots de la línea 241 una lectura
+			// de $2002 devuelve el bit de VBlank a 0, aunque el flag ya esté puesto.
+			if (scanline == 241u && dot < 3u) r = static_cast<eng::u8>(r & 0x7Fu);
 			status = static_cast<eng::u8>(status & ~0x80u);
 			write_toggle = false;
 			return r;
