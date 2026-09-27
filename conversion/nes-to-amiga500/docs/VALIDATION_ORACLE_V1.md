@@ -1,8 +1,8 @@
 # Validación del oráculo
 
-- commit: `4328713`
-- tag: `oracle-v1`
-- fecha: 2026-09-27T06:02Z
+- commit: `bef109e`
+- tag: `oracle-v1-1-gbef109e`
+- fecha: 2026-09-27T06:03Z
 
 ## Suite (`test/run.sh`)
 ```
@@ -16,7 +16,7 @@ HLE raster OK (VBlank/sprite-0 + delay_cycles)
 ROM=/mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/conversion/nes-to-amiga500/runtime/../../../roms/nes/Balloon Fight (USA).nes frames=120
 ciclos CPU 6502/frame : 29783   (NTSC 29780 -> 100%, PAL 33247 -> 90%)
 HLE PPU               : 95.6% (3003 HLE / 139 fallback)
-host                  : 36.0 ms total, 3331 fps (0.30 ms/frame)
+host                  : 33.9 ms total, 3535 fps (0.28 ms/frame)
 [extra] ajustes por ROM (pack 4 bpp sin afectar a la emulacion)
   emulación idéntica; muestras de framebuffer distintas=634
 ENHANCE OK
@@ -25,11 +25,11 @@ CPU metodos OK (intérprete == metodos del codegen)
 [extra] motor rapido: equivalencia + FPS (interprete vs pre-decodificado)
 frames       : 120
 direcciones  : 5220 decodificadas
-interprete   : 34.7 ms  (3456.1 fps)
-rapido       : 28.0 ms  (4284.5 fps)
-aceleracion  : 1.24x
+interprete   : 33.9 ms  (3538.9 fps)
+rapido       : 28.2 ms  (4258.3 fps)
+aceleracion  : 1.20x
 equivalencia : OK (ram_diff=0 fb_diff=0 regs=ok)
-cpu (sin render): interp 93.1 Mips | rapido 139.4 Mips | 1.50x
+cpu (sin render): interp 94.8 Mips | rapido 140.0 Mips | 1.48x
 [extra] telemetria de valores (--facts)
 facts_from_run: 74 direcciones con valores -> /mnt/c/Users/dvdjg/Documents/programa/AI/Amiga/RetroReverse/repo/conversion/nes-to-amiga500/runtime/build/facts_nestest.txt
 [extra] validacion diferencial con mesen
