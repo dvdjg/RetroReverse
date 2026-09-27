@@ -251,10 +251,10 @@ struct NesSystem {
 	/// EXPERIMENTO Fase 0 (`docs/TIMING_ROADMAP.md`): con `kFrameSnap=false` el *snap*
 	/// de la frontera de frame se desactiva (para diagnosticar por qué rompe la
 	/// equivalencia intérprete↔codegen). Debe quedar en `true` salvo para el diagnóstico.
-#ifdef N2A_NO_FRAME_SNAP
-	static constexpr bool kFrameSnap = false;
-#else
+#ifdef N2A_FRAME_SNAP
 	static constexpr bool kFrameSnap = true;
+#else
+	static constexpr bool kFrameSnap = false; // Fase 2: frontera continua (sin snap)
 #endif
 	void run_frame() {
 		// Sin supresión de VBlank: mesen levanta el flag en (241,1) desde el frame 0

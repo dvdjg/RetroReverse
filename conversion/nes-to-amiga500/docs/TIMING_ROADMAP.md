@@ -55,6 +55,11 @@ El *snap* de la frontera de frame **ya no es necesario para la equivalencia**:
 **Conclusión**: Fase 2 es ahora **equivalencia-safe** (gran avance) y ataca la **deriva entre frames**;
 se puede abordar sin el riesgo que tenía.
 
+> **Implementada (2026).** `kFrameSnap=false` por **defecto** (frontera de frame continua, sin snap;
+> el `#ifdef N2A_FRAME_SNAP` permite volver al snap). Suite verde (`equivalencia OK`) y
+> `port_matrix --gate` EXIT=0 (0 regresiones). Es más correcto (fase continua entre frames) y es la
+> base de Fase 3/4; de momento neutro en el % porque la primera divergencia está en frame 0.
+
 ### Fase 1 — PPU **dot a dot**
 Sustituir el avance en bloque (`ppu.dot = end; while (dot>=341)`) por un lazo que llame
 `tick_dot()` **una vez por dot** (3 por ciclo de CPU), resolviendo en ese punto: VBlank en `(241,1)`
