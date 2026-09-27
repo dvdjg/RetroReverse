@@ -34,6 +34,11 @@ int main(int argc, char** argv) {
 	sf.reset();
 
 	n2a::FastCpu fast;
+	if (!rom_f.mapper.has_fixed_prg()) {
+		// `FastCpu` decodifica la PRG lineal (sin banking): sólo NROM/CNROM.
+		std::printf("aviso: mapper sin PRG fija; el ejecutor rapido no aplica\n");
+		return 2;
+	}
 	{
 		n2a::NESMemory probe;
 		probe.prg = rom_f.mapper.prg;

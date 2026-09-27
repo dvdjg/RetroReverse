@@ -62,12 +62,16 @@ for m in 0 1 2 3 4 5 7 24 26 69; do
 	else
 		# Equivalencia intérprete ↔ ejecutor rápido/transpilado (mismo mapper).
 		# LÍMITE CONOCIDO: `FastCpu` decodifica la PRG **lineal** (sin banking), así
-		# que diverge en mappers ≠ NROM/CNROM (ver docs/FAST_EXECUTOR.md). Es un
-		# AVISO, no un fallo: el oráculo (nes_frame/frame_probe) usa el intérprete.
-		if "$ROOT/build/bench_engine" "$rom" 60 2>/dev/null | grep -q 'equivalencia : OK'; then
+		# que **sólo aplica a NROM/CNROM**; en el resto `bench_engine` avisa y compara
+		# intérprete vs intérprete (ver docs/FAST_EXECUTOR.md).
+		be="$("$ROOT/build/bench_engine" "$rom" 60 2>/dev/null)"
+		if printf '%s' "$be" | grep -q 'sin PRG fija'; then
+			echo "OK: mapper $m ($(basename "$rom")): nes_frame == frame_probe (fast N/A: mapper sin PRG fija)"
+		elif printf '%s' "$be" | grep -q 'equivalencia : OK'; then
 			echo "OK: mapper $m ($(basename "$rom")): nes_frame == frame_probe, interp == fast"
 		else
-			echo "AVISO: mapper $m ($(basename "$rom")): interp != fast (FastCpu sin banking; ver FAST_EXECUTOR.md)"
+			echo "FALLO: mapper $m ($(basename "$rom")): interp != fast en mapper con PRG fija"
+			fail=1
 		fi
 		checked=$((checked + 1))
 	fi

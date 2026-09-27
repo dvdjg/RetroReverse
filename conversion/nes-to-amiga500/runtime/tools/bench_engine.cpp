@@ -73,9 +73,14 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	// Decodifica la PRG una vez para el camino rápido.
+	// Decodifica la PRG una vez para el camino rápido. **Sólo** si el mapper tiene
+	// PRG de mapeo fijo (NROM/CNROM): `FastCpu` decodifica la PRG lineal sin
+	// consultar el mapper, así que con bancos conmutables (MMC1/MMC3/MMC5/VRC6/…)
+	// daría una decodificación equivocada. En esos casos se compara intérprete
+	// contra intérprete (equivalencia trivial) y se avisa.
 	n2a::FastCpu fast;
-	{
+	const bool fast_ok = rom_b.mapper.has_fixed_prg();
+	if (fast_ok) {
 		n2a::NESMemory probe;
 		probe.prg = rom_b.mapper.prg;
 		probe.prg_size = rom_b.mapper.prg_size;
@@ -84,10 +89,12 @@ int main(int argc, char** argv) {
 			std::printf("error: no se pudo decodificar la PRG\n");
 			return 1;
 		}
+		fast_sys.fast_ctx = &fast;
+		fast_sys.fast_step = &n2a::FastCpu::step;
+		fast_sys.fast_run = &n2a::FastCpu::run_block;
+	} else {
+		std::printf("aviso: mapper sin PRG fija; el ejecutor rapido no aplica (se compara el interprete)\n");
 	}
-	fast_sys.fast_ctx = &fast;
-	fast_sys.fast_step = &n2a::FastCpu::step;
-	fast_sys.fast_run = &n2a::FastCpu::run_block;
 
 	// Primera pasada (la que se compara) + dos de regalo para quedarnos con el
 	// mejor tiempo y reducir el sesgo de caché/calentamiento.
@@ -95,9 +102,11 @@ int main(int argc, char** argv) {
 	double ms_fast = run_frames(fast_sys, frames);
 
 	int decoded = 0;
-	for (unsigned a = 0; a < 0x10000u; ++a) {
-		if (fast.has[a] != 0u) {
-			++decoded;
+	if (fast.has != nullptr) {
+		for (unsigned a = 0; a < 0x10000u; ++a) {
+			if (fast.has[a] != 0u) {
+				++decoded;
+			}
 		}
 	}
 

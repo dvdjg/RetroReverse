@@ -202,6 +202,15 @@ struct Mapper {
 		}
 	}
 
+	/// ¿La PRG tiene un **mapeo fijo** (sin bancos conmutables)? Sólo NROM (0) y
+	/// CNROM (3, que conmuta CHR pero no PRG). El **ejecutor rápido** (`FastCpu`)
+	/// decodifica la PRG **lineal** sin consultar el mapper, así que **sólo es
+	/// correcto** con mapeo fijo; en el resto hay que usar el intérprete.
+	/// \return `true` si la PRG no cambia de bancos en runtime.
+	[[nodiscard]] bool has_fixed_prg() const noexcept {
+		return kind == MapperKind::Nrom || kind == MapperKind::Cnrom;
+	}
+
 	/// ¿La VRC6 usa **nametables por CHR ROM**? (`$B003` bit 4 = 1.) Lo consulta el
 	/// sistema para mapear la PPU. \return `true` si el modo CHR-ROM está activo.
 	[[nodiscard]] bool vrc6_chr_nt_active() const noexcept {
