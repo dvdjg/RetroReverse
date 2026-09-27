@@ -9,6 +9,9 @@
 >   ya a 0.0% → el dot natural de Fase 1+2 es el **óptimo**.
 > - **4 juegos** (`ic` 92.2%, `galaga` 36.7%, `metalstorm` 14.2%, `pacman` 12.9%) quedan como
 >   **límite de fidelidad de estado** (no bloqueante; el render es correcto).
+> - **Segunda referencia (paso 2)**: nestopia usa `SCANLINE_VBLANK = 240` y mesen `241` →
+>   **las referencias discrepan** en el instante del VBlank; el ±1 dot es **modelo-dependiente**,
+>   no un bug nuestro claro. (Coincide con la observación de que nuestro `(241,0)` compensa.)
 > - El andamiaje experimental (`kFrameSnap`) se **retiró**; Fase 2 es el comportamiento por defecto.
 
 **Objetivo.** Que los **efectos observables** de la PPU (flag de VBlank en `$2002`, NMI, sprite-0,
