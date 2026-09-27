@@ -279,13 +279,17 @@ struct NesSystem {
 		// saltaría las líneas 0-239 y adelantaría el primer VBlank ~27000 ciclos, haciendo
 		// que el bucle `LDA $2002/BPL` del reset salga de inmediato). Desde el 2º frame la
 		// PPU ya está en la 240 y se fija una frontera nítida.
-		if (kFrameSnap && frames_done_ > 0) {
-			ppu.scanline = 240u;
+		// Fase 2 (docs/TIMING_ROADMAP.md): con `kFrameSnap` se fijan scanline Y dot a
+		// (240,0) al inicio de frame; sin él NO se resetean (fase del PPU continua).
+		if (kFrameSnap) {
+			if (frames_done_ > 0) {
+				ppu.scanline = 240u;
+			}
+			ppu.dot = 0u;
 		}
 		++frames_done_;
 		ppu.status = static_cast<eng::u8>(ppu.status & ~0x80u);
 		ppu.nmi_occurred = false;
-		ppu.dot = 0u;
 		// LÍMITE (ver docs/RISKS.md): el frame se cierra en la **frontera de instrucción**
 		// que cae justo después de volver a la pre-VBlank, así que su largo es un entero
 		// (~29782) y no el real 29780.67 (media NTSC; los frames impares cuentan 340 dots
@@ -470,50 +474,30 @@ private:
 	/// `$2005` a mitad de frame (splits) afectan solo desde ese punto (scroll
 	/// mid-frame real, no el global de fin de frame).
 	void clock_ppu(int cpu_cycles) {
-		mapper.clock(cpu_cycles); // IRQ de la VRC6 (por ciclos de CPU)
+		mapper.clock(cpu_cycles); // IRQ de VRC6/FME-7 (por ciclos de CPU)
+		// Fase 1 del timing (docs/TIMING_ROADMAP.md): avance de la PPU **dot a dot**
+		// (como mesen `PPU::Exec`). Resuelve sprite-0, el flag de VBlank y los cruces de
+		// línea en su **dot exacto**; el reloj A12 de la MMC3 se dispara en su dot. El
+		// render sigue siendo *lazy* (al final del frame).
 		const int dots = cpu_cycles * 3;
-		const eng::u16 start = ppu.dot;
-		const eng::u16 end = static_cast<eng::u16>(start + static_cast<eng::u16>(dots));
-		// Sprite-0 **dot-exacto** sin iterar dot a dot: si el dot del hit cae dentro
-		// de este tramo de la línea actual, se activa el flag. Los bloques del
-		// ejecutor rápido terminan (o cruzan) en frontera de scanline, así que cada
-		// llamada abarca como mucho una línea; el cruce se resuelve tras el `while`.
-		if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot >= start && ppu.sprite0_dot < end) {
-			ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
-		}
-		// MMC3: el contador IRQ avanza en el flanco de subida de A12. En una línea
-		// renderizada ese flanco ocurre (una vez) si **hay sprites** (fetch en $1000+,
-		// dot ~257) o si el **fondo usa la base de patrones $1000** (fetch de BG, A12
-		// sube al ir de la nametable $2000 a los patrones $1xxx). Si no (BG=$0000 y sin
-		// sprites) A12 no sube y no se reloja. (mesen/nestopia enganchan la línea de
-		// direcciones del PPU con un filtro; aquí se modela el flanco dominante por línea.)
-		if (mapper.kind == MapperKind::Mmc3 && ppu.scanline < 240u && kA12Dot >= start &&
-		    kA12Dot < end) {
-			const bool spr_on = (ppu.mask & 0x10u) != 0u;
-			const bool bg_on = (ppu.mask & 0x08u) != 0u;
-			const bool bg_hi = (ppu.ctrl & 0x10u) != 0u;
-			if (spr_on || (bg_on && bg_hi)) {
-				mapper.on_scanline(ppu.scanline);
-			}
-		}
-		ppu.dot = end;
-		while (ppu.dot >= 341u) {
-			ppu.dot = static_cast<eng::u16>(ppu.dot - 341u);
+		for (int i = 0; i < dots; ++i) {
 			const eng::u16 before = ppu.scanline;
-			ppu.tick_scanline();
+			ppu.tick_dot();
 			if (ppu.scanline != before) {
 				ppu.set_line_scroll(static_cast<int>(ppu.scanline), ppu.scroll_x, ppu.scroll_y);
-				// MMC5: contador de scanlines para el IRQ ($5203/$5204). Se reinicia en
-				// la pre-render (261); avanza en cada línea renderizada.
 				if (ppu.scanline == 261u) {
-					mapper.reset_mmc5_frame();
+					mapper.reset_mmc5_frame(); // MMC5: reinicia el contador de scanlines
 				} else if (ppu.scanline < 240u) {
 					mapper.mmc5_on_scanline();
 				}
-				// Cruce de la frontera de línea a mitad de tramo: el A12 de la nueva línea
-				// (dot 257) queda por delante, se dispara en la siguiente llamada.
-				if (ppu.scanline == ppu.sprite0_line && ppu.sprite0_dot < ppu.dot) {
-					ppu.status = static_cast<eng::u8>(ppu.status | 0x40u);
+			}
+			// MMC3: contador IRQ en el flanco de A12 (fetch de sprites, dot `kA12Dot`).
+			if (mapper.kind == MapperKind::Mmc3 && ppu.dot == kA12Dot && ppu.scanline < 240u) {
+				const bool spr_on = (ppu.mask & 0x10u) != 0u;
+				const bool bg_on = (ppu.mask & 0x08u) != 0u;
+				const bool bg_hi = (ppu.ctrl & 0x10u) != 0u;
+				if (spr_on || (bg_on && bg_hi)) {
+					mapper.on_scanline(ppu.scanline);
 				}
 			}
 		}
