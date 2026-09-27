@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "../include/nes_system.hpp"
 #include "../host/rom_loader.hpp"
@@ -29,6 +30,12 @@ int main(int argc, char** argv) {
 		return 2;
 	}
 	const int frames = (argc > 2) ? std::atoi(argv[2]) : 120;
+	bool cycle_exact = true;
+	for (int i = 1; i < argc; ++i) {
+		if (std::strcmp(argv[i], "--fast-timing") == 0) {
+			cycle_exact = false;
+		}
+	}
 	n2a::NesSystem sys;
 	if (!n2a::load_ines(argv[1], g_rom)) {
 		std::printf("error: no se pudo cargar '%s'\n", argv[1]);
@@ -36,6 +43,7 @@ int main(int argc, char** argv) {
 	}
 	sys.load_mapper(g_rom.mapper);
 	sys.reset();
+	sys.set_cycle_exact(cycle_exact);
 
 	const auto t0 = std::chrono::steady_clock::now();
 	long long total_cycles = 0;

@@ -109,8 +109,16 @@ falso positivo; sirve como cota.
 
 ```
 nes_transpiler build ... (compilar raster_idioms)
-raster_idioms build/*.nes
+raster_idioms build/*.nes            # tabla legible
+raster_idioms --json build/*.nes     # mapeo consumible por el codegen
 ```
+
+El modo `--json` emite, por ROM, las direcciones de cada idioma (p. ej. SMB:
+`vblank [0x800A,0x800F]`, `sprite0 [0x813D,0x8150]`, `delay [0x8157,0x8737,…]`).
+**Contrato del codegen**: para cada dirección marcada, el codegen (cuando exista el
+backend Amiga) sustituye el bucle por la primitiva de `nes_hle_raster.hpp` —
+`n2a_wait_vblank`/`n2a_wait_sprite0`/`n2a_delay`. La interfaz está congelada; en el
+host las primitivas consultan la PPU y no cambian la emulación.
 
 Resultado con las 13 ROMs de prueba:
 

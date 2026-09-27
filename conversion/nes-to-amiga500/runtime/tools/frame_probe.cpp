@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "../fallback/nes_palette.hpp"
 #include "../include/nes_system.hpp"
@@ -25,10 +26,16 @@ void trace_ppu_write(eng::u16 addr, eng::u8 value) {
 
 int main(int argc, char** argv) {
 	if (argc < 2) {
-		std::printf("uso: frame_probe <rom.nes> [frames]\n");
+		std::printf("uso: frame_probe <rom.nes> [frames] [--fast-timing]\n");
 		return 1;
 	}
 	const int frames = (argc > 2) ? std::atoi(argv[2]) : 120;
+	bool cycle_exact = true;
+	for (int i = 1; i < argc; ++i) {
+		if (std::strcmp(argv[i], "--fast-timing") == 0) {
+			cycle_exact = false; // desactiva el reloj de bus por acceso
+		}
+	}
 	n2a::NesSystem sys;
 	if (!n2a::load_ines(argv[1], g_rom)) {
 		std::printf("error: no se pudo cargar\n");
@@ -37,6 +44,7 @@ int main(int argc, char** argv) {
 	g_wt = std::fopen("frame_probe.wt", "wb");
 	sys.load_mapper(g_rom.mapper);
 	sys.reset();
+	sys.set_cycle_exact(cycle_exact);
 	sys.ppu.write_trace = &trace_ppu_write; // tras reset(): este hace `ppu = Ppu{}`
 	std::printf("mapper=%u prg=%u chr=%u mirror_h=%d\n", g_rom.mapper_no, g_rom.prg_size,
 		    g_rom.chr_size, static_cast<int>(g_rom.mapper.mirror_h));

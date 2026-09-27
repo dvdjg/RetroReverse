@@ -200,18 +200,21 @@ struct Ppu {
 	}
 
 	/// Avanza una scanline y, al llegar a la 241, levanta VBlank (y `nmi_occurred`
-	/// si `ctrl` lo habilita). En la pre-render (261) reinicia el flag.
+	/// si `ctrl` lo habilita). En la pre-render (261) reinicia los flags y el frame
+	/// vuelve a la línea 0 tras la **262** (el PPU NTSC tiene 262 líneas: 0..261).
 	void tick_scanline() {
 		++scanline;
 		if (scanline == 241u) {
 			status = static_cast<eng::u8>(status | 0x80u);
 			nmi_occurred = (ctrl & 0x80u) != 0u;
 		} else if (scanline == 261u) {
-			scanline = 0u;
-			// Fin de VBlank: se borran VBlank, sprite-0 y overflow (el PPU real
-			// limpia sprite-0/overflow en la pre-render). Sin esto, el bit de
-			// sprite-0 quedaba pegado y SMB se colgaba en su bucle de espera.
+			// Pre-render: se borran VBlank, sprite-0 y overflow (el PPU real limpia
+			// sprite-0/overflow aquí). Sin esto, el bit de sprite-0 quedaba pegado
+			// y SMB se colgaba en su bucle de espera.
 			status = static_cast<eng::u8>(status & ~0xE0u);
+		} else if (scanline == 262u) {
+			// Fin de frame: la línea 261 ya contó sus 341 dots. Volver a la 0.
+			scanline = 0u;
 		}
 	}
 

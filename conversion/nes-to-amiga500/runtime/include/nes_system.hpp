@@ -22,6 +22,11 @@
 
 namespace n2a {
 
+/// Versión del **oráculo** (semántica observable de la emulación: framebuffer, RAM,
+/// timing). Queda **congelada** antes de empezar el backend Amiga; cualquier cambio
+/// que altere lo observable debe incrementarla (ver `docs/VERSIONS.md`).
+inline constexpr int kOracleVersion = 1;
+
 /// Consola NES mínima: memoria con hooks hacia PPU/APU/mapper, CPU intérprete y
 /// control de NMI por VBlank.
 struct NesSystem {
@@ -54,6 +59,7 @@ struct NesSystem {
 	eng::u8 shift1 = 0;  ///< Desplazamiento del mando 1.
 	eng::u8 shift2 = 0;  ///< Desplazamiento del mando 2.
 	eng::u32 nmi_count = 0; ///< NMIs tomadas (diagnóstico: ¿llega el VBlank al juego?).
+	bool cycle_exact_ = true; ///< Reloj de bus por acceso activo (ver `set_cycle_exact`).
 
 	/// Instala los hooks de E/S y enlaza el intérprete con `cpu`/`mem`.
 	NesSystem() : interp(cpu, mem) {
@@ -75,6 +81,16 @@ struct NesSystem {
 		ppu.mirror_h = m.mirror_h;
 		mem.prg = m.prg;
 		mem.prg_size = m.prg_size;
+	}
+
+	/// Activa/desactiva el **reloj de bus por acceso** (modelo dot-exacto del
+	/// intérprete). Activado por defecto. Desactivarlo acelera el host (la PPU se
+	/// reloja al final de la instrucción, modelo anterior) a costa de perder el
+	/// orden intra-instrucción. No afecta al Amiga: el codegen no reloja por acceso.
+	/// \param on `true` para relojear en cada acceso de bus.
+	void set_cycle_exact(bool on) {
+		cycle_exact_ = on;
+		mem.cycle_tick = on ? &NesSystem::cycle_tick_cb : nullptr;
 	}
 
 	/// Reinicia CPU y PPU al estado de arranque (vector de reset).
@@ -104,10 +120,13 @@ struct NesSystem {
 			int n = 0;
 			int cyc = fast_run(fast_ctx, cpu, mem, budget, &n);
 			if (cyc <= 0) {
-				// Bloque vacío/no cubierto: una instrucción por el intérprete, que ya
-				// reloja la PPU por acceso (no hay que relojar aquí).
+				// Bloque vacío/no cubierto: una instrucción por el intérprete. Si el
+				// reloj de bus está activo, ya reloja por acceso; si no, relojamos aquí.
 				cyc = interp.step();
 				n = 1;
+				if (!cycle_exact_) {
+					clock_ppu(cyc);
+				}
 			} else {
 				clock_ppu(cyc); // la PRG transpilada no reloja por acceso
 			}
@@ -169,8 +188,11 @@ struct NesSystem {
 			}
 		} else {
 			// El intérprete reloja la PPU en cada acceso de bus y completa los ciclos
-			// internos: no hay que relojar aquí ni pre-relojar.
+			// internos; si el reloj de bus está desactivado, se reloja aquí al final.
 			cyc = interp.step();
+			if (!cycle_exact_) {
+				clock_ppu(cyc);
+			}
 		}
 		if (ppu.nmi_occurred) {
 			ppu.nmi_occurred = false; // el NMI se toma en frontera de instrucción

@@ -40,19 +40,19 @@ en algunos frames. No es un offset de 1 frame (comparar con `mesen` `f+1` empeor
 el logo del título ("SUPER"/recuadro) asienta ~2 filas más bajo que en `mesen` → el **3.1%** de
 diff **estructural** restante ("MARIO BROS.", menú y suelo ya coinciden).
 
-**Qué se probó.** (a) Se hizo **dot-exacto** el sprite-0 (`sprite0_line`/`sprite0_dot`; el flag se
-activa al alcanzar la columna del primer píxel del hit) — *no cambió* el 3.1%: el sprite-0 no es
-la causa principal. (b) El offset de 1 frame se descartó. (c) Se añadió el **pre-reloj por ciclo del
-acceso a datos** (`NesSystem::ppu_pre_cycles`: la `LDA $2002` ve el estado en su ciclo real) —
-*tampoco* cambió los 8 bytes: la lectura de `$2002` no era la causa. (d) Con los headers previos al
-cambio de timing, `dk`/`galaga` divergen igual → **no es una regresión** de estos arreglos.
+**Qué se probó (y se descartó).** (a) **sprite-0 dot-exacto** (`sprite0_line`/`sprite0_dot`, flag en
+la columna del hit) — no cambió. (b) offset de 1 frame — no. (c) **pre-reloj del acceso a datos**
+(`LDA $2002` ve el ciclo real) — no. (d) **intérprete dirigido por ciclo** (reloj de bus por acceso:
+`NESMemory::cycle_tick`) — no cambió los 8 bytes ni el diff. (e) **longitud de frame**: teníamos 261
+líneas; corregido a **262** (ciclos/frame pasaron de 29668 a **29782**, el real NTSC) — *sigue* sin
+cambiar los 8 bytes ni los diffs. (f) SMB **no lee `$4015`** → no es el frame IRQ del APU. (g) Con
+los headers previos, `dk`/`galaga` divergen igual → **no es regresión** de estos arreglos.
 
-**Causa.** Los ciclos por instrucción ya son exactos (los valida `cycles_test`) y los eventos de PPU
-son dot-exactos; el pre-reloj cubre el orden intra-instrucción de los accesos a PPU. Lo que queda
-es la **granularidad de la propia ejecución del 6502** dentro de una instrucción (actividad de bus
-por ciclo y muestreo de IRQ/NMI en el ciclo exacto). Cerrarlo exigiría un **intérprete dirigido por
-ciclo** (bus ciclo a ciclo), un refactor mayor; se recomienda como hito dedicado. **No bloquea el
-Amiga**, donde ese timing se resuelve por hardware (ver [`TIMING_AMIGA.md`](TIMING_AMIGA.md)).
+**Causa.** Todo el timing temporal (eventos de PPU dot-exactos, acceso por ciclo, longitud de frame)
+está descartado. La divergencia es de **estado/CPU**: un contador de arranque (`$0001`, que mesen
+incrementa cada frame) y unos bytes de pila. Candidatos restantes: una **nuance de un opcode** no
+cubierta por nestest, o el **estado de power-up** (RAM/PPU/APU). No rompe el juego (llega al mismo
+título) y **no bloquea el Amiga** (timing por hardware; ver [`TIMING_AMIGA.md`](TIMING_AMIGA.md)).
 
 **Impacto en el codegen.** El mismo efecto aparece entre el **plugin** (bloques) y el **intérprete**
 (instrucción a instrucción): al verificar los 13 `.n2x`, 5 coinciden (RAM 0/2048) y 8 difieren en

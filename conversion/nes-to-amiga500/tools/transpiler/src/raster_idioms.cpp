@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "opcodes.hpp"
 
@@ -75,14 +76,31 @@ void scan(const eng::u8* p, eng::usize n, int out[3], unsigned addrs[3][4]) {
 
 } // namespace
 
+/// Emite una lista JSON de direcciones (hex) para un idioma.
+void json_addrs(unsigned v[4], int n) {
+	std::printf("[");
+	for (int i = 0; i < n; ++i) {
+		std::printf("%s\"0x%04X\"", i != 0 ? "," : "", v[i]);
+	}
+	std::printf("]");
+}
+
 int main(int argc, char** argv) {
 	if (argc < 2) {
-		std::printf("uso: raster_idioms <rom.nes> [rom2.nes ...]\n");
+		std::printf("uso: raster_idioms [--json] <rom.nes> [rom2.nes ...]\n");
 		return 2;
 	}
-	std::printf("%-16s %7s %8s %7s   direcciones (vblank / sprite0 / retardo)\n", "ROM", "vblank",
-		    "sprite0", "retardo");
-	for (int a = 1; a < argc; ++a) {
+	// Con `--json` emite un mapeo (nombre -> idiomas con direcciones) que el
+	// codegen/backend Amiga puede consumir para emitir las primitivas HLE.
+	const bool json = std::strcmp(argv[1], "--json") == 0;
+	const int first = json ? 2 : 1;
+	if (json) {
+		std::printf("{\n");
+	} else {
+		std::printf("%-16s %7s %8s %7s   direcciones (vblank / sprite0 / retardo)\n", "ROM",
+			    "vblank", "sprite0", "retardo");
+	}
+	for (int a = first; a < argc; ++a) {
 		std::FILE* f = std::fopen(argv[a], "rb");
 		if (f == nullptr) {
 			std::printf("  error: no se pudo abrir '%s'\n", argv[a]);
@@ -110,9 +128,23 @@ int main(int argc, char** argv) {
 		for (const char* c = argv[a]; *c != '\0'; ++c) {
 			if (*c == '/' || *c == '\\') base = c + 1;
 		}
-		std::printf("%-16s %7d %8d %7d   %04X %04X %04X / %04X / %04X\n", base, out[0], out[1],
-			    out[2], addrs[0][0], addrs[0][1], addrs[1][0], addrs[2][0], addrs[2][1]);
+		if (json) {
+			std::printf("  %s\"%s\": {\"vblank\": ", a > first ? ",\n" : "", base);
+			json_addrs(addrs[0], out[0] < 4 ? out[0] : 4);
+			std::printf(", \"sprite0\": ");
+			json_addrs(addrs[1], out[1] < 4 ? out[1] : 4);
+			std::printf(", \"delay\": ");
+			json_addrs(addrs[2], out[2] < 4 ? out[2] : 4);
+			std::printf(", \"counts\": [%d,%d,%d]}", out[0], out[1], out[2]);
+		} else {
+			std::printf("%-16s %7d %8d %7d   %04X %04X %04X / %04X / %04X\n", base, out[0],
+				    out[1], out[2], addrs[0][0], addrs[0][1], addrs[1][0], addrs[2][0],
+				    addrs[2][1]);
+		}
 		std::free(buf);
+	}
+	if (json) {
+		std::printf("\n}\n");
 	}
 	return 0;
 }
