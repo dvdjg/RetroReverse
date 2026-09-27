@@ -37,6 +37,13 @@ struct Interpreter {
 	///         por cruce de página en lecturas indexadas y por ramas tomadas).
 	int step();
 
+	/// Ciclos **base** de un opcode (tabla estándar del 6502, sin penalizaciones).
+	/// Expuesto para que el sistema pueda situar la PPU en el ciclo del acceso a
+	/// datos antes de ejecutar (`NesSystem::ppu_pre_cycles`).
+	/// \param op Byte de opcode.
+	/// \return Ciclos base (1..8); 0 si el opcode no es válido.
+	[[nodiscard]] static eng::u8 opcode_cycles(eng::u8 op) noexcept;
+
 private:
 	eng::u8 rd(eng::u16 a) const { return mem.read(a); }
 	void wr(eng::u16 a, eng::u8 v) { mem.write(a, v); }
@@ -180,6 +187,8 @@ private:
 
 /// Implementación de `step()`. Se define fuera del struct por legibilidad; es
 /// `inline` para poder estar en cabecera.
+inline eng::u8 Interpreter::opcode_cycles(eng::u8 op) noexcept { return base_cycles(op); }
+
 inline int Interpreter::step() {
 	if (jammed) {
 		return 1;

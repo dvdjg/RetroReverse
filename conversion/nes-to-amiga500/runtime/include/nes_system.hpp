@@ -126,7 +126,29 @@ struct NesSystem {
 	/// Se expone para pruebas en lockstep (comparar intérprete vs ejecutor rápido
 	/// instrucción a instrucción).
 	/// \return Ciclos de CPU consumidos por la instrucción.
+	/// Ciclos de PPU a avanzar **antes** del acceso a datos de la instrucción en
+	/// `cpu.PC` (dot-exacto para lecturas de registros de PPU). El acceso a datos
+	/// del 6502 ocurre en el **último** ciclo de la instrucción, así que se
+	/// pre-relojea `base-1` ciclos: una `LDA $2002` (4 ciclos) ve el estado en el
+	/// ciclo 4 (el real), no al principio. Es una aproximación de 1 ciclo para
+	/// lecturas indexadas con cruce de página. Solo afecta al orden intra-instrucción
+	/// (el total no cambia), por lo que es inocuo para el timing global.
+	/// \return Ciclos a pre-relojar (>= 0).
+	[[nodiscard]] int ppu_pre_cycles() const {
+		const eng::u8 op = mem.read(cpu.PC);
+		const int b = Interpreter::opcode_cycles(op);
+		return b > 0 ? b - 1 : 0;
+	}
+
+	/// Ejecuta **una** instrucción de CPU y avanza la PPU/NMI en consecuencia.
+	/// Se expone para pruebas en lockstep (comparar intérprete vs ejecutor rápido
+	/// instrucción a instrucción).
+	/// \return Ciclos de CPU consumidos por la instrucción.
 	int step_instruction() {
+		const int pre = ppu_pre_cycles();
+		if (pre > 0) {
+			clock_ppu(pre); // sitúa la PPU en el ciclo del acceso a datos
+		}
 		int cyc;
 		if (fast_step != nullptr) {
 			cyc = fast_step(fast_ctx, cpu, mem);
@@ -136,9 +158,12 @@ struct NesSystem {
 		} else {
 			cyc = interp.step();
 		}
-		clock_ppu(cyc);
+		const int post = cyc - pre;
+		if (post > 0) {
+			clock_ppu(post);
+		}
 		if (ppu.nmi_occurred) {
-			ppu.nmi_occurred = false;
+			ppu.nmi_occurred = false; // el NMI se toma en frontera de instrucción
 			trigger_nmi();
 		}
 		return cyc;

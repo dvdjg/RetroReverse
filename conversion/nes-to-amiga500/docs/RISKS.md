@@ -58,7 +58,8 @@ recupere. Se necesitaría un **sincronismo dot-exacto del 6502** (sub-instrucci�
 ## Impacto de los arreglos en la versión Amiga
 
 Estos arreglos viven en el **oráculo/host** (PPU/APU software), no en el renderer Amiga (Copper/
-Blitter/Paula). Su impacto en el port es indirecto pero real:
+Blitter/Paula). Su impacto en el port es indirecto pero real (y la estrategia para no pedir más
+ciclos al 68000 está en [`TIMING_AMIGA.md`](TIMING_AMIGA.md)):
 
 | Arreglo (host) | Impacto en el Amiga |
 |---|---|
