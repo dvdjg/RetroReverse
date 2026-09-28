@@ -524,6 +524,11 @@ public:
 		out.append("using n2a::CPU;\n");
 		out.append("using n2a::NESMemory;\n\n");
 		emit_rom(out);
+		// Backend nativo (estilo descompilador): sustituye todo el codegen por bloques.
+		if (native_ && native_ok()) {
+			emit_native(out);
+			return;
+		}
 		// Ventana fija (y NROM/CNROM completos): el llamador ya hizo
 		// `disassemble()` + `build_basic_blocks()`.
 		const eng::usize fixed_instr = count_;
@@ -614,6 +619,40 @@ public:
 	/// \param b `true` para emitir lecturas directas de ROM.
 	void set_rom_direct(bool b) noexcept { rom_direct_ = b; }
 
+	/// Con `true`, emite un **backend "nativo" estilo descompilador**: en vez de bloques
+	/// que llaman a métodos de `CPU` (con el estado en `struct`), genera **una función C++
+	/// por REGIÓN** (punto de entrada = `reset`/NMI/IRQ/`JSR`) con el estado del 6502 en
+	/// **variables locales** (`a/x/y/flags`), lecturas de ROM como **literales** (PRG fija)
+	/// y control de flujo C++ normal (`goto`). Así el optimizador global de g++ puede
+	/// propagar valores, plegar constantes y asignar registros entre bloques.
+	/// Solo para **PRG no bancada** y sin opcodes indirectos/ilegales (si no, el llamador
+	/// debe usar el codegen por bloques).
+	/// \param b `true` para activar el backend nativo.
+	void set_native(bool b) noexcept { native_ = b; }
+	/// \return `true` si el backend nativo puede emitir esta ROM (PRG fija y opcodes
+	/// soportados). Lo consulta el llamador para elegir el codegen.
+	[[nodiscard]] bool native_ok() const noexcept {
+		if (prg_banked_ || prg_size_ == 0u || (prg_size_ & (prg_size_ - 1u)) != 0u) {
+			return false;
+		}
+		for (eng::u32 a = 0; a < kSpace; ++a) {
+			if (has_instr_[a] == 0u) {
+				continue;
+			}
+			if (!native_supported(kOpcodeTable[instr_[a].opcode])) {
+				return false;
+			}
+			// Todo destino de `JSR` debe ser inicio de bloque (entrada de región).
+			const Instruction& in = instr_[a];
+			if (sv_equal(kOpcodeTable[in.opcode].mnemonic, "JSR") && has_operand(in) &&
+			    !(in.target < kSpace && has_instr_[in.target] != 0u &&
+			      leaders_[in.target] != 0u)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	/// Número de mapper iNES de la ROM cargada.
 	[[nodiscard]] int mapper() const noexcept { return mapper_; }
 	/// Tamaño de la PRG-ROM en bytes.
@@ -693,6 +732,8 @@ private:
 	bool trace_ = false;         ///< Si `true`, emitir `N2A_TRACE` por instrucción (ver `set_trace`).
 	bool chain_ = false;         ///< Si `true`, encadenar bloques (ver `set_chain`).
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
+	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
 	int cur_bank_ = -1;          ///< Banco del bloque en emisión (`-1` = ventana fija).
 	bool cur_nz_live_ = true;    ///< ¿`Z`/`N` viven tras la instrucción actual? (liveness, ver `nz_dead_after`).
 
@@ -2178,6 +2219,495 @@ private:
 		}
 	}
 
+	/// \return `true` si el opcode se puede emitir en el backend nativo.
+	[[nodiscard]] static bool native_supported(const OpcodeInfo& info) noexcept {
+		const char* m = info.mnemonic;
+		if (sv_equal(m, "JMP") || sv_equal(m, "JSR")) {
+			return info.mode == AddrMode::Abs; // indirecto: no soportado (fallback)
+		}
+		if (info.mode == AddrMode::Rel) {
+			return true; // BEQ/BNE/BCC/BCS/BMI/BPL/BVS/BVC
+		}
+		if (sv_equal(m, "LAX") || sv_equal(m, "SAX") || sv_equal(m, "DCP") ||
+		    sv_equal(m, "ISB") || sv_equal(m, "SLO") || sv_equal(m, "RLA") ||
+		    sv_equal(m, "SRE") || sv_equal(m, "RRA")) {
+			return false; // ilegales: fallback
+		}
+		return sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY") ||
+		       sv_equal(m, "STA") || sv_equal(m, "STX") || sv_equal(m, "STY") ||
+		       sv_equal(m, "TAX") || sv_equal(m, "TAY") || sv_equal(m, "TXA") ||
+		       sv_equal(m, "TYA") || sv_equal(m, "TSX") || sv_equal(m, "TXS") ||
+		       sv_equal(m, "PHA") || sv_equal(m, "PLA") || sv_equal(m, "PHP") ||
+		       sv_equal(m, "PLP") || sv_equal(m, "AND") || sv_equal(m, "ORA") ||
+		       sv_equal(m, "EOR") || sv_equal(m, "ADC") || sv_equal(m, "SBC") ||
+		       sv_equal(m, "CMP") || sv_equal(m, "CPX") || sv_equal(m, "CPY") ||
+		       sv_equal(m, "BIT") || sv_equal(m, "INC") || sv_equal(m, "DEC") ||
+		       sv_equal(m, "INX") || sv_equal(m, "INY") || sv_equal(m, "DEX") ||
+		       sv_equal(m, "DEY") || sv_equal(m, "ASL") || sv_equal(m, "LSR") ||
+		       sv_equal(m, "ROL") || sv_equal(m, "ROR") || sv_equal(m, "CLC") ||
+		       sv_equal(m, "SEC") || sv_equal(m, "CLI") || sv_equal(m, "SEI") ||
+		       sv_equal(m, "CLD") || sv_equal(m, "SED") || sv_equal(m, "CLV") ||
+		       sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK") ||
+		       sv_equal(m, "NOP");
+	}
+
+	/// Emite el **backend nativo** (estilo descompilador) para PRG fija. Ver `set_native`.
+	void emit_native(Dyn& out) {
+		// --- Preludio: estado en locales + bus con hooks de E/S ---
+		out.append("// ---- Backend nativo (estilo descompilador) ----\n");
+		out.append("// Estado del 6502 en variables locales, ROM como literales/array constexpr y\n");
+		out.append("// una funcion por REGION (entrada: reset/NMI/IRQ/JSR): el optimizador global\n");
+		out.append("// de g++ propaga valores, pliega constantes y asigna registros entre bloques.\n");
+		out.append("struct N2A_State {\n");
+		out.append("    eng::u8 a = 0, x = 0, y = 0, sp = 0xFD;\n");
+		out.append("    eng::u16 pc = 0;\n");
+		out.append("    bool c = false, z = false, n = false, v = false, d = false, i = true;\n");
+		out.append("    bool halted = false;\n};\n");
+		out.append("struct N2A_Bus {\n");
+		out.append("    eng::u8 ram[0x800] = {};\n");
+		out.append("    eng::u8 wram[0x2000] = {};\n");
+		out.append("    void (*io_write)(N2A_Bus&, eng::u16, eng::u8) = nullptr;\n");
+		out.append("    eng::u8 (*io_read)(N2A_Bus&, eng::u16) = nullptr;\n};\n");
+		out.append("[[nodiscard]] static eng::u8 n2a_read(N2A_Bus& m, eng::u16 a) {\n");
+		out.append("    if (a < 0x2000u) { return m.ram[a & 0x7FFu]; }\n");
+		out.append("    if (a < 0x4020u) { return (m.io_read != nullptr) ? m.io_read(m, a) : 0u; }\n");
+		out.append("    if (a >= 0x8000u) { return PRG_ROM[(static_cast<eng::u32>(a) - 0x8000u) & (kPrgSize - 1u)]; }\n");
+		out.append("    if (a >= 0x6000u) { return m.wram[a - 0x6000u]; }\n");
+		out.append("    return 0u;\n}\n");
+		out.append("static void n2a_write(N2A_Bus& m, eng::u16 a, eng::u8 v) {\n");
+		out.append("    if (a < 0x2000u) { m.ram[a & 0x7FFu] = v; return; }\n");
+		out.append("    if (a < 0x4020u) { if (m.io_write != nullptr) { m.io_write(m, a, v); } return; }\n");
+		out.append("    if (a >= 0x6000u && a < 0x8000u) { m.wram[a - 0x6000u] = v; return; }\n}\n");
+		out.append("static N2A_State g_st;\nstatic N2A_Bus g_bus;\n\n");
+
+		// --- Entradas de región: reset/NMI/IRQ + destinos de JSR ---
+		eng::util::Vector<eng::u16, eng::util::HeapAlloc> entries {};
+		const auto add_entry = [&](eng::u16 a) {
+			if (a < kSpace && has_instr_[a] != 0u && leaders_[a] != 0u) {
+				for (eng::usize i = 0; i < entries.size(); ++i) {
+					if (entries[i] == a) {
+						return;
+					}
+				}
+				(void)entries.push_back(a);
+			}
+		};
+		add_entry(reset_);
+		add_entry(nmi_);
+		add_entry(irq_);
+		for (eng::u32 a = 0; a < kSpace; ++a) {
+			if (has_instr_[a] != 0u) {
+				const Instruction& in = instr_[a];
+				if (sv_equal(kOpcodeTable[in.opcode].mnemonic, "JSR") && has_operand(in)) {
+					add_entry(in.target);
+				}
+			}
+		}
+		// Declaraciones adelantadas.
+		for (eng::usize i = 0; i < entries.size(); ++i) {
+			out.append("static void n2a_r_");
+			out.append_hex(entries[i], 4u, true);
+			out.append("(N2A_State* __restrict r, N2A_Bus* __restrict m);\n");
+		}
+		out.append('\n');
+		for (eng::usize i = 0; i < entries.size(); ++i) {
+			emit_native_region(out, entries[i]);
+		}
+
+		// --- Entradas (reset/NMI/IRQ). `[[gnu::used]]` evita que g++ elimine las
+		// regiones solo alcanzables desde NMI/IRQ por ser `static` no referenciadas.
+		out.append("[[gnu::used]] void game_main() {\n");
+		out.append("    n2a_r_");
+		out.append_hex(reset_, 4u, true);
+		out.append("(&g_st, &g_bus);\n}\n");
+		out.append("[[gnu::used]] void n2a_nmi() { n2a_r_");
+		out.append_hex(nmi_, 4u, true);
+		out.append("(&g_st, &g_bus); }\n");
+		out.append("[[gnu::used]] void n2a_irq() { n2a_r_");
+		out.append_hex(irq_, 4u, true);
+		out.append("(&g_st, &g_bus); }\n\n");
+		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
+		out.append("int main() { game_main(); return 0; }\n");
+		out.append("#endif\n");
+	}
+
+	/// Emite una **región** (función C++) del backend nativo: BFS de bloques desde
+	/// `entry` por aristas estáticas (caída/rama/`JMP`; el retorno de `JSR` continúa en la
+	/// región; el destino de `JSR` es otra región). Etiquetas `L_xxxx` + `goto`.
+	void emit_native_region(Dyn& out, eng::u16 entry) {
+		(void)native_vis_.resize(kSpace, 0u);
+		for (eng::u32 i = 0; i < kSpace; ++i) {
+			native_vis_[i] = 0u; // `resize` no reescribe; limpiar para cada región
+		}
+		eng::util::Vector<eng::u16, eng::util::HeapAlloc> stack {};
+		const auto visit = [&](eng::u16 b) {
+			if (b < kSpace && has_instr_[b] != 0u && leaders_[b] != 0u &&
+			    native_vis_[b] == 0u) {
+				native_vis_[b] = 1u;
+				(void)stack.push_back(b);
+			}
+		};
+		visit(entry);
+		for (eng::usize i = 0; i < stack.size(); ++i) {
+			const eng::u16 b = stack[i];
+			eng::u16 p = b;
+			const Instruction* term = nullptr;
+			for (;;) {
+				if (has_instr_[p] == 0u || (p != b && leaders_[p] != 0u)) {
+					break;
+				}
+				const Instruction& in = instr_[p];
+				const OpcodeInfo& info = kOpcodeTable[in.opcode];
+				term = &in;
+				p = static_cast<eng::u16>(p + info.size);
+				if (info.mode == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
+				    sv_equal(info.mnemonic, "JSR") || sv_equal(info.mnemonic, "RTS") ||
+				    sv_equal(info.mnemonic, "RTI") || sv_equal(info.mnemonic, "BRK")) {
+					break;
+				}
+			}
+			const eng::u16 next = p;
+			if (term != nullptr) {
+				const char* m = kOpcodeTable[term->opcode].mnemonic;
+				const AddrMode md = kOpcodeTable[term->opcode].mode;
+				if (md == AddrMode::Rel) {
+					visit(term->target);
+					visit(next);
+				} else if (sv_equal(m, "JMP")) {
+					visit(term->target);
+				} else if (sv_equal(m, "JSR")) {
+					visit(next); // retorno del JSR (continúa en la región)
+				} else if (!sv_equal(m, "RTS") && !sv_equal(m, "RTI") &&
+					   !sv_equal(m, "BRK")) {
+					visit(next); // Ultima corriente: cae al siguiente bloque
+				}
+			} else {
+				visit(next);
+			}
+		}
+		// Orden ascendente para localidad de código.
+		for (eng::usize i = 1; i < stack.size(); ++i) {
+			const eng::u16 k = stack[i];
+			eng::usize j = i;
+			while (j > 0u && stack[j - 1u] > k) {
+				stack[j] = stack[j - 1u];
+				--j;
+			}
+			stack[j] = k;
+		}
+
+		out.append("static void n2a_r_");
+		out.append_hex(entry, 4u, true);
+		out.append("(N2A_State* __restrict r, N2A_Bus* __restrict m) {\n");
+		for (eng::usize si = 0; si < stack.size(); ++si) {
+			const eng::u16 b = stack[si];
+			out.append("L_");
+			out.append_hex(b, 4u, true);
+			out.append(":\n");
+			eng::u16 p = b;
+			const Instruction* term = nullptr;
+			for (;;) {
+				if (has_instr_[p] == 0u || (p != b && leaders_[p] != 0u)) {
+					break;
+				}
+				const Instruction& in = instr_[p];
+				const OpcodeInfo& info = kOpcodeTable[in.opcode];
+				term = &in;
+				emit_native_instruction(out, in);
+				p = static_cast<eng::u16>(p + info.size);
+				if (info.mode == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
+				    sv_equal(info.mnemonic, "JSR") || sv_equal(info.mnemonic, "RTS") ||
+				    sv_equal(info.mnemonic, "RTI") || sv_equal(info.mnemonic, "BRK")) {
+					break;
+				}
+			}
+			const eng::u16 next = p;
+			if (term != nullptr) {
+				const char* m = kOpcodeTable[term->opcode].mnemonic;
+				if (kOpcodeTable[term->opcode].mode == AddrMode::Rel) {
+					if (native_vis_[term->target] != 0u) {
+						out.append("    if (");
+						out.append(sv_equal(m, "BEQ") ? "r->z"
+							   : sv_equal(m, "BNE") ? "!r->z"
+							   : sv_equal(m, "BCC") ? "!r->c"
+							   : sv_equal(m, "BCS") ? "r->c"
+							   : sv_equal(m, "BMI") ? "r->n"
+							   : sv_equal(m, "BPL") ? "!r->n"
+							   : sv_equal(m, "BVS") ? "r->v"
+							   : sv_equal(m, "BVC") ? "!r->v"
+										: "false");
+						out.append(") { goto L_");
+						out.append_hex(term->target, 4u, true);
+						out.append("; }\n");
+					}
+					if (native_vis_[next] != 0u) {
+						out.append("    goto L_");
+						out.append_hex(next, 4u, true);
+						out.append(";\n");
+					}
+				} else if (sv_equal(m, "JMP")) {
+					if (native_vis_[term->target] != 0u) {
+						out.append("    goto L_");
+						out.append_hex(term->target, 4u, true);
+						out.append(";\n");
+					}
+				} else if (sv_equal(m, "JSR")) {
+					out.append("    n2a_r_");
+					out.append_hex(term->target, 4u, true);
+					out.append("(r, m);");
+					if (native_vis_[next] != 0u) {
+						out.append(" goto L_");
+						out.append_hex(next, 4u, true);
+						out.append(";");
+					}
+					out.append('\n');
+				} else if (sv_equal(m, "RTS") || sv_equal(m, "RTI")) {
+					out.append("    return;\n");
+				} else if (sv_equal(m, "BRK")) {
+					out.append("    r->halted = true; return;\n");
+				} else if (native_vis_[next] != 0u) {
+					out.append("    goto L_");
+					out.append_hex(next, 4u, true);
+					out.append(";\n");
+				}
+			} else if (native_vis_[next] != 0u) {
+				out.append("    goto L_");
+				out.append_hex(next, 4u, true);
+				out.append(";\n");
+			}
+		}
+		out.append("}\n\n");
+	}
+
+	/// Emite una instrucción del backend nativo (salvo transferencias de control, que
+	/// resuelve `emit_native_region`). `r` es `N2A_State*`, `m` es `N2A_Bus*`.
+	void emit_native_instruction(Dyn& out, const Instruction& in) const {
+		const OpcodeInfo& info = kOpcodeTable[in.opcode];
+		const char* m = info.mnemonic;
+		if (sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK") ||
+		    sv_equal(m, "JMP") || sv_equal(m, "JSR") || info.mode == AddrMode::Rel ||
+		    sv_equal(m, "NOP")) {
+			return; // terminadores / no-op
+		}
+		// Expresión del operando efectivo (rvalue del byte).
+		const auto operand = [&]() {
+			if (info.mode == AddrMode::Imm) {
+				out.append("0x");
+				out.append_hex(static_cast<eng::u16>(in.operand), 2u, true);
+				return;
+			}
+			if (info.mode == AddrMode::Abs && in.operand >= 0x8000u) {
+				// ROM absoluta: **literal** (PRG fija).
+				out.append("0x");
+				out.append_hex(prg_[(static_cast<eng::u32>(in.operand) - 0x8000u) &
+						     (prg_size_ - 1u)], 2u, true);
+				return;
+			}
+			if ((info.mode == AddrMode::AbsX || info.mode == AddrMode::AbsY) &&
+			    in.operand >= 0x8000u && in.operand <= 0xFF00u) {
+				// ROM indexada: acceso directo al array constexpr.
+				out.append("PRG_ROM[(0x");
+				out.append_hex(static_cast<eng::u32>(in.operand) - 0x8000u, 4u, true);
+				out.append("u + r->");
+				out.append(info.mode == AddrMode::AbsX ? "x" : "y");
+				out.append(") & (kPrgSize - 1u)]");
+				return;
+			}
+			out.append("n2a_read(*m, ");
+			emit_native_ea(out, in);
+			out.append(")");
+		};
+		const auto setzn = [&](const char* reg) {
+			out.append(" r->z = (");
+			out.append(reg);
+			out.append(" == 0u); r->n = ((");
+			out.append(reg);
+			out.append(" & 0x80u) != 0u);");
+		};
+		const auto store = [&](const char* src) {
+			out.append("    n2a_write(*m, ");
+			emit_native_ea(out, in);
+			out.append(", ");
+			out.append(src);
+			out.append(");\n");
+		};
+
+		if (sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY")) {
+			const char* reg = sv_equal(m, "LDA") ? "a" : (sv_equal(m, "LDX") ? "x" : "y");
+			out.append("    r->");
+			out.append(reg);
+			out.append(" = static_cast<eng::u8>(");
+			operand();
+			out.append(");");
+			out.append(" r->z = (r->");
+			out.append(reg);
+			out.append(" == 0u); r->n = ((r->");
+			out.append(reg);
+			out.append(" & 0x80u) != 0u);\n");
+			return;
+		}
+		if (sv_equal(m, "STA") || sv_equal(m, "STX") || sv_equal(m, "STY")) {
+			store(sv_equal(m, "STA") ? "r->a" : (sv_equal(m, "STX") ? "r->x" : "r->y"));
+			return;
+		}
+		if (sv_equal(m, "AND") || sv_equal(m, "ORA") || sv_equal(m, "EOR")) {
+			out.append("    r->a = static_cast<eng::u8>(r->a ");
+			out.append(sv_equal(m, "AND") ? "&" : sv_equal(m, "ORA") ? "|" : "^");
+			out.append(" static_cast<eng::u8>(");
+			operand();
+			out.append("));");
+			setzn("r->a");
+			out.append('\n');
+			return;
+		}
+		if (sv_equal(m, "ADC") || sv_equal(m, "SBC")) {
+			out.append("    { const eng::u8 n2a_v = static_cast<eng::u8>(");
+			operand();
+			out.append(");");
+			if (sv_equal(m, "ADC")) {
+				out.append(" const eng::u16 n2a_s = static_cast<eng::u16>(r->a) + n2a_v + (r->c ? 1u : 0u);");
+				out.append(" r->v = ((((r->a ^ n2a_s) & (n2a_v ^ n2a_s)) & 0x80u) != 0u);");
+				out.append(" r->a = static_cast<eng::u8>(n2a_s);");
+				out.append(" r->c = (n2a_s > 0xFFu);");
+			} else {
+				out.append(" const eng::u8 n2a_nv = static_cast<eng::u8>(~n2a_v);");
+				out.append(" const eng::u16 n2a_s = static_cast<eng::u16>(r->a) + n2a_nv + (r->c ? 1u : 0u);");
+				out.append(" r->v = ((((r->a ^ n2a_s) & (n2a_nv ^ n2a_s)) & 0x80u) != 0u);");
+				out.append(" r->a = static_cast<eng::u8>(n2a_s);");
+				out.append(" r->c = (n2a_s > 0xFFu);");
+			}
+			setzn("r->a");
+			out.append(" }\n");
+			return;
+		}
+		if (sv_equal(m, "CMP") || sv_equal(m, "CPX") || sv_equal(m, "CPY")) {
+			const char* reg = sv_equal(m, "CMP") ? "r->a" : (sv_equal(m, "CPX") ? "r->x" : "r->y");
+			out.append("    { const eng::u8 n2a_v = static_cast<eng::u8>(");
+			operand();
+			out.append(");");
+			out.append(" const eng::u8 n2a_d = static_cast<eng::u8>(");
+			out.append(reg);
+			out.append(" - n2a_v);");
+			out.append(" r->c = (");
+			out.append(reg);
+			out.append(" >= n2a_v); r->z = (n2a_d == 0u); r->n = ((n2a_d & 0x80u) != 0u); }\n");
+			return;
+		}
+		if (sv_equal(m, "BIT")) {
+			out.append("    { const eng::u8 n2a_v = static_cast<eng::u8>(");
+			operand();
+			out.append("); r->z = ((r->a & n2a_v) == 0u); r->v = ((n2a_v & 0x40u) != 0u); r->n = ((n2a_v & 0x80u) != 0u); }\n");
+			return;
+		}
+		if (sv_equal(m, "INC") || sv_equal(m, "DEC")) {
+			out.append("    { const eng::u8 n2a_v = static_cast<eng::u8>(n2a_read(*m, ");
+			emit_native_ea(out, in);
+			out.append(") ");
+			out.append(sv_equal(m, "INC") ? "+ 1u" : "- 1u");
+			out.append("); n2a_write(*m, ");
+			emit_native_ea(out, in);
+			out.append(", n2a_v); r->z = (n2a_v == 0u); r->n = ((n2a_v & 0x80u) != 0u); }\n");
+			return;
+		}
+		if (sv_equal(m, "ASL") || sv_equal(m, "LSR") || sv_equal(m, "ROL") || sv_equal(m, "ROR")) {
+			out.append("    { eng::u8 n2a_v = n2a_read(*m, ");
+			emit_native_ea(out, in);
+			out.append(");");
+			if (sv_equal(m, "ASL")) {
+				out.append(" r->c = ((n2a_v & 0x80u) != 0u); n2a_v = static_cast<eng::u8>(n2a_v << 1u);");
+			} else if (sv_equal(m, "LSR")) {
+				out.append(" r->c = ((n2a_v & 1u) != 0u); n2a_v = static_cast<eng::u8>(n2a_v >> 1u);");
+			} else if (sv_equal(m, "ROL")) {
+				out.append(" { const eng::u8 n2a_c = r->c ? 1u : 0u; r->c = ((n2a_v & 0x80u) != 0u); n2a_v = static_cast<eng::u8>((n2a_v << 1u) | n2a_c); }");
+			} else {
+				out.append(" { const eng::u8 n2a_c = r->c ? 1u : 0u; r->c = ((n2a_v & 1u) != 0u); n2a_v = static_cast<eng::u8>((n2a_v >> 1u) | (n2a_c << 7u)); }");
+			}
+			out.append(" n2a_write(*m, ");
+			emit_native_ea(out, in);
+			out.append(", n2a_v); r->z = (n2a_v == 0u); r->n = ((n2a_v & 0x80u) != 0u); }\n");
+			return;
+		}
+		if (sv_equal(m, "INX")) { out.append("    r->x = static_cast<eng::u8>(r->x + 1u);"); setzn("r->x"); out.append('\n'); return; }
+		if (sv_equal(m, "INY")) { out.append("    r->y = static_cast<eng::u8>(r->y + 1u);"); setzn("r->y"); out.append('\n'); return; }
+		if (sv_equal(m, "DEX")) { out.append("    r->x = static_cast<eng::u8>(r->x - 1u);"); setzn("r->x"); out.append('\n'); return; }
+		if (sv_equal(m, "DEY")) { out.append("    r->y = static_cast<eng::u8>(r->y - 1u);"); setzn("r->y"); out.append('\n'); return; }
+		if (sv_equal(m, "TAX")) { out.append("    r->x = r->a;"); setzn("r->x"); out.append('\n'); return; }
+		if (sv_equal(m, "TAY")) { out.append("    r->y = r->a;"); setzn("r->y"); out.append('\n'); return; }
+		if (sv_equal(m, "TXA")) { out.append("    r->a = r->x;"); setzn("r->a"); out.append('\n'); return; }
+		if (sv_equal(m, "TYA")) { out.append("    r->a = r->y;"); setzn("r->a"); out.append('\n'); return; }
+		if (sv_equal(m, "TSX")) { out.append("    r->x = r->sp;"); setzn("r->x"); out.append('\n'); return; }
+		if (sv_equal(m, "TXS")) { out.append("    r->sp = r->x;\n"); return; }
+		if (sv_equal(m, "PHA")) { out.append("    m->ram[0x100u + r->sp] = r->a; r->sp = static_cast<eng::u8>(r->sp - 1u);\n"); return; }
+		if (sv_equal(m, "PLA")) { out.append("    r->sp = static_cast<eng::u8>(r->sp + 1u); r->a = m->ram[0x100u + r->sp];"); setzn("r->a"); out.append('\n'); return; }
+		if (sv_equal(m, "PHP")) {
+			out.append("    m->ram[0x100u + r->sp] = static_cast<eng::u8>(0x30u | (r->n ? 0x80u : 0u) | (r->v ? 0x40u : 0u) | (r->d ? 0x08u : 0u) | (r->i ? 0x04u : 0u) | (r->z ? 0x02u : 0u) | (r->c ? 0x01u : 0u)); r->sp = static_cast<eng::u8>(r->sp - 1u);\n");
+			return;
+		}
+		if (sv_equal(m, "PLP")) {
+			out.append("    { r->sp = static_cast<eng::u8>(r->sp + 1u); const eng::u8 n2a_p = m->ram[0x100u + r->sp]; r->n = ((n2a_p & 0x80u) != 0u); r->v = ((n2a_p & 0x40u) != 0u); r->d = ((n2a_p & 0x08u) != 0u); r->i = ((n2a_p & 0x04u) != 0u); r->z = ((n2a_p & 0x02u) != 0u); r->c = ((n2a_p & 0x01u) != 0u); }\n");
+			return;
+		}
+		if (sv_equal(m, "CLC")) { out.append("    r->c = false;\n"); return; }
+		if (sv_equal(m, "SEC")) { out.append("    r->c = true;\n"); return; }
+		if (sv_equal(m, "CLI")) { out.append("    r->i = false;\n"); return; }
+		if (sv_equal(m, "SEI")) { out.append("    r->i = true;\n"); return; }
+		if (sv_equal(m, "CLD")) { out.append("    r->d = false;\n"); return; }
+		if (sv_equal(m, "SED")) { out.append("    r->d = true;\n"); return; }
+		if (sv_equal(m, "CLV")) { out.append("    r->v = false;\n"); return; }
+		// No alcanzable: `native_supported` filtra el resto.
+	}
+
+	/// Expresión de la **dirección efectiva** (u16) de una instrucción del backend nativo.
+	void emit_native_ea(Dyn& out, const Instruction& in) const {
+		const OpcodeInfo& info = kOpcodeTable[in.opcode];
+		switch (info.mode) {
+		case AddrMode::Zp:
+			out.append("0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u");
+			break;
+		case AddrMode::ZpX:
+			out.append("static_cast<eng::u16>(static_cast<eng::u8>(0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u + r->x))");
+			break;
+		case AddrMode::ZpY:
+			out.append("static_cast<eng::u16>(static_cast<eng::u8>(0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u + r->y))");
+			break;
+		case AddrMode::Abs:
+			out.append("0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u");
+			break;
+		case AddrMode::AbsX:
+			out.append("static_cast<eng::u16>(0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u + r->x)");
+			break;
+		case AddrMode::AbsY:
+			out.append("static_cast<eng::u16>(0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u + r->y)");
+			break;
+		case AddrMode::IndX:
+			out.append("static_cast<eng::u16>(static_cast<eng::u16>(n2a_read(*m, static_cast<eng::u8>(0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u + r->x))) | (static_cast<eng::u16>(n2a_read(*m, static_cast<eng::u8>(0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u + r->x + 1u))) << 8u))");
+			break;
+		default: // IndY
+			out.append("static_cast<eng::u16>(static_cast<eng::u16>(n2a_read(*m, 0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 4u, true);
+			out.append("u)) | (static_cast<eng::u16>(n2a_read(*m, 0x");
+			out.append_hex(static_cast<eng::u16>(in.operand + 1u), 4u, true);
+			out.append("u)) << 8u)) + r->y");
+			break;
+		}
+	}
+
 	/// Escribe el despacho y la entrada del programa: la firma `BlockFn`, las
 	/// tablas **dispersas** (bloques/ciclos + búsqueda binaria) para la ventana
 	/// fija y por banco, el estado global `g_state`, `game_main()` y el `main()` de
@@ -2358,3 +2888,4 @@ private:
 };
 
 } // namespace n2a
+
