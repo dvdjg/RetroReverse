@@ -238,18 +238,22 @@ bool write_ines_rom(const char* path, const eng::u8* prog, eng::usize prog_len) 
 constexpr eng::u8 kMiniProg[] = {0xA9u, 0x23u, 0x85u, 0x00u, 0xE8u, 0x00u};
 
 // ROM de idioms multibyte (16 bits):
-//   $8000: LDA #$34  A9 34
-//   $8002: STA $10   85 10
-//   $8004: LDA #$12  A9 12
-//   $8006: STA $11   85 11        -> (u16)$10 = $1234
-//   $8008: LDA $10   A5 10
-//   $800A: STA $20   85 20
-//   $800C: LDA $11   A5 11
-//   $800E: STA $21   85 21        -> copia $10 -> $20
-//   $8010: BRK       00
+//   (u16)$10 = $1234                          A9 34 85 10 A9 12 85 11
+//   copia $10 -> $20                          A5 10 85 20 A5 11 85 21
+//   (u16)$30 = $00FF                          A9 FF 85 30 A9 00 85 31
+//   INC $30; BNE skip; INC $31  (++16 bits)   E6 30 D0 02 E6 31
+//   comparar $30 con #$0100 (CMP/SBC)         A5 30 C9 00 A5 31 E9 01
+//   LDX #$02; LDA $8000,X; STA $40            A2 02 BD 00 80 85 40
+//   (tabla ROM con índice constante -> literal; $8000+2 = 85)
+//   BRK                                       00
 constexpr eng::u8 kMultibyteProg[] = {
 	0xA9u, 0x34u, 0x85u, 0x10u, 0xA9u, 0x12u, 0x85u, 0x11u,
-	0xA5u, 0x10u, 0x85u, 0x20u, 0xA5u, 0x11u, 0x85u, 0x21u, 0x00u,
+	0xA5u, 0x10u, 0x85u, 0x20u, 0xA5u, 0x11u, 0x85u, 0x21u,
+	0xA9u, 0xFFu, 0x85u, 0x30u, 0xA9u, 0x00u, 0x85u, 0x31u,
+	0xE6u, 0x30u, 0xD0u, 0x02u, 0xE6u, 0x31u,
+	0xA5u, 0x30u, 0xC9u, 0x00u, 0xA5u, 0x31u, 0xE9u, 0x01u,
+	0xA2u, 0x02u, 0xBDu, 0x00u, 0x80u, 0x85u, 0x40u,
+	0x00u,
 };
 
 // Bucle de 5 iteraciones + llamada a subrutina:

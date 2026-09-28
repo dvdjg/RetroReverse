@@ -198,24 +198,32 @@ Prueba `probe_const.cpp` (`-m68000 -O3`):
 
 ---
 
-## 9. Idioms multibyte en el nativo (hecho, parcial)
+## 9. Idioms multibyte en el nativo (hecho)
 
-El backend nativo reconoce idioms **sin ramas** dentro de un bloque y los emite como operaciones de
-**16 bits**, para que g++ use `move.w`/`add.w` en vez de byte a byte:
+El backend nativo reconoce idioms del 6502 y los emite como operaciones de **16 bits**, para que g++
+use `move.w`/`add.w` en vez de byte a byte:
 
 | Idioma 6502 | Emisión nativa | 68000 |
 |---|---|---|
-| `LDA #k0; STA c; LDA #k1; STA c+1` | `ram[c]=k0; ram[c+1]=k1` | `move.w #imm,(a)` |
-| `LDA zp a; STA zp c; LDA zp a+1; STA zp c+1` | copia de 16 bits (`memcpy`) | `move.w` (a menudo **const-propagation**) |
+| `LDA #k0; STA c; LDA #k1; STA c+1` | dos bytes (g++ los combina) | `move.w #imm,(a)` |
+| `LDA zp a; STA zp c; LDA zp a+1; STA zp c+1` | copia 16 bits (`memcpy`, orden de bytes preservado) | `move.w` + **const-propagation** |
+| `INC zp lo; BNE skip; INC zp lo+1` (**cruza el `BNE`**) | `++(u16)lo` con flags del 6502 | `addq.w` (o `move.w #imm` si se pliega) |
+| `LDA zp a; CMP #k0; LDA zp a+1; SBC #k1` | comparación de 16 bits | `C` = `a>=b`, `A/Z/N` del byte alto |
+| `LDX #c; LDA tabla,X` (índice constante, VSA) | **literal** `tabla[c]` | carga inmediata |
 
-Ejemplo real (DK, `--native`): el NMI pone un puntero `$00/$01` → `move.w #imm,(g_bus+…)`. En la ROM
-de prueba `multibyte` g++ **propaga la constante** de la copia (`move.w #13330` directo). Validado en
-host (misma RAM que el codegen por bloques) y en 68000 (`run.sh`).
+- El idiom con rama (`INC lo; BNE; INC hi`) se reconoce **al emitir el bloque** y **absorbe** el
+  bloque intermedio (`INC hi`) solo si tiene **un único predecesor** (no se rompe ningún otro camino);
+  luego `goto` al `skip`.
+- **Endianness (importante):** una palabra 6502 es **little-endian** y el 68000 es **big-endian**. Los
+  helpers `n2a_ld16`/`n2a_st16` cargan/guardan la palabra con `__builtin_bswap16` **solo en
+  big-endian** (portables: el host little-endian valida la misma semántica). La **copia** usa
+  `memcpy` (preserva bytes, sin problema de orden). Sin esto, `INC`/comparación eran incorrectos en
+  68000 (lo cazó la inspección del asm; el host x86 no lo detecta).
+- **Medido (DK, `--native`, `-O3`):** `.text` 76 404 B; se aplican `copia16=3`, `const16=32`,
+  `compare16=1`. El asm sale como `move.w`/`addq.w` en `g_bus+…` y a menudo con **plegado de
+  constantes** (`move.w #13330` sin cargar).
 
-**Pendiente (necesita absorber el cruce de bloque):** `INC lo; BNE skip; INC hi` (16 bits ++) y la
-aritmética `ADC` en cadena: el `BNE` intermedio **termina el bloque**, así que hay que reconocer el
-idiom sobre el **flujo linearizado de la región** (no por bloque) y absorber la rama interna. Es el
-siguiente paso para los "registros grandes" en algoritmos matemáticos.
+**Pendiente:** `DEC` de 16 bits y la suma/resta `ADC/SBC` en cadena (multibyte).
 
 ---
 

@@ -151,7 +151,14 @@ compile_native branch 'int main() { game_main(); return (g_st.a == 5u && g_st.x 
 compile_native vsa 'int main() { game_main(); return (g_st.a == 0x2Au) ? 0 : 1; }'
 # Idioms multibyte (16 bits): constante de dos bytes y copia de dos bytes.
 "$BIN" --emit-multibyte-rom "$GEN/multibyte.nes"
-compile_native multibyte 'int main() { game_main(); return (g_bus.ram[0x10] == 0x34u && g_bus.ram[0x11] == 0x12u && g_bus.ram[0x20] == 0x34u && g_bus.ram[0x21] == 0x12u && g_st.a == 0x12u) ? 0 : 1; }'
+compile_native multibyte 'int main() {
+	game_main();
+	const bool ok = (g_bus.ram[0x10] == 0x34u) && (g_bus.ram[0x11] == 0x12u) &&
+			(g_bus.ram[0x20] == 0x34u) && (g_bus.ram[0x21] == 0x12u) &&
+			(g_bus.ram[0x30] == 0x00u) && (g_bus.ram[0x31] == 0x01u) &&
+			(g_bus.ram[0x40] == 0x85u) && (g_st.a == 0x85u);
+	return ok ? 0 : 1;
+}'
 
 echo "[8/9] helpers rapidos del runtime (equivalencia n2a_ror_run/n2a_rol_run)"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$ROOT/tests/fastops_test.cpp" -o "$TMP/fastops_test"

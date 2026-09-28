@@ -744,6 +744,12 @@ private:
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
 	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
+	/// VSA de índices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
+	/// Permite plegar `LDA tabla,X` a literal cuando `X` es constante en el bloque.
+	bool native_x_known_ = false;
+	bool native_y_known_ = false;
+	eng::u8 native_x_val_ = 0;
+	eng::u8 native_y_val_ = 0;
 	int cur_bank_ = -1;          ///< Banco del bloque en emisión (`-1` = ventana fija).
 	bool cur_nz_live_ = true;    ///< ¿`Z`/`N` viven tras la instrucción actual? (liveness, ver `nz_dead_after`).
 
@@ -2289,6 +2295,15 @@ private:
 		out.append("    if (a < 0x2000u) { m.ram[a & 0x7FFu] = v; return; }\n");
 		out.append("    if (a < 0x4020u) { if (m.io_write != nullptr) { m.io_write(m, a, v); } return; }\n");
 		out.append("    if (a >= 0x6000u && a < 0x8000u) { m.wram[a - 0x6000u] = v; return; }\n}\n");
+		// Palabra little-endian (como el 6502) usando palabra del 68000: en big-endian se
+		// intercambian los bytes (el 68000 tiene `ror.w #8`); en little-endian es directo.
+		out.append("[[nodiscard]] static inline eng::u16 n2a_ld16(const eng::u8* p) {\n");
+		out.append("    eng::u16 w; __builtin_memcpy(&w, p, 2u);\n");
+		out.append("#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)\n");
+		out.append("    w = __builtin_bswap16(w);\n#endif\n    return w;\n}\n");
+		out.append("static inline void n2a_st16(eng::u8* p, eng::u16 w) {\n");
+		out.append("#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)\n");
+		out.append("    w = __builtin_bswap16(w);\n#endif\n    __builtin_memcpy(p, &w, 2u);\n}\n");
 		out.append("static N2A_State g_st;\nstatic N2A_Bus g_bus;\n");
 		out.append("/// Hook que el runtime fija para resolver eventos (VBlank/NMI) al ceder el\n");
 		out.append("/// codigo nativo. Si es `nullptr`, `game_main` termina en la primera cesion.\n");
@@ -2419,8 +2434,115 @@ private:
 		out.append("static void n2a_r_");
 		out.append_hex(entry, 4u, true);
 		out.append("(N2A_State* __restrict r, N2A_Bus* __restrict m) {\n");
+		// Nº de aristas estáticas de la región que entran en `target`: para absorber
+		// idioms que cruzan un `BNE` solo si nadie más entra en el bloque intermedio.
+		const auto predecessors_of = [&](eng::u16 target) -> int {
+			int count = 0;
+			for (eng::usize k = 0; k < stack.size(); ++k) {
+				eng::u16 q = stack[k];
+				const Instruction* tm = nullptr;
+				for (;;) {
+					if (has_instr_[q] == 0u || (q != stack[k] && leaders_[q] != 0u)) {
+						break;
+					}
+					const Instruction& in = instr_[q];
+					const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+					tm = &in;
+					q = static_cast<eng::u16>(q + inf.size);
+					if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+					    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+					    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+						break;
+					}
+				}
+				if (tm != nullptr) {
+					const char* mm = kOpcodeTable[tm->opcode].mnemonic;
+					if (kOpcodeTable[tm->opcode].mode == AddrMode::Rel) {
+						if (tm->target == target) {
+							++count;
+						}
+						if (q == target) {
+							++count;
+						}
+					} else if (sv_equal(mm, "JMP")) {
+						if (tm->target == target) {
+							++count;
+						}
+					} else if (sv_equal(mm, "JSR")) {
+						if (q == target) {
+							++count;
+						}
+					} else if (!sv_equal(mm, "RTS") && !sv_equal(mm, "RTI") &&
+						   !sv_equal(mm, "BRK")) {
+						if (q == target) {
+							++count;
+						}
+					}
+				} else if (q == target) {
+					++count;
+				}
+			}
+			return count;
+		};
 		for (eng::usize si = 0; si < stack.size(); ++si) {
 			const eng::u16 b = stack[si];
+			if (native_vis_[b] == 2u) {
+				continue; // bloque absorbido por un idiom
+			}
+			native_x_known_ = false; // VSA de índices: se reinicia en cada bloque
+			native_y_known_ = false;
+			// Idiom 16 bits que cruza el `BNE`: `INC zp lo; BNE skip; INC zp lo+1`.
+			{
+				eng::u16 q = b;
+				const Instruction* last = nullptr;
+				const Instruction* prev = nullptr;
+				for (;;) {
+					if (has_instr_[q] == 0u || (q != b && leaders_[q] != 0u)) {
+						break;
+					}
+					const Instruction& in = instr_[q];
+					const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+					prev = last;
+					last = &in;
+					q = static_cast<eng::u16>(q + inf.size);
+					if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+					    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+					    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+						break;
+					}
+				}
+				const eng::u16 mid = q;
+				if (last != nullptr && prev != nullptr && last->opcode == 0xD0u &&
+				    prev->opcode == 0xE6u && native_vis_[mid] == 1u &&
+				    has_instr_[mid] != 0u && instr_[mid].opcode == 0xE6u &&
+				    static_cast<eng::u8>(instr_[mid].operand) ==
+					    static_cast<eng::u8>(static_cast<eng::u8>(prev->operand) + 1u) &&
+				    last->target == static_cast<eng::u16>(mid + 2u) &&
+				    predecessors_of(mid) == 1) {
+					eng::u16 r2 = b;
+					while (r2 != prev->addr) {
+						eng::u16 nmp2 = r2;
+						if (try_native_multibyte(out, r2, nmp2)) {
+							r2 = nmp2;
+							continue;
+						}
+						const Instruction& in2 = instr_[r2];
+						emit_native_instruction(out, in2);
+						r2 = static_cast<eng::u16>(r2 + kOpcodeTable[in2.opcode].size);
+					}
+					const eng::u8 lo = static_cast<eng::u8>(prev->operand);
+					out.append("    { const eng::u16 n2a_w = n2a_ld16(&m->ram[0x");
+					out.append_hex(lo, 2u, true);
+					out.append("u]); const eng::u16 n2a_r = static_cast<eng::u16>(n2a_w + 1u); n2a_st16(&m->ram[0x");
+					out.append_hex(lo, 2u, true);
+					out.append("u], n2a_r); const eng::u8 n2a_l = static_cast<eng::u8>(n2a_r & 0xFFu), n2a_h = static_cast<eng::u8>(n2a_r >> 8u); if (n2a_l == 0u) { r->z = (n2a_h == 0u); r->n = ((n2a_h & 0x80u) != 0u); } else { r->z = false; r->n = ((n2a_l & 0x80u) != 0u); } }\n");
+					out.append("    goto L_");
+					out.append_hex(static_cast<eng::u16>(mid + 2u), 4u, true);
+					out.append(";\n");
+					native_vis_[mid] = 2u; // absorbido
+					continue;
+				}
+			}
 			out.append("L_");
 			out.append_hex(b, 4u, true);
 			out.append(":\n");
@@ -2629,14 +2751,66 @@ private:
 				return true;
 			}
 		}
+		// --- Comparación 16 bits: LDA zp a; CMP #k0|zp m0; LDA zp a+1; SBC #k1|zp m1 ---
+		// (sin ramas; deja `C` = (a >= b) a 16 bits y `A`/`Z`/`N` del byte alto, como el 6502)
+		if (i0->opcode == 0xA5u && (i1->opcode == 0xC9u || i1->opcode == 0xC5u) &&
+		    i2->opcode == 0xA5u && (i3->opcode == 0xE9u || i3->opcode == 0xE5u)) {
+			const eng::u8 a = static_cast<eng::u8>(i0->operand);
+			const bool imm1 = (i1->opcode == 0xC9u);
+			const bool imm2 = (i3->opcode == 0xE9u);
+			if (static_cast<eng::u8>(i2->operand) == static_cast<eng::u8>(a + 1u) &&
+			    imm1 == imm2) {
+				out.append("    { const eng::u16 n2a_a = n2a_ld16(&m->ram[");
+				hex2(a);
+				out.append("]); const eng::u16 n2a_b = ");
+				if (imm1) {
+					const eng::u16 k =
+						static_cast<eng::u16>(static_cast<eng::u8>(i1->operand)) |
+						(static_cast<eng::u16>(static_cast<eng::u8>(i3->operand)) << 8u);
+					out.append("0x");
+					out.append_hex(k, 4u, true);
+					out.append("u");
+				} else {
+					const eng::u8 m0 = static_cast<eng::u8>(i1->operand);
+					out.append("n2a_ld16(&m->ram[");
+					hex2(m0);
+					out.append("])");
+				}
+				out.append("; const eng::u16 n2a_d = static_cast<eng::u16>(n2a_a - n2a_b); r->a = static_cast<eng::u8>(n2a_d >> 8u); r->c = (n2a_a >= n2a_b); r->z = (r->a == 0u); r->n = ((r->a & 0x80u) != 0u); }\n");
+				next = static_cast<eng::u16>(p + 8u);
+				return true;
+			}
+		}
 		return false;
 	}
 
 	/// Emite una instrucción del backend nativo (salvo transferencias de control, que
 	/// resuelve `emit_native_region`). `r` es `N2A_State*`, `m` es `N2A_Bus*`.
-	void emit_native_instruction(Dyn& out, const Instruction& in) const {
+	void emit_native_instruction(Dyn& out, const Instruction& in) {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
+		// VSA: seguir el valor de X/Y (LDX/LDY #imm) y invalidarlo en cualquier otra
+		// escritura; en `JSR`/salto el callee puede cambiarlos.
+		if (in.opcode == 0xA2u) {
+			native_x_known_ = true;
+			native_x_val_ = static_cast<eng::u8>(in.operand);
+		} else if (sv_equal(m, "LDX") || sv_equal(m, "TAX") || sv_equal(m, "INX") ||
+			   sv_equal(m, "DEX") || sv_equal(m, "TSX") || sv_equal(m, "PLP") ||
+			   sv_equal(m, "RTI")) {
+			native_x_known_ = false;
+		}
+		if (in.opcode == 0xA0u) {
+			native_y_known_ = true;
+			native_y_val_ = static_cast<eng::u8>(in.operand);
+		} else if (sv_equal(m, "LDY") || sv_equal(m, "TAY") || sv_equal(m, "INY") ||
+			   sv_equal(m, "DEY") || sv_equal(m, "PLP") || sv_equal(m, "RTI")) {
+			native_y_known_ = false;
+		}
+		if (sv_equal(m, "JSR") || sv_equal(m, "JMP") || sv_equal(m, "RTS") ||
+		    sv_equal(m, "RTI")) {
+			native_x_known_ = false;
+			native_y_known_ = false;
+		}
 		if (sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK") ||
 		    sv_equal(m, "JMP") || sv_equal(m, "JSR") || info.mode == AddrMode::Rel ||
 		    sv_equal(m, "NOP")) {
@@ -2658,7 +2832,17 @@ private:
 			}
 			if ((info.mode == AddrMode::AbsX || info.mode == AddrMode::AbsY) &&
 			    in.operand >= 0x8000u && in.operand <= 0xFF00u) {
-				// ROM indexada: acceso directo al array constexpr.
+				// Índice de ROM con X/Y **conocido** (VSA): plegar a **literal**.
+				const bool known = (info.mode == AddrMode::AbsX) ? native_x_known_ : native_y_known_;
+				const eng::u8 iv = (info.mode == AddrMode::AbsX) ? native_x_val_ : native_y_val_;
+				if (known) {
+					const eng::u32 idx = (static_cast<eng::u32>(in.operand) - 0x8000u + iv) &
+							     (prg_size_ - 1u);
+					out.append("0x");
+					out.append_hex(prg_[idx], 2u, true);
+					return;
+				}
+				// ROM indexada (índice de runtime): acceso directo al array constexpr.
 				out.append("PRG_ROM[(0x");
 				out.append_hex(static_cast<eng::u32>(in.operand) - 0x8000u, 4u, true);
 				out.append("u + r->");
