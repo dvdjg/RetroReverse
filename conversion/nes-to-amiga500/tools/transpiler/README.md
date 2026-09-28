@@ -71,12 +71,12 @@ nes_transpiler --emit-bench-rom  ../../generated/bench.nes
 nes_transpiler --emit-cnrom-rom  ../../generated/cnrom.nes
 ```
 
-Acepta **NROM (0)**, **CNROM (3)**, **UxROM (2)**, **MMC1 (1, modo 16K)**, **MMC3 (4)**, **FME-7 (69)** y
-**VRC6 (24/26)**. Se transpila **por banco** (bloques `bbB<b>_<addr>` con despacho por banco
-`prg_bank`/`prg_bank2`/`prg_bank3`) y se cae al **intérprete** si una dirección no tiene bloque; si el
-juego cambia a un modo no soportado (MMC1/MMC3), el runtime lo invalida (sentinel). **Verificado
-byte-exact** (`banks_test.sh`, 13 ROMs: UxROM, MMC1, MMC3, FME-7 y VRC6). Solo **MMC5** queda por
-decodificar: plan en [`../../docs/TRANSPILER_BANKING.md`](../../docs/TRANSPILER_BANKING.md).
+Acepta **NROM (0)**, **CNROM (3)**, **UxROM (2)**, **MMC1 (1, modo 16K)**, **MMC3 (4)**, **FME-7 (69)**,
+**VRC6 (24/26)** y **MMC5 (5, modo 3)**. Se transpila **por banco** (bloques `bbB<b>_<addr>` con
+despacho por banco `prg_bank`..`prg_bank4`) y se cae al **intérprete** si una dirección no tiene
+bloque; si el juego cambia a un modo no soportado (MMC1/MMC3/MMC5), el runtime lo invalida
+(sentinel). **Verificado byte-exact** (`banks_test.sh`, 14 ROMs: UxROM, MMC1, MMC3, FME-7, VRC6 y
+MMC5). Plan/detalle en [`../../docs/TRANSPILER_BANKING.md`](../../docs/TRANSPILER_BANKING.md).
 
 ### 7z (entrada y salida)
 
@@ -189,6 +189,20 @@ Los cambios en `eng/core` se validaron con la suite host de Amiga-Cpp (`tools/ru
 todas las categorías pasan. El único ajuste fue `tests/host/core/073_basic_type_traits` (ahora
 comprueba `sizeof(u32)==4` en vez de la identidad con `unsigned long`, que ya no se cumple en LP64).
 El aviso `header-impl` sobre `eng/ai/planning/goap.hpp` es preexistente y ajeno a estos cambios.
+
+## `--release` (build Amiga)
+
+El codegen emite por defecto **avance de PPU por acceso** (`cpu.mem->tick`) y contabilidad de ciclos,
+necesarios para la **validación en host** (codegen == intérprete). En el **Amiga** no se usa (el PPU es
+hardware/Copper), y ese código **duplica el `.text`**. Medido en m68k (GCC 15.1, `-O2`):
+
+| ROM | `.text` con ticks | `.text` `--release` | `.bss` |
+|---|---:|---:|---:|
+| Metroid (MMC1) | 451 KB | **228 KB** | 0 |
+| Mega Man 3 (MMC3) | 318 KB | **282 KB** | 0 |
+
+→ El build para A500 debe usar **`--release`** (`--no-cycles`, sin ticks). Ver
+[`../../docs/TIMING_CODEGEN.md`](../../docs/TIMING_CODEGEN.md).
 
 ## Empaquetado para Amiga (RRPK)
 

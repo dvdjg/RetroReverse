@@ -53,8 +53,8 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* 
 		return 0; // fallback total al intérprete
 	}
 	BlockFn fn = nullptr;
-	if (kPrgBanked && !force_fixed && pc >= 0x8000u && pc < 0xC000u) {
-		fn = n2a_banked_block(pc, bank, mem.prg_bank2, mem.prg_bank3);
+	if (kPrgBanked && !force_fixed && pc >= 0x8000u && pc < kBankedTop) {
+		fn = n2a_banked_block(pc, bank, mem.prg_bank2, mem.prg_bank3, mem.prg_bank4);
 	} else {
 		fn = n2a_fixed_block(pc);
 	}

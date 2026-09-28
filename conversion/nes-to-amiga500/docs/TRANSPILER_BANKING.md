@@ -203,6 +203,15 @@ conmutable (`vrc6_prg1`), `$E000-$FFFF` = último 8 KB. El bucle de análisis us
 ventana** (16 KB vs 8 KB) y `n2a_banked_block(pc,b0,b1,b2)` elige `b0` si `pc<$C000`, si no `b1`.
 **Akumajou Densetsu byte-exact** (RAM 0/2048). `banks_test.sh` → **13 ROMs**.
 
+### B3e — MMC5 (5, modo 3) — **HECHO** (2026)
+
+Cuatro ventanas conmutables de 8 KB (`$8000/$A000/$C000/$E000` = `mmc5_prg_banks[1..4]`, modo 3 por
+defecto). `NESMemory::prg_bank4` (ABI **v5**); `n2a_banked_block(pc,b0,b1,b2,b3)` elige por rango;
+`kBankedTop = $10000` (la ventana conmutable de MMC5 llega a `$FFFF`). Análisis "fijo" mapea
+`$E000-$FFFF` al último banco (boot/vectores). **Sentinela de modo** (si `$5100 != 3` → fallback).
+**Gemfire byte-exact** (RAM 0/2048). `banks_test.sh` → **14 ROMs**. *Pendiente: audio de expansión y
+banco CHR del split (no afectan al codegen PRG).*
+
 <details><summary>Plan original (referencia)</summary>
 
 MMC3 tiene **dos ventanas conmutables de 8 KB** (`$8000-$9FFF`=R6, `$A000-$BFFF`=R7) + **dos fijas**

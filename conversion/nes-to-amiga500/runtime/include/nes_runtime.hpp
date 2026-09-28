@@ -76,8 +76,10 @@ struct NESMemory {
 	/// **Segundo banco** de la ventana conmutable: MMC3 = banco R7 de
 	/// `$A000-$BFFF`. Otros mappers: 0.
 	eng::u8 prg_bank2 = 0;
-	/// **Tercer banco**: FME-7 = banco de `$C000-$DFFF`. Otros mappers: 0.
+	/// **Tercer banco**: FME-7/MMC5 = banco de `$C000-$DFFF`. Otros mappers: 0.
 	eng::u8 prg_bank3 = 0;
+	/// **Cuarto banco**: MMC5 (modo 3) = banco de `$E000-$FFFF`. Otros mappers: 0.
+	eng::u8 prg_bank4 = 0;
 
 	// --- Hooks opcionales del sistema (PPU/APU/mapper/input) ---
 	/// Cookie que se pasa a los hooks de E/S.

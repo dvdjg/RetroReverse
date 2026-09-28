@@ -25,6 +25,7 @@ tinytoonadventures
 metalstorm
 Mr. Gimmick (Europe)
 Akumajou Densetsu (Japan)
+Gemfire (USA)
 "
 ran=0
 while IFS= read -r rom; do

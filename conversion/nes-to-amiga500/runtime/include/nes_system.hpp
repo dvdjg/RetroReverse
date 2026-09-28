@@ -112,6 +112,7 @@ struct NesSystem {
 		mem.prg_bank = 0;
 		mem.prg_bank2 = 0;
 		mem.prg_bank3 = 0;
+		mem.prg_bank4 = 0;
 	}
 
 	/// Activa/desactiva el **reloj de bus por acceso** (modelo dot-exacto del
@@ -501,6 +502,17 @@ private:
 					mem.prg_bank = mapper.fme7_prg[0];
 					mem.prg_bank2 = mapper.fme7_prg[1];
 					mem.prg_bank3 = mapper.fme7_prg[2];
+				} else if (mapper.kind == MapperKind::Mmc5) {
+					// Modo 3 (por defecto): 4 ventanas de 8 KB ($8000/$A000/$C000/$E000).
+					// Otros modos → sentinel (fallback).
+					if (mapper.mmc5_prg_mode == 3u) {
+						mem.prg_bank = mapper.mmc5_prg_banks[1];
+						mem.prg_bank2 = mapper.mmc5_prg_banks[2];
+						mem.prg_bank3 = mapper.mmc5_prg_banks[3];
+						mem.prg_bank4 = static_cast<eng::u8>(mapper.mmc5_prg_banks[4] & 0x7Fu);
+					} else {
+						mem.prg_bank = static_cast<eng::u8>(0xFFu);
+					}
 				} else if (mapper.kind == MapperKind::Vrc6) {
 					// VRC6: banco de 16 KB ($8000-$BFFF) y de 8 KB ($C000-$DFFF).
 					mem.prg_bank = static_cast<eng::u8>(mapper.vrc6_prg0 & 0x0Fu);
