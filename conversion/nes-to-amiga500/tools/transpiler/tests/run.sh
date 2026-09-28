@@ -132,11 +132,29 @@ compile_amiga vsa 'int main() {
 	return (g_state.cpu.A == 0x2Au) ? 0 : 1;
 }'
 
-echo "[7/8] helpers rapidos del runtime (equivalencia n2a_ror_run/n2a_rol_run)"
+echo "[7/9] backend nativo (regiones + literales ROM): equivalencia host"
+# El backend `--native` (estilo descompilador: estado en locales, ROM como literales,
+# una funcion por region) debe dar el mismo estado final que la version por bloques.
+compile_native() {  # $1 = nombre; $2 = cuerpo del main
+	local name="$1"
+	"$BIN" "$GEN/$name.nes" --native -o "$GEN/${name}_native.cpp"
+	cat > "$TMP/${name}_native_check.cpp" <<EOF
+#define N2A_NO_HOST_MAIN
+#include "$GEN/${name}_native.cpp"
+$2
+EOF
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$TMP/${name}_native_check.cpp" -o "$TMP/${name}_native_check"
+	"$TMP/${name}_native_check"
+}
+compile_native mini 'int main() { game_main(); return (g_st.a == 0x23u && g_st.x == 1u && g_bus.ram[0] == 0x23u) ? 0 : 1; }'
+compile_native branch 'int main() { game_main(); return (g_st.a == 5u && g_st.x == 5u && g_bus.ram[0x10] == 5u && g_bus.ram[0] == 0u) ? 0 : 1; }'
+compile_native vsa 'int main() { game_main(); return (g_st.a == 0x2Au) ? 0 : 1; }'
+
+echo "[8/9] helpers rapidos del runtime (equivalencia n2a_ror_run/n2a_rol_run)"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$ROOT/tests/fastops_test.cpp" -o "$TMP/fastops_test"
 "$TMP/fastops_test"
 
-echo "[8/8] benchmark codegen vs interprete vs ejecutor rapido"
+echo "[9/9] benchmark codegen vs interprete vs ejecutor rapido"
 bash "$ROOT/tests/bench_codegen.sh"
 
 echo "TEST OK"
