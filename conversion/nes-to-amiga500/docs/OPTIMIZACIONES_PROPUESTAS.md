@@ -232,7 +232,16 @@ use `move.w`/`add.w` en vez de byte a byte:
 - **Endianness**: helpers `n2a_ld16`/`n2a_st16` (little-endian) con `__builtin_bswap16` en big-endian.
 - **Medido (DK, `--native`, `-O3`)**: `.text` 76 404 B; `copia16=3`, `const16=32`, `compare16=1`.
 
-**`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
+**Añadido después (2):** **resta 16 bits** (`SEC;LDA;SBC;…`), **`DEC` 16 bits general** (con "saltar
+la 1ª instrucción" del bloque `skip`, así no exige que sea una sola instrucción) y **opcodes
+ilegales frecuentes** (`LAX/SAX/DCP/ISB/SLO/RLA/SRE/RRA`) con la misma semántica que el intérprete.
+La ROM de prueba `--emit-multibyte-rom` ahora cubre todo eso (check en `run.sh`).
+
+> **Cobertura nativa (medido):** con los ilegales soportados, **sigue siendo solo DK el nativo** entre
+> los NROM del repo: **todos** los demás usan `JMP (ind)`, que no se puede forzar de forma segura (ver
+> abajo). `--best` los manda al backend por bloques (perfil Amiga optimizado), que es correcto.
+
+> **`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
 regiones no se pueden entrar por el medio sin duplicar cada bloque como función (que es justo el
 codegen por bloques). Un despachador nativo a **entradas de región** sería **parcialmente incorrecto**
 (fallaría en targets internos). Por eso `--best` **cae al codegen por bloques** (con el perfil Amiga
