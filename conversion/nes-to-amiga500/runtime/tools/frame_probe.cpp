@@ -107,12 +107,16 @@ int main(int argc, char** argv) {
 	const int frames = (argc > 2) ? std::atoi(argv[2]) : 120;
 	bool cycle_exact = true;
 	bool trace = false;
+	bool dump_nt = false;
 	for (int i = 1; i < argc; ++i) {
 		if (std::strcmp(argv[i], "--fast-timing") == 0) {
 			cycle_exact = false; // desactiva el reloj de bus por acceso
 		}
 		if (std::strcmp(argv[i], "--trace") == 0) {
 			trace = true; // vuelca la traza de CPU a frame_probe.cpu
+		}
+		if (std::strcmp(argv[i], "--dump-nametables") == 0) {
+			dump_nt = true; // vuelca la nametable EFECTIVA (mapeo del cartucho)
 		}
 	}
 	n2a::NesSystem sys;
@@ -194,6 +198,30 @@ int main(int argc, char** argv) {
 	if (FILE* fp = std::fopen("frame_probe.ram", "wb")) {
 		std::fwrite(sys.mem.ram, 1, sizeof(sys.mem.ram), fp);
 		std::fclose(fp);
+	}
+	// Nametable **efectiva** (lo que realmente lee el render): 4 tablas lógicas
+	// resueltas por el mapeo del cartucho (MMC5 `$5105`: CIRAM/ExRAM/fill) o por el
+	// mirroring normal. `frame_probe.mmc5` = `nt_map_on` + `nt_map[4]` + ExRAM (1 KB).
+	if (dump_nt) {
+		if (FILE* fp = std::fopen("frame_probe.nteff", "wb")) {
+			for (int nt = 0; nt < 4; ++nt) {
+				for (int o = 0; o < 0x400; ++o) {
+					std::fputc(sys.ppu.nt_effective(nt, static_cast<eng::u16>(o)), fp);
+				}
+			}
+			std::fclose(fp);
+		}
+		if (FILE* fp = std::fopen("frame_probe.mmc5", "wb")) {
+			unsigned char hdr[6] = {static_cast<unsigned char>(sys.ppu.nt_map_on ? 1u : 0u),
+						sys.ppu.nt_map[0], sys.ppu.nt_map[1], sys.ppu.nt_map[2],
+						sys.ppu.nt_map[3], 0u};
+			std::fwrite(hdr, 1, 6, fp);
+			if (sys.ppu.nt_exram != nullptr) {
+				std::fwrite(sys.ppu.nt_exram, 1, 0x400, fp);
+			}
+			std::fclose(fp);
+		}
+		std::printf("escrito frame_probe.nteff|mmc5\n");
 	}
 	if (g_wt != nullptr) {
 		std::fclose(g_wt);

@@ -208,6 +208,16 @@ struct Ppu {
 		}
 	}
 
+	/// Byte de la nametable **efectiva** (lo que lee el render) para la tabla
+	/// lógica `nt` (0..3) en `off` (0..$3FF): aplica el mapeo del cartucho (MMC5
+	/// `$5105`: CIRAM/ExRAM/fill) o el mirroring normal. Expuesto para diagnóstico
+	/// (`frame_probe --dump-nametables`).
+	/// \param nt Índice lógico de nametable 0..3. \param off Offset dentro (0..$3FF).
+	/// \return Byte de la nametable efectiva.
+	[[nodiscard]] eng::u8 nt_effective(int nt, eng::u16 off) const noexcept {
+		return nt_read(nt & 1, (nt >> 1) & 1, off);
+	}
+
 	/// Escribe un registro de la PPU `$2000-$2007`.
 	/// \param addr  Dirección en el rango de PPU.
 	/// \param value Byte a escribir. `$2005` reparte X e Y; `$2006` fija `v` en dos

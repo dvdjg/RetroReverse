@@ -147,13 +147,18 @@ Pendientes reales (2026, tras la matriz corregida):
     bit5=0 (8×8) → no aplica.
   - La nametable (CIRAM) es **~965× tile 0** (bytes 0 = fondo) → debería salir negro; hay **56 tiles
     distintos** en ~59 posiciones. El render pinta de más donde `mesen` pinta negro.
-  - **Instrumentado 2026**: el **volcado `RRS1` de mesen** (nombre/CHR/paleta/OAM/RAM + **4
-    nametables**) ya está disponible en `mesen_libretro.so` (`MESEN_DUMP_FRAME`/`MESEN_STATE`). Primer
-    hallazgo (frame 60): las **nametables CIRAM de mesen están casi llenas** (896/1024 bytes ≠0, tiles
-    `90 90 10 90 f8…`), mientras la **`ppu.vram` de nuestro oráculo está casi vacía** (59/1024 y
-    0/1024). → la **fuente de nametable del MMC5** (CIRAM vs **ExRAM**/`nt_src_byte`, `$5105`) difiere:
-    `mesen` lee una fuente que nosotros no. **Siguiente**: volcar la **nametable efectiva** de nuestro
-    oráculo (`nt_src_byte`/ExRAM) y compararla byte a byte con la de mesen.
+  - **Instrumentado 2026**: el **volcado `RRS1` de mesen** (paleta/OAM/RAM + **4 nametables**) está
+    disponible en `mesen_libretro.so` (`MESEN_DUMP_FRAME`/`MESEN_STATE`); y
+    `frame_probe <rom> 60 --dump-nametables` vuelca la **nametable efectiva** del oráculo
+    (`frame_probe.nteff`) + `$5105`/ExRAM (`frame_probe.mmc5`).
+  - **Hallazgo (frame 60)**: mesen tiene las 4 nametables **llenas** (896/1024 bytes ≠0, tiles
+    `90 90 10 90 f8…`); en el oráculo **tanto la CIRAM como la ExRAM están casi vacías** (59/1024 y
+    60/1024) con `nt_map=[0,0,0,0]` (`$5105=0`). Es decir, **el contenido de la nametable difiere
+    mucho**: el juego escribió ~840 bytes que mesen tiene y nosotros no. Esto apunta a un **síntoma de
+    la divergencia de ejecución** (45.8 %), no a un simple `$5105` mal mapeado (nuestras dos fuentes de
+    nametable están igual de vacías). **Siguiente**: `trace_diff.py` (oráculo vs mesen) para ver si el
+    oráculo **deja de escribir la nametable** antes por una divergencia de CPU; si no, revisar el
+    capado de escrituras `$2007` en MMC5.
   - Gemfire/Laser/Nobunaga's/CV3 siguen a 0.0–3.1% (sin regresión con los cambios).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).
