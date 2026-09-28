@@ -558,6 +558,9 @@ inline int Interpreter::step() {
 		mem.tick(cyc - bus_cycles_);
 	}
 	cycles += cyc;
+	// Contador **global** `cpu.cycles` sincronizado con el intérprete: el `deadline`
+	// del yield por evento es consistente mezclando bloques e intérprete.
+	cpu.cycles += static_cast<eng::u32>(cyc);
 	return cyc;
 }
 

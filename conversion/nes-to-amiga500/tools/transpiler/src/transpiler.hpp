@@ -190,9 +190,9 @@ public:
 	/// Desensambla un **banco conmutable** (UxROM) desde las entradas descubiertas
 	/// en `switch_targets_`. Antes hay que llamar a `reset_analysis()` y fijar
 	/// `bank_` al índice del banco.
-	void disassemble_bank() {
-		for (eng::usize i = 0; i < switch_targets_.size(); ++i) {
-			push_work(switch_targets_[i]);
+	void disassemble_bank(const eng::util::Vector<eng::u16, eng::util::HeapAlloc>& entries) {
+		for (eng::usize i = 0; i < entries.size(); ++i) {
+			push_work(entries[i]);
 		}
 		run_worklist();
 	}
@@ -316,6 +316,7 @@ public:
 	/// como puntos de entrada candidatos de los bancos conmutables (UxROM).
 	void collect_switch_targets() {
 		switch_targets_.clear();
+		switch_targets2_.clear();
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (has_instr_[a] == 0u) {
 				continue;
@@ -325,18 +326,31 @@ public:
 				continue;
 			}
 			const eng::u16 t = in.target;
-			if (t < 0x8000u || t >= 0xC000u) {
-				continue;
+			// MMC3: dos ventanas conmutables separadas ($8000-$9FFF y $A000-$BFFF).
+			eng::util::Vector<eng::u16, eng::util::HeapAlloc>* dst;
+			if (mapper_ == 4) {
+				if (t >= 0x8000u && t < 0xA000u) {
+					dst = &switch_targets_;
+				} else if (t >= 0xA000u && t < 0xC000u) {
+					dst = &switch_targets2_;
+				} else {
+					continue;
+				}
+			} else {
+				if (t < 0x8000u || t >= 0xC000u) {
+					continue;
+				}
+				dst = &switch_targets_;
 			}
 			bool dup = false;
-			for (eng::usize i = 0; i < switch_targets_.size(); ++i) {
-				if (switch_targets_[i] == t) {
+			for (eng::usize i = 0; i < dst->size(); ++i) {
+				if ((*dst)[i] == t) {
 					dup = true;
 					break;
 				}
 			}
 			if (!dup) {
-				(void)switch_targets_.push_back(t);
+				(void)dst->push_back(t);
 			}
 		}
 	}
@@ -484,20 +498,26 @@ public:
 		emit_blocks_for(out, -1);
 		// UxROM (2) / MMC1 (1, modo 16K): decodifica la ventana conmutable **por
 		// banco** desde las entradas descubiertas en la ventana fija.
-		if (prg_banked_ && (mapper_ == 2 || mapper_ == 1)) {
+		if (prg_banked_ && (mapper_ == 2 || mapper_ == 1 || mapper_ == 4)) {
 			collect_switch_targets();
 			eng::usize bank_instr = 0u;
 			eng::usize bank_blocks = 0u;
-			for (eng::u32 b = 0; b < prg_bank_count_; ++b) {
-				reset_analysis();
-				bank_ = static_cast<int>(b);
-				disassemble_bank();
-				build_basic_blocks();
-				bank_instr += count_;
-				bank_blocks += block_count_;
-				emit_blocks_for(out, static_cast<int>(b));
+			// MMC3: dos ventanas conmutables ($8000-$9FFF y $A000-$BFFF).
+			const int windows = (mapper_ == 4) ? 2 : 1;
+			for (int w = 0; w < windows; ++w) {
+				win_ = (mapper_ == 4) ? w : -1;
+				for (eng::u32 b = 0; b < prg_bank_count_; ++b) {
+					reset_analysis();
+					bank_ = static_cast<int>(b);
+					disassemble_bank(w == 0 ? switch_targets_ : switch_targets2_);
+					build_basic_blocks();
+					bank_instr += count_;
+					bank_blocks += block_count_;
+					emit_blocks_for(out, static_cast<int>(b));
+				}
 			}
 			bank_ = -1;
+			win_ = -1;
 			count_ = fixed_instr + bank_instr;
 			block_count_ = fixed_blocks + bank_blocks;
 		}
@@ -514,6 +534,11 @@ public:
 	/// (Amiga/`--release`), donde los ciclos solo agobian al 68000.
 	/// \param b `true` para desactivar los ciclos.
 	void set_no_cycles(bool b) noexcept { no_cycles_ = b; }
+
+	/// Con `true`, emite `N2A_TRACE(0xADDR);` antes de cada instrucción, para
+	/// trazar el flujo del codegen y compararlo con el intérprete. Sin definir,
+	/// `N2A_TRACE` es un no-op (coste cero). \param b `true` para activar la traza.
+	void set_trace(bool b) noexcept { trace_ = b; }
 
 	/// Con `true`, las instrucciones de **zero-page** se emiten con acceso directo a
 	/// `cpu.mem->ram[...]` (sin el método/`switch` de región). Ganancia en 68000.
@@ -566,9 +591,11 @@ private:
 		eng::u16 cycles; ///< Ciclos base del bloque (para avanzar la PPU).
 	};
 	int bank_ = -1; ///< Contexto de análisis: -1 = fijo; >=0 = banco conmutable.
+	int win_ = -1;  ///< Ventana MMC3: -1 = fija; 0 = `$8000-$9FFF`; 1 = `$A000-$BFFF`.
 	eng::util::Vector<BlockInfo, eng::util::HeapAlloc> fixed_blocks_ {}; ///< Bloques de $C000+ (o NROM).
 	eng::util::Vector<BlockInfo, eng::util::HeapAlloc> bank_blocks_ {};  ///< Bloques de la ventana conmutable.
-	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets_ {}; ///< Entradas de $8000-$BFFF vistas.
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets_ {}; ///< Entradas de $8000-$BFFF (o W0 MMC3).
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets2_ {}; ///< Entradas de $A000-$BFFF (W1 MMC3).
 	bool mirror_h_ = false;                                   ///< Mirroring horizontal (bit0 flags6).
 	bool has_trainer_ = false;                                ///< ¿Trae trainer de 512 B?
 	eng::u16 reset_ = 0;                                      ///< Vector de reset.
@@ -592,6 +619,7 @@ private:
 	eng::usize block_count_ = 0; ///< Bloques detectados.
 	bool no_cycles_ = false;     ///< Si `true`, no emitir ciclos (ver `set_no_cycles`).
 	bool fast_ram_ = false;      ///< Si `true`, zero-page con acceso directo (ver `set_fast_ram`).
+	bool trace_ = false;         ///< Si `true`, emitir `N2A_TRACE` por instrucción (ver `set_trace`).
 
 	// --- Utilidades internas ---
 
@@ -655,12 +683,12 @@ private:
 		default:
 			break;
 		}
-		// "codegen-ready": NROM/CNROM (PRG fija) y UxROM (2). **MMC1 (1) queda
-		// fuera**: se probó el modelo modo-16K (misma forma que UxROM) y la
-		// equivalencia de frame **falla** (Metroid 20 %, Mega Man 2 100 %); ver
-		// docs/TRANSPILER_BANKING.md §B3. Hasta resolverlo, MMC1 se reconoce pero
-		// no se transpila (fallback total al intérprete).
-		const bool codegen_ok = (mapper_ == 0 || mapper_ == 2 || mapper_ == 3);
+		// "codegen-ready": NROM/CNROM (PRG fija), UxROM (2) y **MMC1 (1)** en modo
+		// 16K con banco en `$8000` (sentinela de modo en runtime → fallback si el
+		// juego cambia de modo). Verificado byte-exact en Metroid/Mega Man 2 a 60
+		// frames (docs/TIMING_CODEGEN.md).
+		const bool codegen_ok = (mapper_ == 0 || mapper_ == 1 || mapper_ == 2 ||
+					 mapper_ == 3 || mapper_ == 4);
 		return prg_size_ != 0u && codegen_ok;
 	}
 
@@ -712,10 +740,33 @@ private:
 			return {};
 		}
 		eng::usize off;
-		// UxROM (2) y MMC1 (1) en modo 16K con banco conmutable en $8000: misma
-		// forma de ventanas (conmutable $8000-$BFFF + último banco fijo $C000-$FFFF).
-		// En MMC1 la validez del modo la garantiza el runtime (sentinel `prg_bank`).
-		if (mapper_ == 2 || mapper_ == 1) {
+		// MMC3 (4): dos ventanas conmutables de 8 KB + dos fijas (modo0).
+		//  - W0 `$8000-$9FFF` = R6 · W1 `$A000-$BFFF` = R7 (conmutables, `win_`).
+		//  - `$C000-$DFFF` = n8-2 y `$E000-$FFFF` = n8-1 (fijas, `win_ < 0`).
+		if (mapper_ == 4) {
+			const eng::usize n8 = prg_size_ / 0x2000u;
+			if (win_ < 0) {
+				if (addr >= 0xC000u && addr < 0xE000u) {
+					off = (n8 >= 2u ? n8 - 2u : 0u) * 0x2000u + (addr - 0xC000u);
+				} else if (addr >= 0xE000u) {
+					off = (n8 >= 1u ? n8 - 1u : 0u) * 0x2000u + (addr - 0xE000u);
+				} else {
+					return {};
+				}
+			} else if (win_ == 0) {
+				if (addr < 0x8000u || addr >= 0xA000u) {
+					return {};
+				}
+				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0x8000u);
+			} else {
+				if (addr < 0xA000u || addr >= 0xC000u) {
+					return {};
+				}
+				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0xA000u);
+			}
+		} else if (mapper_ == 2 || mapper_ == 1) {
+			// UxROM (2) y MMC1 (1) en modo 16K con banco conmutable en $8000: misma
+			// forma de ventanas (conmutable $8000-$BFFF + último banco fijo $C000-$FFFF).
 			if (bank_ >= 0) {
 				// Análisis de un banco conmutable: solo se resuelve $8000-$BFFF.
 				if (addr < 0x8000u || addr >= 0xC000u) {
@@ -924,6 +975,9 @@ private:
 		out.append_hex(irq_, 4u, true);
 		out.append("\n// ============================================================\n\n");
 		out.append("#include <eng/core/types/types.hpp>\n\n");
+		// Traza opcional por instrucción (`--trace`): el que incluya este fichero
+		// puede definir `N2A_TRACE(addr)` antes; si no, es un no-op.
+		out.append("#ifndef N2A_TRACE\n#define N2A_TRACE(addr) ((void)0)\n#endif\n\n");
 	}
 
 	/// Escribe `kPrgSize` y la tabla `PRG_ROM` con los bytes de la PRG, 16 por línea.
@@ -982,7 +1036,7 @@ private:
 		// con `prg_bank = 0xFF` si el juego cambia a un modo no soportado (el
 		// plugin entonces cae al intérprete).
 		out.append(";\nstatic constexpr bool kPrgModeSensitive = ");
-		out.append(mapper_ == 1 ? "true" : "false");
+		out.append((mapper_ == 1 || mapper_ == 4) ? "true" : "false");
 		out.append(";\n\n");
 	}
 
@@ -1057,6 +1111,12 @@ private:
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
 
+		if (trace_) {
+			out.append("    N2A_TRACE(0x");
+			out.append_hex(in.addr, 4u, true);
+			out.append(");\n");
+		}
+
 		// Las ramas y `JMP` **siempre** vuelven al despacho (`cpu.PC = destino;
 		// return;`), sin `goto` interno: así el runtime puede avanzar la PPU entre
 		// bloques y no se cuelga en un bucle de espera de VBlank. `block_start` ya
@@ -1070,9 +1130,14 @@ private:
 			if (no_cycles_) {
 				return;
 			}
+			// Ciclos base **y** avance de PPU por acceso: el acceso a datos (p. ej.
+			// leer `$2002`) ve la PPU en el mismo ciclo que el intérprete. El host
+			// no re-reloja el bloque (`NesSystem::fast_ticks`).
 			out.append("    cpu.cycles += ");
 			out.append_u32(op_base_cycles(in.opcode));
-			out.append("u;\n");
+			out.append("u; cpu.mem->tick(");
+			out.append_u32(op_base_cycles(in.opcode));
+			out.append(");\n");
 		};
 
 		if (info.mode == AddrMode::Rel) {
@@ -1084,15 +1149,16 @@ private:
 			out.append(branch_cond(m));
 			out.append(") {");
 			if (!no_cycles_) {
-				out.append(" cpu.cycles += 1u;");
+				out.append(" cpu.cycles += 1u; cpu.mem->tick(1);");
 				// Cruce de página de la rama: `pc+2` vs destino (estático).
 				if (((in.addr + 2u) & 0xFF00u) != (in.target & 0xFF00u)) {
-					out.append(" cpu.cycles += 1u;");
+					out.append(" cpu.cycles += 1u; cpu.mem->tick(1);");
 				}
 			}
 			out.append(" cpu.PC = 0x");
 			out.append_hex(in.target, 4u, true);
 			out.append("; return; }\n");
+			emit_yield(out, in, info); // fall-through (rama no tomada)
 			return;
 		}
 		if (sv_equal(m, "JMP") && info.mode == AddrMode::Abs) {
@@ -1134,6 +1200,15 @@ private:
 			append_comment(out, in, info);
 			out.append('\n');
 			emit_base();
+			if (sv_equal(m, "BRK")) {
+				// `CPU::BRK` empuja `PC+2`; el bloque **no mantiene el PC por
+				// instrucción**, así que hay que fijar el PC real de esta `BRK`
+				// antes de llamarla (si no, se apila una dirección de retorno
+				// incorrecta cuando `BRK` no es la 1ª instrucción del bloque).
+				out.append("    cpu.PC = 0x");
+				out.append_hex(in.addr, 4u, true);
+				out.append(";\n");
+			}
 			out.append("    cpu.");
 			out.append(m);
 			out.append("(); return;\n");
@@ -1146,17 +1221,17 @@ private:
 			if (info.mode == AddrMode::AbsX) {
 				out.append("    if (((0x");
 				out.append_hex(static_cast<eng::u16>(in.operand & 0xFFu), 2u, true);
-				out.append("u) + cpu.X) > 0xFFu) { cpu.cycles += 1u; }\n");
+				out.append("u) + cpu.X) > 0xFFu) { cpu.cycles += 1u; cpu.mem->tick(1); }\n");
 			} else if (info.mode == AddrMode::AbsY) {
 				out.append("    if (((0x");
 				out.append_hex(static_cast<eng::u16>(in.operand & 0xFFu), 2u, true);
-				out.append("u) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; }\n");
+				out.append("u) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; cpu.mem->tick(1); }\n");
 			} else if (info.mode == AddrMode::IndY) {
 				out.append("    { const eng::u16 p = static_cast<eng::u16>(cpu.mem->read(0x");
 				out.append_hex(in.operand, 4u, true);
 				out.append(") | (static_cast<eng::u16>(cpu.mem->read(0x");
 				out.append_hex(static_cast<eng::u16>(in.operand + 1u), 4u, true);
-				out.append(")) << 8u)); if (((p & 0xFFu) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; } }\n");
+				out.append(")) << 8u)); if (((p & 0xFFu) + cpu.Y) > 0xFFu) { cpu.cycles += 1u; cpu.mem->tick(1); } }\n");
 			}
 		}
 		bool handled = false;
@@ -1175,6 +1250,20 @@ private:
 		}
 		append_comment(out, in, info);
 		out.append('\n');
+		emit_yield(out, in, info);
+	}
+
+	/// Emite el **yield por deadline**: si el bloque cruzó el próximo evento del PPU
+	/// (`cpu.cycles >= cpu.deadline`), guarda el **PC estático** de la instrucción
+	/// siguiente y vuelve al despacho (el host resuelve NMI/IRQ y la frontera de
+	/// frame en esa instrucción exacta). Desactivado con `--no-cycles`.
+	void emit_yield(Dyn& out, const Instruction& in, const OpcodeInfo& info) const {
+		if (no_cycles_) {
+			return;
+		}
+		out.append("    if (cpu.cycles >= cpu.deadline) { cpu.PC = 0x");
+		out.append_hex(static_cast<eng::u16>(in.addr + info.size), 4u, true);
+		out.append("; return; }\n");
 	}
 
 	/// Escribe en `out` la **ficha** que precede a la función `bb_<start>`.
@@ -1718,9 +1807,15 @@ private:
 			out.append_u32(static_cast<eng::u32>(n));
 		}
 		out.append(" };\n\n");
-		out.append("/// Devuelve el bloque de la ventana conmutable para (banco, pc), o nullptr\n");
-		out.append("/// si no hay. Búsqueda **binaria** (la tabla va ordenada por dirección).\n");
-		out.append("[[maybe_unused]] static BlockFn n2a_banked_block(eng::u16 pc, eng::u8 bank) {\n");
+		out.append("/// Devuelve el bloque de la ventana conmutable para (pc, b0, b1).\n");
+		out.append("/// MMC1/UxROM: `b0` = banco (`b1` ignorado). MMC3: `b0`=R6 ($8000-$9FFF),\n");
+		out.append("/// `b1`=R7 ($A000-$BFFF). Búsqueda **binaria** (tabla ordenada).\n");
+		out.append("[[maybe_unused]] static BlockFn n2a_banked_block(eng::u16 pc, eng::u8 b0, eng::u8 b1) {\n");
+		if (mapper_ == 4) {
+			out.append("    const eng::u8 bank = (pc < 0xA000u) ? b0 : b1;\n");
+		} else {
+			out.append("    (void)b1;\n    const eng::u8 bank = b0;\n");
+		}
 		out.append("    if (bank >= kPrgBankCount) { return nullptr; }\n");
 		out.append("    const BankBlock* t = kBankTables[bank];\n");
 		out.append("    eng::u16 lo = 0u;\n");

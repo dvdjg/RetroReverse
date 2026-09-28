@@ -266,6 +266,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	const char* mode = "interprete";
 	if (want_codegen && has_codegen) {
 		g_sys.fast_run = &codegen_run;
+		g_sys.fast_ticks = true; // el codegen reloja la PPU por acceso
 		if (n2a_codegen_init != nullptr) {
 			n2a_codegen_init();
 		}

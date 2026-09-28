@@ -68,10 +68,14 @@ struct NESMemory {
 	/// Tamaño de la PRG-ROM en bytes: 16 KB se espeja, 32 KB no.
 	eng::u32 prg_size = 0;
 	/// **Banco de PRG activo** (espejo del estado del mapper), para el despacho
-	/// del código transpilado por banco (UxROM/…): el plugin lo lee para elegir
-	/// la tabla de bloques de la ventana conmutable `$8000-$BFFF`. El sistema lo
-	/// mantiene actualizado en cada conmutación de banco. NROM/CNROM: 0.
+	/// del código transpilado por banco: el plugin lo lee para elegir la tabla de
+	/// bloques de la ventana conmutable. UxROM/MMC1: banco de `$8000-$BFFF`.
+	/// MMC3: banco R6 de `$8000-$9FFF`. El sistema lo mantiene al día en cada
+	/// conmutación. NROM/CNROM: 0.
 	eng::u8 prg_bank = 0;
+	/// **Segundo banco** de la ventana conmutable: MMC3 = banco R7 de
+	/// `$A000-$BFFF`. Otros mappers: 0.
+	eng::u8 prg_bank2 = 0;
 
 	// --- Hooks opcionales del sistema (PPU/APU/mapper/input) ---
 	/// Cookie que se pasa a los hooks de E/S.
@@ -177,6 +181,16 @@ struct NESMemory {
 		return static_cast<eng::u16>(read(addr) |
 			       (static_cast<eng::u16>(read(static_cast<eng::u16>(addr + 1u))) << 8));
 	}
+
+	/// Lee un puntero de **página cero** con **envoltura** (`(zp+1) & 0xFF`), como
+	/// el 6502 real y el intérprete: lo usan `(zp,X)` y `(zp),Y`. Sin envolver, un
+	/// `zp = 0xFF` leería el byte alto en `$0100` (pila) en vez de `$0000`.
+	/// \param zp Dirección de página cero del puntero.
+	/// \return Puntero little-endian con el byte alto envuelto en la página cero.
+	[[nodiscard]] eng::u16 read_zp16(eng::u8 zp) const {
+		return static_cast<eng::u16>(
+			read(zp) | (static_cast<eng::u16>(read(static_cast<eng::u8>(zp + 1u))) << 8u));
+	}
 };
 
 /// CPU 6502 (2A03 sin decimal) del runtime.
@@ -217,6 +231,11 @@ struct CPU {
 	/// el intérprete. El intérprete/ejecutor rápido no lo usan (calculan sus ciclos
 	/// aparte), así que en esos caminos permanece a 0.
 	eng::u32 cycles = 0;
+	/// **Deadline del `yield` por evento** (docs/TIMING_CODEGEN.md): el código
+	/// generado cede (guarda `PC` y retorna) cuando `cycles >= deadline`. El host lo
+	/// fija a `cycles + next_event_dots()/3` antes de cada bloque. `0xFFFFFFFF` =
+	/// nunca (sin host que lo fije).
+	eng::u32 deadline = 0xFFFFFFFFu;
 	/// Memoria asociada (observador, no propietario). La enlaza `game_main()`.
 	NESMemory* mem = nullptr;
 
@@ -263,8 +282,8 @@ struct CPU {
 	void NAME##_abs(eng::u16 a) { R = mem->read(a); set_nz(R); } \
 	void NAME##_absx(eng::u16 a) { R = mem->read(static_cast<eng::u16>(a + X)); set_nz(R); } \
 	void NAME##_absy(eng::u16 a) { R = mem->read(static_cast<eng::u16>(a + Y)); set_nz(R); } \
-	void NAME##_indx(eng::u8 a) { R = mem->read(mem->read16(static_cast<eng::u8>(a + X))); set_nz(R); } \
-	void NAME##_indy(eng::u8 a) { R = mem->read(static_cast<eng::u16>(mem->read16(a) + Y)); set_nz(R); }
+	void NAME##_indx(eng::u8 a) { R = mem->read(mem->read_zp16(static_cast<eng::u8>(a + X))); set_nz(R); } \
+	void NAME##_indy(eng::u8 a) { R = mem->read(static_cast<eng::u16>(mem->read_zp16(a) + Y)); set_nz(R); }
 	N2A_LOAD(LDA, A)
 	N2A_LOAD(LDX, X)
 	N2A_LOAD(LDY, Y)
@@ -282,8 +301,8 @@ struct CPU {
 	void NAME##_abs(eng::u16 a) { mem->write(a, R); } \
 	void NAME##_absx(eng::u16 a) { mem->write(static_cast<eng::u16>(a + X), R); } \
 	void NAME##_absy(eng::u16 a) { mem->write(static_cast<eng::u16>(a + Y), R); } \
-	void NAME##_indx(eng::u8 a) { mem->write(mem->read16(static_cast<eng::u8>(a + X)), R); } \
-	void NAME##_indy(eng::u8 a) { mem->write(static_cast<eng::u16>(mem->read16(a) + Y), R); }
+	void NAME##_indx(eng::u8 a) { mem->write(mem->read_zp16(static_cast<eng::u8>(a + X)), R); } \
+	void NAME##_indy(eng::u8 a) { mem->write(static_cast<eng::u16>(mem->read_zp16(a) + Y), R); }
 	N2A_STORE(STA, A)
 	N2A_STORE(STX, X)
 	N2A_STORE(STY, Y)
@@ -512,13 +531,16 @@ struct CPU {
 	/// `BIT` (absoluto): igual que `BIT_zp` con dirección de 16 bits.
 	void BIT_abs(eng::u16 a) { const eng::u8 v = mem->read(a); Z = (A & v) == 0u; N = (v & 0x80u) != 0u; V = (v & 0x40u) != 0u; }
 
-	/// `NOP` y sus variantes: no hacen nada (el operando se ignora).
+	/// `NOP` y sus variantes. Los implicados/inmediatos no acceden a memoria; los
+	/// ilegales con direccionamiento **sí leen** (como el intérprete) para
+	/// conservar los **efectos secundarios** del acceso (p. ej. leer `$2002`
+	/// limpia VBlank). Ignorar el read producía divergencia de estado.
 	void NOP() {}
 	void NOP_imm(eng::u8) {}
-	void NOP_zp(eng::u8) {}
-	void NOP_zpx(eng::u8) {}
-	void NOP_abs(eng::u16) {}
-	void NOP_absx(eng::u16) {}
+	void NOP_zp(eng::u8 a) { (void)mem->read(a); }
+	void NOP_zpx(eng::u8 a) { (void)mem->read(static_cast<eng::u8>(a + X)); }
+	void NOP_abs(eng::u16 a) { (void)mem->read(a); }
+	void NOP_absx(eng::u16 a) { (void)mem->read(static_cast<eng::u16>(a + X)); }
 
 	// --- Opcodes no oficiales (aproximados) --------------------------------
 	// `LAX`: carga A y X con el mismo valor leído.

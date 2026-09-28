@@ -20,7 +20,8 @@
 
 /// Versión de la ABI (subir al cambiar el layout de `CPU`/`NESMemory` o la firma).
 /// v2: `NESMemory` gana `prg_bank` (despacho por banco, F9/B1b).
-#define N2A_ABI_VERSION 2
+/// v3: `NESMemory` gana `prg_bank2` (2.ª ventana MMC3, F9/B3b).
+#define N2A_ABI_VERSION 3
 
 /// Arquitecturas que identifica el plugin (el gestor solo carga la suya).
 #define N2A_ARCH_X64_NT 1    ///< Windows x86-64 (MinGW/MSVC).

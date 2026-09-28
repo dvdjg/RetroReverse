@@ -357,6 +357,16 @@ struct Ppu {
 	///         89342 dots), por eso `eng::u32`.
 	[[nodiscard]] eng::u32 next_event_dots() const {
 		eng::u32 best = dots_between(scanline, dot, 262u, 0u); // fin de frame
+		{
+			// **Corte de frame** del host: `run_frame` termina al volver a la
+			// scanline 240 **tras** el VBlank (tras envolver en la 262). Incluirlo
+			// como evento hace que el bloque ceda justo ahí (misma frontera que el
+			// intérprete), sin la instrucción de más por frame.
+			const eng::u32 d = dots_between(scanline, dot, 262u, 0u) + 240u * 341u;
+			if (d < best) {
+				best = d;
+			}
+		}
 		if (scanline < 241u) {
 			const eng::u32 d = dots_between(scanline, dot, 241u, 0u); // set VBlank
 			if (d < best) {

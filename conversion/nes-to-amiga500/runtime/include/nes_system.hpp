@@ -54,6 +54,9 @@ struct NesSystem {
 	void* fast_ctx = nullptr;       ///< Contexto del ejecutor rápido.
 	FastStep fast_step = nullptr;   ///< Ejecutor rápido de una instrucción (o `nullptr`).
 	FastRun fast_run = nullptr;     ///< Ejecutor rápido por bloques (o `nullptr`).
+	/// El ejecutor rápido **ya reloja la PPU por acceso** (`cpu.mem->tick`, código
+	/// transpilado): el host no re-reloja el bloque. `FastCpu` lo deja a `false`.
+	bool fast_ticks = false;
 	/// Hook opcional: se llama cuando el mapper **conmuta bancos de PRG** (escritura a
 	/// `$8000-$FFFF`) para que el ejecutor rápido **invalide su decodificación**
 	/// (`FastCpu::invalidate`) y la rehaga bajo demanda leyendo a través del mapper.
@@ -107,6 +110,7 @@ struct NesSystem {
 		mem.prg = m.prg;
 		mem.prg_size = m.prg_size;
 		mem.prg_bank = 0;
+		mem.prg_bank2 = 0;
 	}
 
 	/// Activa/desactiva el **reloj de bus por acceso** (modelo dot-exacto del
@@ -157,6 +161,7 @@ struct NesSystem {
 			// scanline): el bloque rápido se corta en la frontera del evento para
 			// no adelantar VBlank/sprite-0 (scheduler de eventos, Fase 3).
 			const int budget = cycles_to_next_event();
+			cpu.deadline = cpu.cycles + static_cast<eng::u32>(budget);
 			int n = 0;
 			int cyc = fast_run(fast_ctx, cpu, mem, budget, &n);
 			if (cyc <= 0) {
@@ -167,8 +172,10 @@ struct NesSystem {
 				if (!cycle_exact_) {
 					clock_ppu(cyc);
 				}
+			} else if (fast_ticks && cycle_exact_) {
+				// El bloque ya relojó la PPU por acceso (`cpu.mem->tick`).
 			} else {
-				clock_ppu(cyc); // la PRG transpilada no reloja por acceso
+				clock_ppu(cyc); // el ejecutor rápido no reloja por acceso
 			}
 			if (ppu.nmi_occurred) {
 				ppu.nmi_occurred = false;
@@ -462,7 +469,11 @@ private:
 			return;
 		}
 		if (a >= 0x4020u) {
-			mapper.cpu_cycle = interp.cycles;
+			// Contador **global** `cpu.cycles` (lo llevan el intérprete y los
+			// bloques): el filtro de 2 ciclos del MMC1 debe usar el mismo reloj en
+			// ambos caminos. Con `interp.cycles` el codegen no avanzaba y el MMC1
+			// **descartaba escrituras** de registro.
+			mapper.cpu_cycle = cpu.cycles;
 			mapper.cur_scan = ppu.scanline;
 			mapper.cpu_write(a, v);
 			// Conmutación de bancos de PRG ($8000-$FFFF): invalida la decodificación
@@ -472,6 +483,18 @@ private:
 			if (a >= 0x8000u) {
 				if (mapper.kind == MapperKind::Uxrom) {
 					mem.prg_bank = mapper.prg_bank;
+				} else if (mapper.kind == MapperKind::Mmc3) {
+					// Modo 0: $8000-R6/R7; el bit de modo (R0 bit6) las intercambia
+					// → invalida el modelo con el sentinel 0xFF (fallback).
+					const eng::u32 n8 = mapper.prg_size / 0x2000u;
+					if (mapper.mmc3_prg_mode == 0u) {
+						mem.prg_bank = static_cast<eng::u8>(mapper.mmc3_regs[6] %
+										  (n8 ? n8 : 1u));
+						mem.prg_bank2 = static_cast<eng::u8>(mapper.mmc3_regs[7] %
+										   (n8 ? n8 : 1u));
+					} else {
+						mem.prg_bank = static_cast<eng::u8>(0xFFu);
+					}
 				} else if (mapper.kind == MapperKind::Mmc1) {
 					// Solo el modo 16K con banco conmutable en $8000 coincide con
 					// el modelo del transpilado; en cualquier otro modo se invalida
@@ -507,8 +530,11 @@ private:
 	/// instrucción (evento a <1 ciclo), como en `cycles_to_scanline`.
 	/// \return Ciclos hasta el próximo evento (>= 0).
 	[[nodiscard]] int cycles_to_next_event() const {
+		// **Techo**: el bloque debe cortar **en o justo después** del evento, no
+		// antes (con `floor` el bloque se quedaba una instrucción corto y el
+		// siguiente cruzaba la frontera de frame → deriva).
 		const eng::u32 dots = ppu.next_event_dots();
-		return static_cast<int>(dots / 3u);
+		return static_cast<int>((dots + 2u) / 3u);
 	}
 
 	/// Avanza la PPU `cpu_cycles*3` dots (341 dots por línea). Al cambiar de

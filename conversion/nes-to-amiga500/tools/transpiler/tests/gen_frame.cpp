@@ -54,7 +54,7 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* 
 	}
 	BlockFn fn = nullptr;
 	if (kPrgBanked && !force_fixed && pc >= 0x8000u && pc < 0xC000u) {
-		fn = n2a_banked_block(pc, bank);
+		fn = n2a_banked_block(pc, bank, mem.prg_bank2);
 	} else {
 		fn = n2a_fixed_block(pc);
 	}
@@ -124,6 +124,7 @@ int main(int argc, char** argv) {
 	gen.reset();
 	init_dispatch_table();
 	gen.fast_run = &gen_run;
+	gen.fast_ticks = true; // el codegen reloja la PPU por acceso
 	const double ms_gen = run_frames(gen, frames);
 
 	int ram_diff = 0;

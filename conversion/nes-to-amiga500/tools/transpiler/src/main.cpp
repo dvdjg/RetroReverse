@@ -396,6 +396,7 @@ constexpr int kCodegenVersion = 2;
 /// Opciones de codegen fijadas por los flags (ver `main`).
 bool g_no_cycles = false;
 bool g_fast_ram = false;
+bool g_trace = false;
 
 /// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
 bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
@@ -425,6 +426,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	}
 	tp.set_no_cycles(g_no_cycles);
 	tp.set_fast_ram(g_fast_ram);
+	tp.set_trace(g_trace);
 	tp.disassemble();
 	tp.build_basic_blocks();
 	if (facts != nullptr && !load_facts(facts, tp)) {
@@ -800,6 +802,11 @@ int main(int argc, char** argv) {
 			g_fast_ram = true;
 			continue;
 		}
+		if (arg == "--trace") { // traza por instrucción (comparar con el intérprete)
+			g_trace = true;
+			continue;
+		}
+
 		if (arg == "--release") { // optimizaciones seguras para Amiga/68000
 			g_no_cycles = true; // --fast-ram queda opt-in (ganancia marginal, ver docs)
 			continue;
