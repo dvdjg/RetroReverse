@@ -1538,6 +1538,52 @@ private:
 		const auto at = [&](eng::u16 a) -> const Instruction* {
 			return (a < kSpace && has_instr_[a] != 0u) ? &instr_[a] : nullptr;
 		};
+		const auto mn = [&](const Instruction* in) -> const char* {
+			return (in != nullptr) ? kOpcodeTable[in->opcode].mnemonic : "";
+		};
+		// `true` + offset si `in` es RAM de dirección constante (zp, o abs < $2000).
+		const auto ramoff = [&](const Instruction* in, eng::u16& off) -> bool {
+			if (in == nullptr) {
+				return false;
+			}
+			const OpcodeInfo& fi = kOpcodeTable[in->opcode];
+			if (fi.mode == AddrMode::Zp) {
+				off = static_cast<eng::u8>(in->operand);
+				return true;
+			}
+			if (fi.mode == AddrMode::Abs && in->operand < 0x2000u) {
+				off = static_cast<eng::u16>(in->operand & 0x7FFu);
+				return true;
+			}
+			return false;
+		};
+		const auto immv = [&](const Instruction* in, eng::u8& v) -> bool {
+			if (in == nullptr || kOpcodeTable[in->opcode].mode != AddrMode::Imm) {
+				return false;
+			}
+			v = static_cast<eng::u8>(in->operand);
+			return true;
+		};
+		const auto hx = [&](eng::u8 v) {
+			out.append("0x");
+			out.append_hex(v, 2u, true);
+			out.append("u");
+		};
+		const auto hxo = [&](eng::u16 v) {
+			out.append("0x");
+			out.append_hex(v, 4u, true);
+			out.append("u");
+		};
+		const auto ram = [&](eng::u16 off) {
+			out.append("n2a_ram[");
+			hxo(off);
+			out.append("]");
+		};
+		const auto ld16 = [&](eng::u16 off) {
+			out.append("n2a_ld16(&n2a_ram[");
+			hxo(off);
+			out.append("])");
+		};
 		const Instruction* i0 = at(p);
 		if (i0 == nullptr) {
 			return false;
@@ -1545,49 +1591,38 @@ private:
 		const Instruction* i1 = at(static_cast<eng::u16>(p + 2u));
 		const Instruction* i2 = at(static_cast<eng::u16>(p + 4u));
 		const Instruction* i3 = at(static_cast<eng::u16>(p + 6u));
-		const bool have4 = (i1 != nullptr && i2 != nullptr && i3 != nullptr);
-		const auto hx = [&](eng::u8 v) {
-			out.append("0x");
-			out.append_hex(v, 2u, true);
-			out.append("u");
-		};
-		const auto ram16 = [&](eng::u8 a) {
-			out.append("n2a_ld16(&n2a_ram[");
-			hx(a);
-			out.append("])");
-		};
-		// Copia 16 bits.
-		if (have4 && i0->opcode == 0xA5u && i1->opcode == 0x85u && i2->opcode == 0xA5u &&
-		    i3->opcode == 0x85u) {
-			const eng::u8 a = static_cast<eng::u8>(i0->operand);
-			const eng::u8 c = static_cast<eng::u8>(i1->operand);
-			if (static_cast<eng::u8>(i2->operand) == static_cast<eng::u8>(a + 1u) &&
-			    static_cast<eng::u8>(i3->operand) == static_cast<eng::u8>(c + 1u)) {
-				out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &n2a_ram[");
-				hx(a);
-				out.append("], 2u); __builtin_memcpy(&n2a_ram[");
-				hx(c);
-				out.append("], &n2a_w, 2u); cpu.A = n2a_ram[");
-				hx(static_cast<eng::u8>(a + 1u));
-				out.append("]; cpu.set_nz(cpu.A); }\n");
+		// --- Copia 16 bits: LDA/STA ×2 sobre RAM (zp o abs) ---
+		{
+			eng::u16 a = 0, c = 0, a1 = 0, c1 = 0;
+			if (sv_equal(mn(i0), "LDA") && sv_equal(mn(i1), "STA") &&
+			    sv_equal(mn(i2), "LDA") && sv_equal(mn(i3), "STA") && ramoff(i0, a) &&
+			    ramoff(i1, c) && ramoff(i2, a1) && ramoff(i3, c1) &&
+			    a1 == static_cast<eng::u16>(a + 1u) && c1 == static_cast<eng::u16>(c + 1u)) {
+				out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &");
+				ram(a);
+				out.append(", 2u); __builtin_memcpy(&");
+				ram(c);
+				out.append(", &n2a_w, 2u); cpu.A = ");
+				ram(a1);
+				out.append("; cpu.set_nz(cpu.A); }\n");
 				next = static_cast<eng::u16>(p + 8u);
 				return true;
 			}
 		}
-		// Constante 16 bits.
-		if (have4 && i0->opcode == 0xA9u && i1->opcode == 0x85u && i2->opcode == 0xA9u &&
-		    i3->opcode == 0x85u) {
-			const eng::u8 k0 = static_cast<eng::u8>(i0->operand);
-			const eng::u8 c = static_cast<eng::u8>(i1->operand);
-			const eng::u8 k1 = static_cast<eng::u8>(i2->operand);
-			if (static_cast<eng::u8>(i3->operand) == static_cast<eng::u8>(c + 1u)) {
-				out.append("    n2a_ram[");
-				hx(c);
-				out.append("] = ");
+		// --- Constante 16 bits ---
+		{
+			eng::u8 k0 = 0, k1 = 0;
+			eng::u16 c = 0, c1 = 0;
+			if (sv_equal(mn(i0), "LDA") && immv(i0, k0) && sv_equal(mn(i2), "LDA") &&
+			    immv(i2, k1) && sv_equal(mn(i1), "STA") && ramoff(i1, c) &&
+			    sv_equal(mn(i3), "STA") && ramoff(i3, c1) &&
+			    c1 == static_cast<eng::u16>(c + 1u)) {
+				ram(c);
+				out.append(" = ");
 				hx(k0);
-				out.append("; n2a_ram[");
-				hx(static_cast<eng::u8>(c + 1u));
-				out.append("] = ");
+				out.append("; ");
+				ram(c1);
+				out.append(" = ");
 				hx(k1);
 				out.append("; cpu.A = ");
 				hx(k1);
@@ -1596,41 +1631,44 @@ private:
 				return true;
 			}
 		}
-		// Comparación 16 bits.
-		if (have4 && i0->opcode == 0xA5u && (i1->opcode == 0xC9u || i1->opcode == 0xC5u) &&
-		    i2->opcode == 0xA5u && (i3->opcode == 0xE9u || i3->opcode == 0xE5u)) {
-			const eng::u8 a = static_cast<eng::u8>(i0->operand);
-			const bool imm1 = (i1->opcode == 0xC9u);
-			const bool imm2 = (i3->opcode == 0xE9u);
-			if (static_cast<eng::u8>(i2->operand) == static_cast<eng::u8>(a + 1u) &&
-			    imm1 == imm2) {
-				out.append("    { const eng::u16 n2a_a = ");
-				ram16(a);
-				out.append("; const eng::u16 n2a_b = ");
-				if (imm1) {
-					const eng::u16 k =
-						static_cast<eng::u16>(static_cast<eng::u8>(i1->operand)) |
-						(static_cast<eng::u16>(static_cast<eng::u8>(i3->operand)) << 8u);
-					out.append("0x");
-					out.append_hex(k, 4u, true);
-					out.append("u");
-				} else {
-					ram16(static_cast<eng::u8>(i1->operand));
+		// --- Comparación 16 bits ---
+		{
+			eng::u16 a = 0, a1 = 0;
+			if (sv_equal(mn(i0), "LDA") && ramoff(i0, a) && sv_equal(mn(i2), "LDA") &&
+			    ramoff(i2, a1) && a1 == static_cast<eng::u16>(a + 1u) &&
+			    sv_equal(mn(i1), "CMP") && sv_equal(mn(i3), "SBC")) {
+				eng::u8 k0 = 0, k1 = 0;
+				eng::u16 m0 = 0, m1 = 0;
+				const bool cimm = immv(i1, k0);
+				const bool simm = immv(i3, k1);
+				const bool cram = !cimm && ramoff(i1, m0);
+				const bool sram = !simm && ramoff(i3, m1);
+				if ((cimm && simm) || (cram && sram && m1 == static_cast<eng::u16>(m0 + 1u))) {
+					out.append("    { const eng::u16 n2a_a = ");
+					ld16(a);
+					out.append("; const eng::u16 n2a_b = ");
+					if (cimm) {
+						hxo(static_cast<eng::u16>(k0) |
+						    (static_cast<eng::u16>(k1) << 8u));
+					} else {
+						ld16(m0);
+					}
+					out.append("; const eng::u16 n2a_d = static_cast<eng::u16>(n2a_a - n2a_b); cpu.A = static_cast<eng::u8>(n2a_d >> 8u); cpu.C = (n2a_a >= n2a_b); cpu.Z = (cpu.A == 0u); cpu.N = ((cpu.A & 0x80u) != 0u); }\n");
+					next = static_cast<eng::u16>(p + 8u);
+					return true;
 				}
-				out.append("; const eng::u16 n2a_d = static_cast<eng::u16>(n2a_a - n2a_b); cpu.A = static_cast<eng::u8>(n2a_d >> 8u); cpu.C = (n2a_a >= n2a_b); cpu.Z = (cpu.A == 0u); cpu.N = ((cpu.A & 0x80u) != 0u); }\n");
-				next = static_cast<eng::u16>(p + 8u);
-				return true;
 			}
 		}
-		// Suma/resta 16 bits (7 instrucciones: SEC/CLC; LDA; ADC/SBC; STA; …).
-		if (i0->opcode == 0x18u || i0->opcode == 0x38u) {
+		// --- Suma/resta 16 bits (SEC/CLC + 6 instrucciones) ---
+		if (sv_equal(mn(i0), "CLC") || sv_equal(mn(i0), "SEC")) {
 			const auto nx = [&](eng::u16 a) {
 				return static_cast<eng::u16>(a + kOpcodeTable[instr_[a].opcode].size);
 			};
+			const bool add = sv_equal(mn(i0), "CLC");
 			const eng::u16 p1 = nx(p);
 			const Instruction* j1 = at(p1);
-			if (j1 != nullptr && j1->opcode == 0xA5u) {
-				const eng::u8 a = static_cast<eng::u8>(j1->operand);
+			eng::u16 a = 0;
+			if (sv_equal(mn(j1), "LDA") && ramoff(j1, a)) {
 				const eng::u16 p2 = nx(p1);
 				const eng::u16 p3 = nx(p2);
 				const eng::u16 p4 = nx(p3);
@@ -1641,44 +1679,37 @@ private:
 				const Instruction* j4 = at(p4);
 				const Instruction* j5 = at(p5);
 				const Instruction* j6 = at(p6);
-				const bool add = (i0->opcode == 0x18u);
-				const eng::u8 op_lo = add ? 0x69u : 0xE9u;
-				const eng::u8 op_zp = add ? 0x65u : 0xE5u;
-				if (j2 != nullptr && (j2->opcode == op_lo || j2->opcode == op_zp) &&
-				    j3 != nullptr && j3->opcode == 0x85u && j4 != nullptr &&
-				    j4->opcode == 0xA5u &&
-				    static_cast<eng::u8>(j4->operand) == static_cast<eng::u8>(a + 1u) &&
-				    j5 != nullptr && (j5->opcode == op_lo || j5->opcode == op_zp) &&
-				    j6 != nullptr && j6->opcode == 0x85u) {
-					const eng::u8 c = static_cast<eng::u8>(j3->operand);
-					const bool imm0 = (j2->opcode == op_lo);
-					const bool imm1 = (j5->opcode == op_lo);
-					const bool zp_ok = imm0 || (static_cast<eng::u8>(j5->operand) ==
-								    static_cast<eng::u8>(static_cast<eng::u8>(j2->operand) + 1u));
-					if (imm0 == imm1 && zp_ok &&
-					    static_cast<eng::u8>(j6->operand) == static_cast<eng::u8>(c + 1u)) {
+				eng::u16 a1 = 0, c = 0, c1 = 0;
+				if (sv_equal(mn(j2), add ? "ADC" : "SBC") && sv_equal(mn(j3), "STA") &&
+				    ramoff(j3, c) && sv_equal(mn(j4), "LDA") && ramoff(j4, a1) &&
+				    a1 == static_cast<eng::u16>(a + 1u) &&
+				    sv_equal(mn(j5), add ? "ADC" : "SBC") && sv_equal(mn(j6), "STA") &&
+				    ramoff(j6, c1) && c1 == static_cast<eng::u16>(c + 1u)) {
+					eng::u8 k0 = 0, k1 = 0;
+					eng::u16 m0 = 0, m1 = 0;
+					const bool imm0 = immv(j2, k0);
+					const bool imm1 = immv(j5, k1);
+					const bool r0 = !imm0 && ramoff(j2, m0);
+					const bool r1 = !imm1 && ramoff(j5, m1);
+					if ((imm0 && imm1) || (r0 && r1 && m1 == static_cast<eng::u16>(m0 + 1u))) {
 						out.append("    { const eng::u16 n2a_x = ");
-						ram16(a);
+						ld16(a);
 						out.append("; const eng::u16 n2a_y = ");
 						if (imm0) {
-							const eng::u16 k =
-								static_cast<eng::u16>(static_cast<eng::u8>(j2->operand)) |
-								(static_cast<eng::u16>(static_cast<eng::u8>(j5->operand)) << 8u);
-							out.append("0x");
-							out.append_hex(k, 4u, true);
-							out.append("u");
+							hxo(static_cast<eng::u16>(k0) |
+							    (static_cast<eng::u16>(k1) << 8u));
 						} else {
-							ram16(static_cast<eng::u8>(j2->operand));
+							ld16(m0);
 						}
 						out.append("; const eng::u8 n2a_ah = static_cast<eng::u8>(n2a_x >> 8u), n2a_bh = static_cast<eng::u8>(n2a_y >> 8u);");
 						if (add) {
-							out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) + n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&n2a_ram[");
-							hx(c);
-							out.append("], n2a_r); cpu.C = (n2a_s > 0xFFFFu); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_bh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
+							out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) + n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&");
+							ram(c);
+							out.append(", n2a_r); cpu.C = (n2a_s > 0xFFFFu); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_bh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
 						} else {
-							out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) - n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&n2a_ram[");
-							hx(c);
-							out.append("], n2a_r); cpu.C = (n2a_x >= n2a_y); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u), n2a_nbh = static_cast<eng::u8>(~n2a_bh); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_nbh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
+							out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) - n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&");
+							ram(c);
+							out.append(", n2a_r); cpu.C = (n2a_x >= n2a_y); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u), n2a_nbh = static_cast<eng::u8>(~n2a_bh); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_nbh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
 						}
 						next = nx(p6);
 						return true;

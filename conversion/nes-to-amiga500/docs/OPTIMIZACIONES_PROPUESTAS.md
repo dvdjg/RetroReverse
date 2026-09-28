@@ -242,10 +242,20 @@ La ROM de prueba `--emit-multibyte-rom` ahora cubre todo eso (check en `run.sh`)
 > abajo). `--best` los manda al backend por bloques (perfil Amiga optimizado), que es correcto.
 
 > **Backend por bloques (`--chain`).** Los idioms **sin ramas** (copia/const/compare/ADD/SUB 16 bits) se
-aplican también en el backend por bloques (`--amiga`), emitiendo sobre `cpu`/`n2a_ram`, para que los
-juegos que caen al fallback (Pac-Man, SMB…) se beneficien. `INC/DEC` de 16 bits (cruzan el `BNE`) de
-momento **solo en el nativo**. Cobertura medida: el patrón es estrecho (en SMB no aparece ninguno de
-los 5 exactos), así que la ganancia depende del juego.
+aplican también en el backend por bloques (`--amiga`), emitiendo sobre `cpu`/`n2a_ram`, con operando
+en **zp o abs** (`< $2000`) o inmediato. `INC/DEC` de 16 bits (cruzan el `BNE`) **solo en el nativo**:
+en el backend por bloques cada bloque es una función distinta, así que no se puede "saltar" una
+instrucción de otro bloque sin fusionarlos (que es lo que hace el nativo con etiquetas).
+
+> **La cobertura real la fija el CFG, no el patrón.** En SMB el transpilador decodifica solo
+> **1075 instrucciones** (de 32 KB) porque los **saltos indirectos cortan el desensamblado**: sin
+> ellos, el grafo no llega a la mayoría del código y los idioms no se encuentran. Es decir, el techo
+> para la mayoría de juegos es **descodificar más CFG** (saltos indirectos / tablas), no añadir
+> patrones.
+
+**Tablas ROM → datos precomputados (HLE).** Evaluado: identificar tablas usadas (por acceso
+`abs,X`/`(zp),Y` a ROM) y **volcarlas ya transformadas** es un reconocimiento por juego (el transpilador
+no conoce la semántica de la tabla) y suele requerir HLE específico; no es un idiom genérico.
 
 **`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
 regiones no se pueden entrar por el medio sin duplicar cada bloque como función (que es justo el
