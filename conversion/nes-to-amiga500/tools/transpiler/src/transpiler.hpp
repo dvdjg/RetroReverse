@@ -2433,6 +2433,13 @@ private:
 				const Instruction& in = instr_[p];
 				const OpcodeInfo& info = kOpcodeTable[in.opcode];
 				term = &in;
+				// Idiom multibyte sin ramas (copia 16 bits / constante 16 bits).
+				eng::u16 nmp = p;
+				if (try_native_multibyte(out, p, nmp)) {
+					term = &instr_[static_cast<eng::u16>(nmp - 2u)];
+					p = nmp;
+					continue;
+				}
 				// Patrón (idioma PRNG): tirada de `ROR/ROL zp` sobre direcciones
 				// consecutivas -> **un bucle** con el carry en una local, en vez de
 				// N rotaciones con acceso a memoria y flags por byte.
@@ -2551,6 +2558,78 @@ private:
 			}
 		}
 		out.append("}\n\n");
+	}
+
+	/// Reconoce un **idiom multibyte sin ramas** (dentro de un bloque) y lo emite como una
+	/// operación de 16 bits, para que g++ use `move.w`/`add.w` en vez de byte a byte:
+	///
+	///   - **copia 16 bits**: `LDA zp a; STA zp c; LDA zp a+1; STA zp c+1`
+	///     -> `*(u16*)&ram[c] = *(u16*)&ram[a]` (el orden de bytes se conserva).
+	///   - **constante 16 bits**: `LDA #k0; STA zp c; LDA #k1; STA zp c+1`
+	///     -> dos bytes (g++ puede combinarlos) + `A = k1` con flags.
+	///
+	/// El estado final (A y flags) replica la secuencia byte a byte del 6502.
+	/// \param out  Salida.
+	/// \param p    Dirección de la primera instrucción.
+	/// \param next [salida] Dirección tras el idiom (`p+8`).
+	/// \return `true` si se emitió el idiom.
+	[[nodiscard]] bool try_native_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
+		const auto at = [&](eng::u16 a) -> const Instruction* {
+			return (a < kSpace && has_instr_[a] != 0u) ? &instr_[a] : nullptr;
+		};
+		const Instruction* i0 = at(p);
+		const Instruction* i1 = at(static_cast<eng::u16>(p + 2u));
+		const Instruction* i2 = at(static_cast<eng::u16>(p + 4u));
+		const Instruction* i3 = at(static_cast<eng::u16>(p + 6u));
+		if (i0 == nullptr || i1 == nullptr || i2 == nullptr || i3 == nullptr) {
+			return false;
+		}
+		const auto hex2 = [&](eng::u8 v) {
+			out.append("0x");
+			out.append_hex(v, 2u, true);
+			out.append("u");
+		};
+		// --- Copia 16 bits: LDA zp a; STA zp c; LDA zp a+1; STA zp c+1 ---
+		if (i0->opcode == 0xA5u && i1->opcode == 0x85u && i2->opcode == 0xA5u &&
+		    i3->opcode == 0x85u) {
+			const eng::u8 a = static_cast<eng::u8>(i0->operand);
+			const eng::u8 c = static_cast<eng::u8>(i1->operand);
+			if (static_cast<eng::u8>(i2->operand) == static_cast<eng::u8>(a + 1u) &&
+			    static_cast<eng::u8>(i3->operand) == static_cast<eng::u8>(c + 1u)) {
+				out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &m->ram[");
+				hex2(a);
+				out.append("], 2u); __builtin_memcpy(&m->ram[");
+				hex2(c);
+				out.append("], &n2a_w, 2u); r->a = m->ram[");
+				hex2(static_cast<eng::u8>(a + 1u));
+				out.append("]; r->z = (r->a == 0u); r->n = ((r->a & 0x80u) != 0u); }\n");
+				next = static_cast<eng::u16>(p + 8u);
+				return true;
+			}
+		}
+		// --- Constante 16 bits: LDA #k0; STA zp c; LDA #k1; STA zp c+1 ---
+		if (i0->opcode == 0xA9u && i1->opcode == 0x85u && i2->opcode == 0xA9u &&
+		    i3->opcode == 0x85u) {
+			const eng::u8 k0 = static_cast<eng::u8>(i0->operand);
+			const eng::u8 c = static_cast<eng::u8>(i1->operand);
+			const eng::u8 k1 = static_cast<eng::u8>(i2->operand);
+			if (static_cast<eng::u8>(i3->operand) == static_cast<eng::u8>(c + 1u)) {
+				out.append("    m->ram[");
+				hex2(c);
+				out.append("] = ");
+				hex2(k0);
+				out.append("; m->ram[");
+				hex2(static_cast<eng::u8>(c + 1u));
+				out.append("] = ");
+				hex2(k1);
+				out.append("; r->a = ");
+				hex2(k1);
+				out.append("; r->z = (r->a == 0u); r->n = ((r->a & 0x80u) != 0u);\n");
+				next = static_cast<eng::u16>(p + 8u);
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/// Emite una instrucción del backend nativo (salvo transferencias de control, que

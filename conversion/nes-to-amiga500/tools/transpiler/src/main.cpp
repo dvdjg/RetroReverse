@@ -237,6 +237,21 @@ bool write_ines_rom(const char* path, const eng::u8* prog, eng::usize prog_len) 
 // Programa de la ROM mínima: A9 23 (LDA #$23) · 85 00 (STA $00) · E8 (INX) · 00 (BRK).
 constexpr eng::u8 kMiniProg[] = {0xA9u, 0x23u, 0x85u, 0x00u, 0xE8u, 0x00u};
 
+// ROM de idioms multibyte (16 bits):
+//   $8000: LDA #$34  A9 34
+//   $8002: STA $10   85 10
+//   $8004: LDA #$12  A9 12
+//   $8006: STA $11   85 11        -> (u16)$10 = $1234
+//   $8008: LDA $10   A5 10
+//   $800A: STA $20   85 20
+//   $800C: LDA $11   A5 11
+//   $800E: STA $21   85 21        -> copia $10 -> $20
+//   $8010: BRK       00
+constexpr eng::u8 kMultibyteProg[] = {
+	0xA9u, 0x34u, 0x85u, 0x10u, 0xA9u, 0x12u, 0x85u, 0x11u,
+	0xA5u, 0x10u, 0x85u, 0x20u, 0xA5u, 0x11u, 0x85u, 0x21u, 0x00u,
+};
+
 // Bucle de 5 iteraciones + llamada a subrutina:
 //   $8000: LDX #$00         A2 00
 //   $8002: LDA #$00         A9 00
@@ -314,6 +329,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("     --emit-mini-rom   <salida.nes>");
 	n2a::out_line("     --emit-branch-rom <salida.nes>");
 	n2a::out_line("     --emit-misc-rom   <salida.nes>");
+	n2a::out_line("     --emit-multibyte-rom <salida.nes>");
 	n2a::out_line("     --emit-vsa-rom    <salida.nes>");
 	n2a::out_line("     --emit-bench-rom  <salida.nes>");
 	n2a::out_line("     --emit-cnrom-rom  <salida.nes>");
@@ -742,15 +758,16 @@ int main(int argc, char** argv) {
 		}
 		if ((arg == "--emit-mini-rom" || arg == "--emit-branch-rom" || arg == "--emit-misc-rom" ||
 		     arg == "--emit-vsa-rom" || arg == "--emit-bench-rom" || arg == "--emit-cnrom-rom" ||
-		     arg == "--emit-ram-rom") &&
+		     arg == "--emit-ram-rom" || arg == "--emit-multibyte-rom") &&
 		    i + 1 < argc) {
-			emit = (arg == "--emit-mini-rom")     ? 1
-			       : (arg == "--emit-branch-rom") ? 2
-			       : (arg == "--emit-misc-rom")   ? 3
-			       : (arg == "--emit-vsa-rom")    ? 4
-			       : (arg == "--emit-bench-rom")  ? 5
-			       : (arg == "--emit-cnrom-rom")  ? 6
-							      : 7;
+			emit = (arg == "--emit-mini-rom")      ? 1
+			       : (arg == "--emit-branch-rom")  ? 2
+			       : (arg == "--emit-misc-rom")    ? 3
+			       : (arg == "--emit-vsa-rom")     ? 4
+			       : (arg == "--emit-bench-rom")   ? 5
+			       : (arg == "--emit-cnrom-rom")   ? 6
+			       : (arg == "--emit-multibyte-rom") ? 8
+							       : 7;
 			(void)inputs.push_back(eng::util::StringView(argv[++i]));
 			continue;
 		}
@@ -858,6 +875,7 @@ int main(int argc, char** argv) {
 				: (emit == 5) ? write_ines_rom(in0, kBenchProg, sizeof(kBenchProg))
 				: (emit == 6) ? write_ines_rom_mapped(in0, kBenchProg, sizeof(kBenchProg),
 								      3u, 1u)
+				: (emit == 8) ? write_ines_rom(in0, kMultibyteProg, sizeof(kMultibyteProg))
 					      : write_ines_rom(in0, kRamProg, sizeof(kRamProg));
 		if (!ok) {
 			n2a::err_line("error: no se pudo escribir la ROM de prueba");

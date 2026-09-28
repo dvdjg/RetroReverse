@@ -149,6 +149,9 @@ EOF
 compile_native mini 'int main() { game_main(); return (g_st.a == 0x23u && g_st.x == 1u && g_bus.ram[0] == 0x23u) ? 0 : 1; }'
 compile_native branch 'int main() { game_main(); return (g_st.a == 5u && g_st.x == 5u && g_bus.ram[0x10] == 5u && g_bus.ram[0] == 0u) ? 0 : 1; }'
 compile_native vsa 'int main() { game_main(); return (g_st.a == 0x2Au) ? 0 : 1; }'
+# Idioms multibyte (16 bits): constante de dos bytes y copia de dos bytes.
+"$BIN" --emit-multibyte-rom "$GEN/multibyte.nes"
+compile_native multibyte 'int main() { game_main(); return (g_bus.ram[0x10] == 0x34u && g_bus.ram[0x11] == 0x12u && g_bus.ram[0x20] == 0x34u && g_bus.ram[0x21] == 0x12u && g_st.a == 0x12u) ? 0 : 1; }'
 
 echo "[8/9] helpers rapidos del runtime (equivalencia n2a_ror_run/n2a_rol_run)"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$ROOT/tests/fastops_test.cpp" -o "$TMP/fastops_test"
