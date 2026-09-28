@@ -104,6 +104,16 @@ instrucción. `dbg_fast2 bf.nes 60000` → **60000 pasos idénticos**; `equivale
 **Pendiente**: el **±1 ciclo** del cruce del VBlank (causa del jam del frame 6 de bioniccommando).
 Para cerrarlo habría que muestrear el flag a resolución de ciclo (como mesen), no de instrucción.
 
+### Límite del volcado de nametables de mesen (MMC5/VRC6)
+
+El volcado `RRS1` de mesen (`Core/CPU.cpp`) incluye `ppu->PeekRAM(0x2000…)` = **CIRAM**. En un
+cartucho con **mapeo de nametables propio** (MMC5 `$5105` → CIRAM/ExRAM/fill; VRC6 con nametables
+por CHR-ROM) la fuente **efectiva** puede **no** ser CIRAM; comparar `RRS1` con nuestra nametable
+efectiva puede inducir a error. Para MMC5 hay que volcar la fuente **resuelta** (ExRAM/fill) o el
+**bitmap de la nametable tras el render**, no CIRAM a secas. Además, al pedir trazas largas a mesen
+éste **reinicia** (timestamp vuelve a `ts=8` en `$F500`), así que `trace_diff` debe limitarse a la
+**primera pasada** (o el harness debe garantizar una pasada única).
+
 ## Estado
 
 - Herramienta corregida (formatos) y referencia cambiada a **mesen**.
