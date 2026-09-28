@@ -314,6 +314,22 @@ fueran de **memoria** (`(n2a_read(0)|n2a_read(1)<<8)+Y`): no existía rama `Addr
 excluyendo juegos que copian rutinas (SMB). Ambos quedan como trabajo futuro (tabla resuelta
 estáticamente / intérprete de respaldo enlazado).
 
+> **Paso 1 — límite MEDIDO y decisivo: el modelo de frames del nativo no es viable para juegos
+> reales.** Al validar Ms. Pac-Man/DK a varios frames (`native_frame`/`native_diff`), el nativo
+> **se colgaba**: `game_main` **re-llamaba la región de `reset`** en cada cesión (repitiendo la
+> inicialización). Se corrigió la re-entrada (**reanudación por `r->pc`**: cada punto de cesión es
+> una entrada de región y `game_main` despacha por `r->pc`) y la detección de espera de VBlank
+> (el bucle puede estar **partido en dos bloques**). Con eso los frames avanzan, pero **sigue
+> divergiendo** del intérprete y **DK aún se cuelga** (varios patrones de espera: solo 1 de 5
+> lecturas de `$2002` se detecta como espera; otros juegos esperan por *flag*/NMI).
+> **Conclusión:** el modelo de frames por *detección de patrón de espera* es un **callejón sin
+> salida**; el modelo **correcto** es el del backend por bloques: **cesión por *deadline* de ciclos**
+> (`cpu.cycles >= deadline`, campo ya presente en `CPU`), del que ya se encarga `NesSystem`. El
+> backend nativo (regiones) no puede usar ese modelo porque no cuenta ciclos ni se despacha por `PC`.
+> Por eso el nativo queda como prototipo de **cómputo puro**; los juegos reales van por el backend
+> por bloques (cadena/ROM/ZP directas) + HLE. Las mejoras del paso 1 (reanudación + espera partida)
+> se mantienen: corrigen fallos reales y no rompen los tests (`run.sh`: TEST OK).
+
 ---
 
 ## Orden recomendado

@@ -1242,6 +1242,20 @@ private:
 		return false;
 	}
 
+	/// \return `true` si `term` es una **rama cuyo bloque destino lee `$2002`** y es un
+	/// bucle hacia atrás: el patrón de espera de VBlank/sprite-0. Sirve para que el
+	/// backend nativo **ceda** al runtime en vez de girar. El bucle puede estar partido
+	/// en dos bloques (el fall-through del `BPL` es líder), por eso se mira el bloque
+	/// **destino** de la rama, no solo el actual.
+	/// \param term Instrucción terminadora (debe ser de rama relativa).
+	[[nodiscard]] bool native_vblank_wait(const Instruction& term) const noexcept {
+		if (kOpcodeTable[term.opcode].mode != AddrMode::Rel) {
+			return false;
+		}
+		const eng::u16 t = term.target;
+		return t < kSpace && t <= term.addr && block_reads_ppu_status(t);
+	}
+
 	/// \return `true` si el mnemónico escribe `Z`/`N` (carga/ALU/comparación/inc-dec/
 	/// desplazamiento/transferencia/PLA/BIT/PLP/RTI). Se usa para el **liveness** local
 	/// que suprime escrituras muertas de flags.
@@ -2672,6 +2686,22 @@ private:
 				}
 			}
 		}
+		// Puntos de **reanudación** de las cesiones (esperas de VBlank/NMI): cada uno
+		// es una entrada de región, para que `game_main` reanude en `r->pc` tras la
+		// cesión y **no** re-ejecute la inicialización.
+		for (eng::u32 a = 0; a < kSpace; ++a) {
+			if (has_instr_[a] == 0u) {
+				continue;
+			}
+			const Instruction& in = instr_[a];
+			const OpcodeInfo& info = kOpcodeTable[in.opcode];
+			if (native_vblank_wait(in)) {
+				add_entry(static_cast<eng::u16>(a + info.size));
+			} else if (sv_equal(info.mnemonic, "JMP") && info.mode == AddrMode::Abs &&
+				   has_operand(in) && in.target == static_cast<eng::u16>(a)) {
+				add_entry(static_cast<eng::u16>(a)); // `JMP a si mismo`
+			}
+		}
 		// Declaraciones adelantadas.
 		for (eng::usize i = 0; i < entries.size(); ++i) {
 			out.append("static void n2a_r_");
@@ -2683,14 +2713,28 @@ private:
 			emit_native_region(out, entries[i]);
 		}
 
+		// --- Despachador de **reanudación**: tras una cesión, `game_main` reanuda en
+		// `r->pc` (punto guardado por la propia cesión) en vez de re-ejecutar `reset`
+		// (que repetiría la inicialización cada frame).
+		out.append("static void n2a_resume(N2A_State* r, N2A_Bus* m) {\n    switch (r->pc) {\n");
+		for (eng::usize i = 0; i < entries.size(); ++i) {
+			out.append("    case 0x");
+			out.append_hex(entries[i], 4u, true);
+			out.append("u: n2a_r_");
+			out.append_hex(entries[i], 4u, true);
+			out.append("(r, m); return;\n");
+		}
+		out.append("    default: r->halted = true; return;\n    }\n}\n");
+
 		// --- Entradas (reset/NMI/IRQ). `[[gnu::used]]` evita que g++ elimine las
 		// regiones solo alcanzables desde NMI/IRQ por ser `static` no referenciadas.
 		out.append("[[gnu::used]] void game_main() {\n");
+		out.append("    g_st.pc = 0x");
+		out.append_hex(reset_, 4u, true);
+		out.append("u;\n");
 		out.append("    for (;;) {\n");
 		out.append("        if (g_st.halted) { break; }\n");
-		out.append("        n2a_r_");
-		out.append_hex(reset_, 4u, true);
-		out.append("(&g_st, &g_bus);\n");
+		out.append("        n2a_resume(&g_st, &g_bus);\n");
 		out.append("        if (!g_st.yield) { break; }\n");
 		out.append("        g_st.yield = false;\n");
 		out.append("        if (g_native_yield != nullptr) { g_native_yield(g_st, g_bus); }\n");
@@ -3049,9 +3093,11 @@ private:
 			if (term != nullptr) {
 				const char* m = kOpcodeTable[term->opcode].mnemonic;
 				if (kOpcodeTable[term->opcode].mode == AddrMode::Rel) {
-					if (term->target == b && block_reads_ppu_status(b)) {
-						// Bucle de espera de VBlank/sprite-0: cede al runtime en vez de
-						// girar en la propia region (el runtime resuelve VBlank/NMI).
+					// Bucle de espera de VBlank/sprite-0 (`native_vblank_wait`): cede al
+					// runtime en vez de girar. Al ceder se guarda en `r->pc` el punto de
+					// **reanudación** (la continuación del bucle) para que `game_main`
+					// reanude ahí y **no** vuelva a ejecutar la inicialización.
+					if (native_vblank_wait(*term)) {
 						out.append("    if (");
 						out.append(sv_equal(m, "BEQ") ? "r->z"
 							   : sv_equal(m, "BNE") ? "!r->z"
@@ -3062,7 +3108,9 @@ private:
 							   : sv_equal(m, "BVS") ? "r->v"
 							   : sv_equal(m, "BVC") ? "!r->v"
 										: "false");
-						out.append(") { r->yield = true; return; }\n");
+						out.append(") { r->pc = 0x");
+						out.append_hex(next, 4u, true);
+						out.append("u; r->yield = true; return; }\n");
 					} else if (native_vis_[term->target] != 0u) {
 						out.append("    if (");
 						out.append(sv_equal(m, "BEQ") ? "r->z"
@@ -3088,8 +3136,10 @@ private:
 						// `JMP ($zp)`: despacho por los destinos observados.
 						emit_native_ind_dispatch(out, term->addr);
 					} else if (term->target == b) {
-						// `JMP a si mismo`: espera de NMI; cede al runtime.
-						out.append("    r->yield = true; return;\n");
+						// `JMP a si mismo`: espera de NMI; cede al runtime y reanuda en `b`.
+						out.append("    r->pc = 0x");
+						out.append_hex(b, 4u, true);
+						out.append("u; r->yield = true; return;\n");
 					} else if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
 						out.append_hex(term->target, 4u, true);
