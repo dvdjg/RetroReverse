@@ -156,7 +156,9 @@ compile_native multibyte 'int main() {
 	const bool ok = (g_bus.ram[0x10] == 0x34u) && (g_bus.ram[0x11] == 0x12u) &&
 			(g_bus.ram[0x20] == 0x34u) && (g_bus.ram[0x21] == 0x12u) &&
 			(g_bus.ram[0x30] == 0x00u) && (g_bus.ram[0x31] == 0x01u) &&
-			(g_bus.ram[0x40] == 0x85u) && (g_st.a == 0x85u);
+			(g_bus.ram[0x40] == 0x85u) &&
+			(g_bus.ram[0x60] == 0x35u) && (g_bus.ram[0x61] == 0x12u) &&
+			(g_bus.ram[0x70] == 0x85u) && (g_st.a == 0x85u);
 	return ok ? 0 : 1;
 }'
 

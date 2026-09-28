@@ -223,7 +223,21 @@ use `move.w`/`add.w` en vez de byte a byte:
   `compare16=1`. El asm sale como `move.w`/`addq.w` en `g_bus+…` y a menudo con **plegado de
   constantes** (`move.w #13330` sin cargar).
 
-**Pendiente:** `DEC` de 16 bits y la suma/resta `ADC/SBC` en cadena (multibyte).
+**Añadido después:**
+- **Suma 16 bits** (`CLC; LDA zp a; ADC k0; STA zp c; LDA zp a+1; ADC k1; STA zp c+1`) → `u16 + u16`
+  con `C`/`V`/`Z`/`N` del byte alto. `DEC` 16 bits implementado con el mismo patrón, pero **solo
+  cuando el bloque del `DEC lo` es una sola instrucción** (absorber parte de un bloque es inseguro).
+- **VSA de A/X/Y**: `#imm`, `INX/DEX/INY/DEY` y `TAX/TAY/TXA/TYA` propagan valores constantes, así
+  `LDX #c; DEX; LDA tabla,X` se pliega a literal.
+- **Endianness**: helpers `n2a_ld16`/`n2a_st16` (little-endian) con `__builtin_bswap16` en big-endian.
+- **Medido (DK, `--native`, `-O3`)**: `.text` 76 404 B; `copia16=3`, `const16=32`, `compare16=1`.
+
+**`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
+regiones no se pueden entrar por el medio sin duplicar cada bloque como función (que es justo el
+codegen por bloques). Un despachador nativo a **entradas de región** sería **parcialmente incorrecto**
+(fallaría en targets internos). Por eso `--best` **cae al codegen por bloques** (con el perfil Amiga
+optimizado) en juegos con indirectos — que es la vía **correcta**. Perseguir native con indirectos
+exigiría duplicar bloques (volver al modelo por bloques) o un intérprete de respaldo enlazado.
 
 ---
 

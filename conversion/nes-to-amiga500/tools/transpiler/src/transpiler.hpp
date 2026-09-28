@@ -748,8 +748,10 @@ private:
 	/// Permite plegar `LDA tabla,X` a literal cuando `X` es constante en el bloque.
 	bool native_x_known_ = false;
 	bool native_y_known_ = false;
+	bool native_a_known_ = false;
 	eng::u8 native_x_val_ = 0;
 	eng::u8 native_y_val_ = 0;
+	eng::u8 native_a_val_ = 0;
 	int cur_bank_ = -1;          ///< Banco del bloque en emisión (`-1` = ventana fija).
 	bool cur_nz_live_ = true;    ///< ¿`Z`/`N` viven tras la instrucción actual? (liveness, ver `nz_dead_after`).
 
@@ -2491,6 +2493,7 @@ private:
 			}
 			native_x_known_ = false; // VSA de índices: se reinicia en cada bloque
 			native_y_known_ = false;
+			native_a_known_ = false;
 			// Idiom 16 bits que cruza el `BNE`: `INC zp lo; BNE skip; INC zp lo+1`.
 			{
 				eng::u16 q = b;
@@ -2524,6 +2527,7 @@ private:
 						eng::u16 nmp2 = r2;
 						if (try_native_multibyte(out, r2, nmp2)) {
 							r2 = nmp2;
+							native_x_known_ = native_y_known_ = native_a_known_ = false;
 							continue;
 						}
 						const Instruction& in2 = instr_[r2];
@@ -2540,6 +2544,49 @@ private:
 					out.append_hex(static_cast<eng::u16>(mid + 2u), 4u, true);
 					out.append(";\n");
 					native_vis_[mid] = 2u; // absorbido
+					continue;
+				}
+				// Idiom 16 bits: `LDA zp lo; BNE skip; DEC zp lo+1; skip: DEC zp lo`.
+				if (last != nullptr && prev != nullptr && last->opcode == 0xD0u &&
+				    prev->opcode == 0xA5u && native_vis_[mid] == 1u &&
+				    has_instr_[mid] != 0u && instr_[mid].opcode == 0xC6u &&
+				    static_cast<eng::u8>(instr_[mid].operand) ==
+					    static_cast<eng::u8>(static_cast<eng::u8>(prev->operand) + 1u) &&
+				    last->target == static_cast<eng::u16>(mid + 2u) &&
+				    has_instr_[static_cast<eng::u16>(mid + 2u)] != 0u &&
+				    instr_[static_cast<eng::u16>(mid + 2u)].opcode == 0xC6u &&
+				    static_cast<eng::u8>(instr_[static_cast<eng::u16>(mid + 2u)].operand) ==
+					    static_cast<eng::u8>(prev->operand) &&
+				    native_vis_[static_cast<eng::u16>(mid + 2u)] == 1u &&
+				    (static_cast<eng::u16>(mid + 4u) >= kSpace ||
+				     has_instr_[static_cast<eng::u16>(mid + 4u)] == 0u ||
+				     leaders_[static_cast<eng::u16>(mid + 4u)] != 0u) &&
+				    predecessors_of(mid) == 1) {
+					eng::u16 r2 = b;
+					while (r2 != prev->addr) {
+						eng::u16 nmp2 = r2;
+						if (try_native_multibyte(out, r2, nmp2)) {
+							r2 = nmp2;
+							native_x_known_ = native_y_known_ = native_a_known_ = false;
+							continue;
+						}
+						const Instruction& in2 = instr_[r2];
+						emit_native_instruction(out, in2);
+						r2 = static_cast<eng::u16>(r2 + kOpcodeTable[in2.opcode].size);
+					}
+					const eng::u8 lo = static_cast<eng::u8>(prev->operand);
+					out.append("    { r->a = m->ram[0x");
+					out.append_hex(lo, 2u, true);
+					out.append("u]; const eng::u16 n2a_w = n2a_ld16(&m->ram[0x");
+					out.append_hex(lo, 2u, true);
+					out.append("u]); const eng::u16 n2a_r = static_cast<eng::u16>(n2a_w - 1u); n2a_st16(&m->ram[0x");
+					out.append_hex(lo, 2u, true);
+					out.append("u], n2a_r); const eng::u8 n2a_l = static_cast<eng::u8>(n2a_r & 0xFFu); r->z = (n2a_l == 0u); r->n = ((n2a_l & 0x80u) != 0u); }\n");
+					out.append("    goto L_");
+					out.append_hex(static_cast<eng::u16>(mid + 4u), 4u, true);
+					out.append(";\n");
+					native_vis_[mid] = 2u;
+					native_vis_[static_cast<eng::u16>(mid + 2u)] = 2u;
 					continue;
 				}
 			}
@@ -2560,6 +2607,7 @@ private:
 				if (try_native_multibyte(out, p, nmp)) {
 					term = &instr_[static_cast<eng::u16>(nmp - 2u)];
 					p = nmp;
+					native_x_known_ = native_y_known_ = native_a_known_ = false;
 					continue;
 				}
 				// Patrón (idioma PRNG): tirada de `ROR/ROL zp` sobre direcciones
@@ -2596,6 +2644,7 @@ private:
 						out.append("]; r->z = (n2a_l == 0u); r->n = ((n2a_l & 0x80u) != 0u); }\n");
 						p = p2;
 						term = &instr_[static_cast<eng::u16>(p2 - 2u)];
+						native_x_known_ = native_y_known_ = native_a_known_ = false;
 						continue;
 					}
 				}
@@ -2703,16 +2752,17 @@ private:
 		const Instruction* i1 = at(static_cast<eng::u16>(p + 2u));
 		const Instruction* i2 = at(static_cast<eng::u16>(p + 4u));
 		const Instruction* i3 = at(static_cast<eng::u16>(p + 6u));
-		if (i0 == nullptr || i1 == nullptr || i2 == nullptr || i3 == nullptr) {
+		if (i0 == nullptr) {
 			return false;
 		}
+		const bool have4 = (i1 != nullptr && i2 != nullptr && i3 != nullptr);
 		const auto hex2 = [&](eng::u8 v) {
 			out.append("0x");
 			out.append_hex(v, 2u, true);
 			out.append("u");
 		};
 		// --- Copia 16 bits: LDA zp a; STA zp c; LDA zp a+1; STA zp c+1 ---
-		if (i0->opcode == 0xA5u && i1->opcode == 0x85u && i2->opcode == 0xA5u &&
+		if (have4 && i0->opcode == 0xA5u && i1->opcode == 0x85u && i2->opcode == 0xA5u &&
 		    i3->opcode == 0x85u) {
 			const eng::u8 a = static_cast<eng::u8>(i0->operand);
 			const eng::u8 c = static_cast<eng::u8>(i1->operand);
@@ -2730,7 +2780,7 @@ private:
 			}
 		}
 		// --- Constante 16 bits: LDA #k0; STA zp c; LDA #k1; STA zp c+1 ---
-		if (i0->opcode == 0xA9u && i1->opcode == 0x85u && i2->opcode == 0xA9u &&
+		if (have4 && i0->opcode == 0xA9u && i1->opcode == 0x85u && i2->opcode == 0xA9u &&
 		    i3->opcode == 0x85u) {
 			const eng::u8 k0 = static_cast<eng::u8>(i0->operand);
 			const eng::u8 c = static_cast<eng::u8>(i1->operand);
@@ -2753,7 +2803,7 @@ private:
 		}
 		// --- Comparación 16 bits: LDA zp a; CMP #k0|zp m0; LDA zp a+1; SBC #k1|zp m1 ---
 		// (sin ramas; deja `C` = (a >= b) a 16 bits y `A`/`Z`/`N` del byte alto, como el 6502)
-		if (i0->opcode == 0xA5u && (i1->opcode == 0xC9u || i1->opcode == 0xC5u) &&
+		if (have4 && i0->opcode == 0xA5u && (i1->opcode == 0xC9u || i1->opcode == 0xC5u) &&
 		    i2->opcode == 0xA5u && (i3->opcode == 0xE9u || i3->opcode == 0xE5u)) {
 			const eng::u8 a = static_cast<eng::u8>(i0->operand);
 			const bool imm1 = (i1->opcode == 0xC9u);
@@ -2781,6 +2831,62 @@ private:
 				return true;
 			}
 		}
+		// --- Suma 16 bits: CLC; LDA zp a; ADC k0; STA zp c; LDA zp a+1; ADC k1; STA zp c+1 ---
+		if (i0->opcode == 0x18u) {
+			const auto nx = [&](eng::u16 a) {
+				return static_cast<eng::u16>(a + kOpcodeTable[instr_[a].opcode].size);
+			};
+			const eng::u16 p1 = nx(p);
+			const Instruction* j1 = at(p1);
+			if (j1 != nullptr && j1->opcode == 0xA5u) {
+				const eng::u8 a = static_cast<eng::u8>(j1->operand);
+				const eng::u16 p2 = nx(p1);
+				const eng::u16 p3 = nx(p2);
+				const eng::u16 p4 = nx(p3);
+				const eng::u16 p5 = nx(p4);
+				const eng::u16 p6 = nx(p5);
+				const Instruction* j2 = at(p2);
+				const Instruction* j3 = at(p3);
+				const Instruction* j4 = at(p4);
+				const Instruction* j5 = at(p5);
+				const Instruction* j6 = at(p6);
+				if (j2 != nullptr && (j2->opcode == 0x69u || j2->opcode == 0x65u) &&
+				    j3 != nullptr && j3->opcode == 0x85u && j4 != nullptr &&
+				    j4->opcode == 0xA5u &&
+				    static_cast<eng::u8>(j4->operand) == static_cast<eng::u8>(a + 1u) &&
+				    j5 != nullptr && (j5->opcode == 0x69u || j5->opcode == 0x65u) &&
+				    j6 != nullptr && j6->opcode == 0x85u) {
+					const eng::u8 c = static_cast<eng::u8>(j3->operand);
+					const bool imm0 = (j2->opcode == 0x69u);
+					const bool imm1 = (j5->opcode == 0x69u);
+					const bool zp_ok = imm0 || (static_cast<eng::u8>(j5->operand) ==
+								    static_cast<eng::u8>(static_cast<eng::u8>(j2->operand) + 1u));
+					if (imm0 == imm1 && zp_ok &&
+					    static_cast<eng::u8>(j6->operand) == static_cast<eng::u8>(c + 1u)) {
+						out.append("    { const eng::u16 n2a_x = n2a_ld16(&m->ram[");
+						hex2(a);
+						out.append("]); const eng::u16 n2a_y = ");
+						if (imm0) {
+							const eng::u16 k =
+								static_cast<eng::u16>(static_cast<eng::u8>(j2->operand)) |
+								(static_cast<eng::u16>(static_cast<eng::u8>(j5->operand)) << 8u);
+							out.append("0x");
+							out.append_hex(k, 4u, true);
+							out.append("u");
+						} else {
+							out.append("n2a_ld16(&m->ram[");
+							hex2(static_cast<eng::u8>(j2->operand));
+							out.append("])");
+						}
+						out.append("; const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) + n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&m->ram[");
+						hex2(c);
+						out.append("], n2a_r); r->c = (n2a_s > 0xFFFFu); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u), n2a_ah = static_cast<eng::u8>(n2a_x >> 8u), n2a_bh = static_cast<eng::u8>(n2a_y >> 8u); r->v = (((n2a_ah ^ n2a_h) & (n2a_bh ^ n2a_h) & 0x80u) != 0u); r->a = n2a_h; r->z = (n2a_h == 0u); r->n = ((n2a_h & 0x80u) != 0u); }\n");
+						next = nx(p6);
+						return true;
+					}
+				}
+			}
+		}
 		return false;
 	}
 
@@ -2789,27 +2895,56 @@ private:
 	void emit_native_instruction(Dyn& out, const Instruction& in) {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
-		// VSA: seguir el valor de X/Y (LDX/LDY #imm) y invalidarlo en cualquier otra
-		// escritura; en `JSR`/salto el callee puede cambiarlos.
+		// VSA (const-prop simple de A/X/Y): sigue valores conocidos a través de
+		// `#imm`, `INX/DEX/INY/DEY` y transferencias; los invalida en cualquier otra
+		// escritura (y en `JSR`/saltos, donde el callee puede cambiarlos).
+		if (in.opcode == 0xA9u) {
+			native_a_known_ = true;
+			native_a_val_ = static_cast<eng::u8>(in.operand);
+		} else if (sv_equal(m, "TXA") && native_x_known_) {
+			native_a_known_ = true;
+			native_a_val_ = native_x_val_;
+		} else if (sv_equal(m, "TYA") && native_y_known_) {
+			native_a_known_ = true;
+			native_a_val_ = native_y_val_;
+		} else if (sv_equal(m, "LDA") || sv_equal(m, "ADC") || sv_equal(m, "SBC") ||
+			   sv_equal(m, "AND") || sv_equal(m, "ORA") || sv_equal(m, "EOR") ||
+			   sv_equal(m, "PLA") || sv_equal(m, "TXA") || sv_equal(m, "TYA")) {
+			native_a_known_ = false;
+		}
 		if (in.opcode == 0xA2u) {
 			native_x_known_ = true;
 			native_x_val_ = static_cast<eng::u8>(in.operand);
-		} else if (sv_equal(m, "LDX") || sv_equal(m, "TAX") || sv_equal(m, "INX") ||
-			   sv_equal(m, "DEX") || sv_equal(m, "TSX") || sv_equal(m, "PLP") ||
-			   sv_equal(m, "RTI")) {
+		} else if (sv_equal(m, "INX") && native_x_known_) {
+			native_x_val_ = static_cast<eng::u8>(native_x_val_ + 1u);
+		} else if (sv_equal(m, "DEX") && native_x_known_) {
+			native_x_val_ = static_cast<eng::u8>(native_x_val_ - 1u);
+		} else if (sv_equal(m, "TAX") && native_a_known_) {
+			native_x_known_ = true;
+			native_x_val_ = native_a_val_;
+		} else if (sv_equal(m, "LDX") || sv_equal(m, "TAX") || sv_equal(m, "TSX") ||
+			   sv_equal(m, "PLA") || sv_equal(m, "PLP") || sv_equal(m, "RTI")) {
 			native_x_known_ = false;
 		}
 		if (in.opcode == 0xA0u) {
 			native_y_known_ = true;
 			native_y_val_ = static_cast<eng::u8>(in.operand);
-		} else if (sv_equal(m, "LDY") || sv_equal(m, "TAY") || sv_equal(m, "INY") ||
-			   sv_equal(m, "DEY") || sv_equal(m, "PLP") || sv_equal(m, "RTI")) {
+		} else if (sv_equal(m, "INY") && native_y_known_) {
+			native_y_val_ = static_cast<eng::u8>(native_y_val_ + 1u);
+		} else if (sv_equal(m, "DEY") && native_y_known_) {
+			native_y_val_ = static_cast<eng::u8>(native_y_val_ - 1u);
+		} else if (sv_equal(m, "TAY") && native_a_known_) {
+			native_y_known_ = true;
+			native_y_val_ = native_a_val_;
+		} else if (sv_equal(m, "LDY") || sv_equal(m, "TAY") || sv_equal(m, "PLA") ||
+			   sv_equal(m, "PLP") || sv_equal(m, "RTI")) {
 			native_y_known_ = false;
 		}
 		if (sv_equal(m, "JSR") || sv_equal(m, "JMP") || sv_equal(m, "RTS") ||
 		    sv_equal(m, "RTI")) {
 			native_x_known_ = false;
 			native_y_known_ = false;
+			native_a_known_ = false;
 		}
 		if (sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK") ||
 		    sv_equal(m, "JMP") || sv_equal(m, "JSR") || info.mode == AddrMode::Rel ||
