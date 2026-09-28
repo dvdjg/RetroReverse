@@ -185,6 +185,14 @@ struct NesSystem {
 			} else if (!cpu.I && (apu.frame_irq || apu.dmc_irq || mapper.irq_line())) {
 				trigger_irq();
 			}
+			// Código generado **encadenado** (`--amiga`): un bloque puede **ceder**
+			// (`cpu.yield`) al llegar a un bucle de espera de VBlank/NMI, en vez de
+			// encadenarse infinitamente. El runtime resuelve aquí los eventos (arriba)
+			// y limpia la cesión; el siguiente `step_block` reanuda en `cpu.PC`.
+			// Es no-op para los motores que no emiten cesiones (intérprete/FastCpu).
+			if (cpu.yield) {
+				cpu.yield = false;
+			}
 			if (out_instrs != nullptr) {
 				*out_instrs = n;
 			}
