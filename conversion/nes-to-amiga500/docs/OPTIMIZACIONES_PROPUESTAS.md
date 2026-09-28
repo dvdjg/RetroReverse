@@ -261,6 +261,18 @@ decodifica. Medido en SMB: **1075 → 5622 instrucciones** (395 → 1723 bloques
 (ese código pasaba antes por el intérprete; ahora corre en el backend rápido). Es la vía **robusta y
 data-driven** para el techo de cobertura.
 
+**Hechos de valor (`--facts`) y `N2A_ASSUME`: estaban inertes en el objetivo — corregido.** El macro
+`N2A_ASSUME` solo cubría `__builtin_assume` (MSVC/Clang); el **g++ 15.1 de m68k no expone ese builtin**,
+así que caía a *no-op*: ni el VSA ni los hechos cambiaban nada en el binario final (el host, que sí lo
+tiene, lo ocultaba). Arreglado: usa **`[[assume]]`** (C++23; `__has_cpp_attribute(assume)` = 1 en ese
+g++. verificado que **pliega** `x & 0xF0` a 0 con `x <= 0x0F`). Se añadió `-DN2A_NO_ASSUME` para medir
+A/B. Además, la suposición se emitía **antes** de la carga y sobre `cpu.mem->read(addr)` —una función
+**no pura** y que con `--fast-ram` el código ni usa (la carga real va por `n2a_ram[]`)—, de modo que
+quedaba **desconectada** del valor. Ahora se emite **después** de la instrucción que lee la dirección y
+sobre la **expresión que el código usa**: `cpu.A/X/Y` en cargas (`LDA/LDX/LDY`) y
+`n2a_ram[..]`/`cpu.mem->read(..)` en el resto (RMW `INC/DEC/ASL…`, `CMP`, `BIT`), solo en modos
+`Zp`/`Abs`. Los hechos deben venir validados por telemetría (`facts_from_run`) o a mano (tests).
+
 **Tablas ROM → datos precomputados (HLE).** Evaluado: identificar tablas usadas (por acceso
 `abs,X`/`(zp),Y` a ROM) y **volcarlas ya transformadas** es un reconocimiento por juego (el transpilador
 no conoce la semántica de la tabla) y suele requerir HLE específico; no es un idiom genérico.

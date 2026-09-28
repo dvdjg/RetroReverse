@@ -34,14 +34,16 @@
 /// Lo emite el transpilador a partir de hechos de valores (fichero `--facts`):
 /// p. ej. "esta dirección de RAM solo toma el valor 2" permite a g++ plegar
 /// ramas y aritmética. En compiladores sin soporte queda como no-op.
-#if defined(_MSC_VER)
-#define N2A_ASSUME(x) __assume(x)
-#elif defined(__has_builtin)
-#if __has_builtin(__builtin_assume)
-#define N2A_ASSUME(x) __builtin_assume(x)
-#else
+#if defined(N2A_NO_ASSUME)
+// Medición A/B: desactiva las suposiciones para comparar el código generado.
 #define N2A_ASSUME(x) ((void)0)
-#endif
+#elif defined(_MSC_VER)
+#define N2A_ASSUME(x) __assume(x)
+#elif defined(__has_builtin) && __has_builtin(__builtin_assume)
+#define N2A_ASSUME(x) __builtin_assume(x)
+#elif defined(__has_cpp_attribute) && __has_cpp_attribute(assume)
+// GCC 13+/Clang 19+: `[[assume]]` (C++23). El g++ 15.1 de m68k lo soporta.
+#define N2A_ASSUME(x) [[assume(x)]]
 #else
 #define N2A_ASSUME(x) ((void)0)
 #endif

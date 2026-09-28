@@ -2124,28 +2124,41 @@ private:
 		return false;
 	}
 
-	/// Emite las suposiciones `N2A_ASSUME(...)` de los hechos (`facts_`) que
-	/// afectan al bloque `start`, al principio del cuerpo de la función. Son
-	/// pistas para g++: si un hecho no se cumpliera en ejecución, el resultado es
-	/// indefinido, así que los hechos deben venir validados por análisis/telemetría.
-	void emit_assumptions(Dyn& out, eng::u16 start) const {
+	/// Emite, **después** de cargar la dirección `addr` en el registro `reg`
+	/// (`"cpu.A"`/`"cpu.X"`/`"cpu.Y"`), una suposición `N2A_ASSUME` con el hecho de
+	/// valores (`--facts`) de esa dirección.
+	///
+	/// Se emite sobre el **registro** (p. ej. `cpu.A`) porque es la expresión que el
+	/// optimizador reutiliza después; hacerlo sobre `cpu.mem->read(addr)` **no sirve**:
+	/// `read()` no es una función pura y con `--fast-ram` la carga real ni siquiera usa
+	/// `read()` (va por `n2a_ram[]`), así que la suposición quedaría desconectada.
+	/// Si un hecho no se cumple en ejecución el resultado es indefinido, así que los
+	/// hechos deben venir validados por análisis/telemetría (`facts_from_run`).
+	///
+	/// \param out Flujo de salida del `.cpp` generado.
+	/// \param addr Dirección 6502 leída (se busca un hecho con esa dirección).
+	/// \param reg  Expresión a la que se aplica el hecho: el registro recién cargado
+	///             (`"cpu.A"`, `"cpu.X"`, `"cpu.Y"`) o la expresión de memoria que el
+	///             código usa (`"n2a_ram[0x0020]"` con `--fast-ram`, o
+	///             `"cpu.mem->read(0x0020)"`).
+	void emit_fact_assume(Dyn& out, eng::u16 addr, eng::util::StringView reg) const {
 		for (eng::usize i = 0; i < facts_.size(); ++i) {
 			const Fact& f = facts_[i];
-			if (f.kind == FactKind::Hot) {
-				continue; // el calor de bloque no es una suposición de valor
-			}
-			if (!block_reads(start, f.addr)) {
+			if (f.kind == FactKind::Hot || f.addr != addr) {
 				continue;
 			}
-			out.append("    N2A_ASSUME(cpu.mem->read(0x");
-			out.append_hex(f.addr, 4u, true);
-			out.append(')');
+			out.append("    N2A_ASSUME(");
+			out.append(reg);
 			switch (f.kind) {
 			case FactKind::Eq:
 				out.append(" == 0x");
 				out.append_hex(f.values[0], 2u, true);
 				break;
 			case FactKind::Range:
+				out.append(" >= 0x");
+				out.append_hex(f.values[0], 2u, true);
+				out.append(" && ");
+				out.append(reg);
 				out.append(" <= 0x");
 				out.append_hex(f.values[1], 2u, true);
 				break;
@@ -2153,23 +2166,24 @@ private:
 				out.append(" == 0x");
 				out.append_hex(f.values[0], 2u, true);
 				for (eng::u8 k = 1u; k < f.count; ++k) {
-					out.append(" || cpu.mem->read(0x");
-					out.append_hex(f.addr, 4u, true);
-					out.append(") == 0x");
+					out.append(" || ");
+					out.append(reg);
+					out.append(" == 0x");
 					out.append_hex(f.values[k], 2u, true);
 				}
 				break;
 			case FactKind::Power2:
-				out.append(" != 0u && (cpu.mem->read(0x");
-				out.append_hex(f.addr, 4u, true);
-				out.append(") & (cpu.mem->read(0x");
-				out.append_hex(f.addr, 4u, true);
-				out.append(") - 1u)) == 0u");
+				out.append(" != 0u && (");
+				out.append(reg);
+				out.append(" & (");
+				out.append(reg);
+				out.append(" - 1u)) == 0u");
 				break;
 			case FactKind::Hot:
 				break; // ya filtrado arriba; evita el aviso de switch
 			}
 			out.append(");\n");
+			return; // un hecho por dirección es suficiente
 		}
 	}
 
@@ -2312,7 +2326,6 @@ private:
 			if (rom_direct_ && !prg_banked_) {
 				out.append("    [[maybe_unused]] const eng::u8* const n2a_prg = PRG_ROM;\n");
 			}
-			emit_assumptions(out, start);
 
 			// VSA intra-bloque: mapa de valores constantes vistos (`LDA #c; STA a`).
 			eng::u16 vsa_addr[64];
@@ -2370,21 +2383,6 @@ private:
 					}
 				}
 
-				// Si leemos una dirección con valor constante conocido en el bloque,
-				// se emite la suposición antes de la carga.
-				if ((in.opcode == 0xA5u || in.opcode == 0xADu) && has_operand(in)) {
-					for (int k = 0; k < vsa_n; ++k) {
-						if (vsa_addr[k] == in.operand) {
-							out.append("    N2A_ASSUME(cpu.mem->read(0x");
-							out.append_hex(in.operand, 4u, true);
-							out.append(") == 0x");
-							out.append_hex(vsa_val[k], 2u, true);
-							out.append(");\n");
-							break;
-						}
-					}
-				}
-
 				// Liveness de Z/N: si la instrucción las escribe y se reescriben antes
 				// de leerse, se suprimen las escrituras (menos accesos al estado).
 				// Solo con el perfil Amiga encadenado (`--chain`); sin él se mantiene
@@ -2401,6 +2399,57 @@ private:
 					}
 				}
 				emit_one_instruction(out, in, start);
+
+				// Suposiciones de valor **tras** la instrucción que lee la dirección,
+				// aplicadas a la expresión que el código usa después:
+				//   - cargas (`LDA/LDX/LDY zp/abs`)  -> el registro (`cpu.A/X/Y`);
+				//   - el resto (RMW `INC/DEC/ASL...`, `CMP`, `BIT`...) -> la **memoria**
+				//     (`n2a_ram[..]` con `--fast-ram`, si no `cpu.mem->read(..)`).
+				// Emitirlas antes sobre `cpu.mem->read(addr)` no servía: `read()` no es
+				// pura y con `--fast-ram` la carga real va por `n2a_ram[]`, así que la
+				// suposición quedaba desconectada del valor. Solo modos `Zp`/`Abs`
+				// (en los indexados el efectivo es `operand + X/Y`, no `operand`).
+				const bool n2a_store_op =
+					in.opcode == 0x85u || in.opcode == 0x8Du || in.opcode == 0x86u ||
+					in.opcode == 0x8Eu || in.opcode == 0x84u || in.opcode == 0x8Cu ||
+					in.opcode == 0x87u || in.opcode == 0x8Fu;
+				if (has_operand(in) && !n2a_store_op &&
+				    (info.mode == AddrMode::Zp || info.mode == AddrMode::Abs)) {
+					const char* reg = nullptr;
+					if (in.opcode == 0xA5u || in.opcode == 0xADu) {
+						reg = "cpu.A";
+					} else if (in.opcode == 0xA6u || in.opcode == 0xAEu) {
+						reg = "cpu.X";
+					} else if (in.opcode == 0xA4u || in.opcode == 0xACu) {
+						reg = "cpu.Y";
+					}
+					if (reg != nullptr) {
+						emit_fact_assume(out, in.operand, eng::util::StringView(reg));
+						if (in.opcode == 0xA5u || in.opcode == 0xADu) {
+							// VSA intra-bloque (`LDA #c; STA a; LDA a`).
+							for (int k = 0; k < vsa_n; ++k) {
+								if (vsa_addr[k] == in.operand) {
+									out.append("    N2A_ASSUME(cpu.A == 0x");
+									out.append_hex(vsa_val[k], 2u, true);
+									out.append(");\n");
+									break;
+								}
+							}
+						}
+					} else if (fast_ram_ && in.operand < 0x2000u) {
+						Dyn expr;
+						expr.append("n2a_ram[0x");
+						expr.append_hex(in.operand, 4u, true);
+						expr.append(']');
+						emit_fact_assume(out, in.operand, expr.view());
+					} else {
+						Dyn expr;
+						expr.append("cpu.mem->read(0x");
+						expr.append_hex(in.operand, 4u, true);
+						expr.append(')');
+						emit_fact_assume(out, in.operand, expr.view());
+					}
+				}
 
 				// Actualiza el mapa: LDA #imm guarda el valor; STA zp/abs lo fija.
 				if (in.opcode == 0xA9u) {
