@@ -1308,6 +1308,15 @@ private:
 		out.append(";\nstatic constexpr eng::u8 kMapperKind = ");
 		out.append_s32(mapper_);
 		out.append(";\n\n");
+		// Palabra little-endian (como el 6502) usando palabra del 68000; en big-endian se
+		// intercambian los bytes (`ror.w #8`). Compartido por ambos backends.
+		out.append("[[nodiscard]] static inline eng::u16 n2a_ld16(const eng::u8* p) {\n");
+		out.append("    eng::u16 w; __builtin_memcpy(&w, p, 2u);\n");
+		out.append("#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)\n");
+		out.append("    w = __builtin_bswap16(w);\n#endif\n    return w;\n}\n");
+		out.append("static inline void n2a_st16(eng::u8* p, eng::u16 w) {\n");
+		out.append("#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)\n");
+		out.append("    w = __builtin_bswap16(w);\n#endif\n    __builtin_memcpy(p, &w, 2u);\n}\n\n");
 	}
 
 	/// Con `--fast-ram`, emite la instrucción de **zero-page** con acceso directo a
@@ -1519,6 +1528,165 @@ private:
 		default: out.append("cpu.CMP_impl(cpu.Y, "); rom(); out.append(");"); break;
 		}
 		return true;
+	}
+
+	/// Idioms multibyte **del backend por bloques** (`--chain` + `--fast-ram` +
+	/// `--no-cycles`): mismos patrones que el nativo pero emitiendo sobre `cpu` y el
+	/// puntero `n2a_ram`. Mantiene la semántica de flags del 6502.
+	/// \return `true` si se emitió (y actualizó `next`).
+	[[nodiscard]] bool try_chain_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
+		const auto at = [&](eng::u16 a) -> const Instruction* {
+			return (a < kSpace && has_instr_[a] != 0u) ? &instr_[a] : nullptr;
+		};
+		const Instruction* i0 = at(p);
+		if (i0 == nullptr) {
+			return false;
+		}
+		const Instruction* i1 = at(static_cast<eng::u16>(p + 2u));
+		const Instruction* i2 = at(static_cast<eng::u16>(p + 4u));
+		const Instruction* i3 = at(static_cast<eng::u16>(p + 6u));
+		const bool have4 = (i1 != nullptr && i2 != nullptr && i3 != nullptr);
+		const auto hx = [&](eng::u8 v) {
+			out.append("0x");
+			out.append_hex(v, 2u, true);
+			out.append("u");
+		};
+		const auto ram16 = [&](eng::u8 a) {
+			out.append("n2a_ld16(&n2a_ram[");
+			hx(a);
+			out.append("])");
+		};
+		// Copia 16 bits.
+		if (have4 && i0->opcode == 0xA5u && i1->opcode == 0x85u && i2->opcode == 0xA5u &&
+		    i3->opcode == 0x85u) {
+			const eng::u8 a = static_cast<eng::u8>(i0->operand);
+			const eng::u8 c = static_cast<eng::u8>(i1->operand);
+			if (static_cast<eng::u8>(i2->operand) == static_cast<eng::u8>(a + 1u) &&
+			    static_cast<eng::u8>(i3->operand) == static_cast<eng::u8>(c + 1u)) {
+				out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &n2a_ram[");
+				hx(a);
+				out.append("], 2u); __builtin_memcpy(&n2a_ram[");
+				hx(c);
+				out.append("], &n2a_w, 2u); cpu.A = n2a_ram[");
+				hx(static_cast<eng::u8>(a + 1u));
+				out.append("]; cpu.set_nz(cpu.A); }\n");
+				next = static_cast<eng::u16>(p + 8u);
+				return true;
+			}
+		}
+		// Constante 16 bits.
+		if (have4 && i0->opcode == 0xA9u && i1->opcode == 0x85u && i2->opcode == 0xA9u &&
+		    i3->opcode == 0x85u) {
+			const eng::u8 k0 = static_cast<eng::u8>(i0->operand);
+			const eng::u8 c = static_cast<eng::u8>(i1->operand);
+			const eng::u8 k1 = static_cast<eng::u8>(i2->operand);
+			if (static_cast<eng::u8>(i3->operand) == static_cast<eng::u8>(c + 1u)) {
+				out.append("    n2a_ram[");
+				hx(c);
+				out.append("] = ");
+				hx(k0);
+				out.append("; n2a_ram[");
+				hx(static_cast<eng::u8>(c + 1u));
+				out.append("] = ");
+				hx(k1);
+				out.append("; cpu.A = ");
+				hx(k1);
+				out.append("; cpu.set_nz(cpu.A);\n");
+				next = static_cast<eng::u16>(p + 8u);
+				return true;
+			}
+		}
+		// Comparación 16 bits.
+		if (have4 && i0->opcode == 0xA5u && (i1->opcode == 0xC9u || i1->opcode == 0xC5u) &&
+		    i2->opcode == 0xA5u && (i3->opcode == 0xE9u || i3->opcode == 0xE5u)) {
+			const eng::u8 a = static_cast<eng::u8>(i0->operand);
+			const bool imm1 = (i1->opcode == 0xC9u);
+			const bool imm2 = (i3->opcode == 0xE9u);
+			if (static_cast<eng::u8>(i2->operand) == static_cast<eng::u8>(a + 1u) &&
+			    imm1 == imm2) {
+				out.append("    { const eng::u16 n2a_a = ");
+				ram16(a);
+				out.append("; const eng::u16 n2a_b = ");
+				if (imm1) {
+					const eng::u16 k =
+						static_cast<eng::u16>(static_cast<eng::u8>(i1->operand)) |
+						(static_cast<eng::u16>(static_cast<eng::u8>(i3->operand)) << 8u);
+					out.append("0x");
+					out.append_hex(k, 4u, true);
+					out.append("u");
+				} else {
+					ram16(static_cast<eng::u8>(i1->operand));
+				}
+				out.append("; const eng::u16 n2a_d = static_cast<eng::u16>(n2a_a - n2a_b); cpu.A = static_cast<eng::u8>(n2a_d >> 8u); cpu.C = (n2a_a >= n2a_b); cpu.Z = (cpu.A == 0u); cpu.N = ((cpu.A & 0x80u) != 0u); }\n");
+				next = static_cast<eng::u16>(p + 8u);
+				return true;
+			}
+		}
+		// Suma/resta 16 bits (7 instrucciones: SEC/CLC; LDA; ADC/SBC; STA; …).
+		if (i0->opcode == 0x18u || i0->opcode == 0x38u) {
+			const auto nx = [&](eng::u16 a) {
+				return static_cast<eng::u16>(a + kOpcodeTable[instr_[a].opcode].size);
+			};
+			const eng::u16 p1 = nx(p);
+			const Instruction* j1 = at(p1);
+			if (j1 != nullptr && j1->opcode == 0xA5u) {
+				const eng::u8 a = static_cast<eng::u8>(j1->operand);
+				const eng::u16 p2 = nx(p1);
+				const eng::u16 p3 = nx(p2);
+				const eng::u16 p4 = nx(p3);
+				const eng::u16 p5 = nx(p4);
+				const eng::u16 p6 = nx(p5);
+				const Instruction* j2 = at(p2);
+				const Instruction* j3 = at(p3);
+				const Instruction* j4 = at(p4);
+				const Instruction* j5 = at(p5);
+				const Instruction* j6 = at(p6);
+				const bool add = (i0->opcode == 0x18u);
+				const eng::u8 op_lo = add ? 0x69u : 0xE9u;
+				const eng::u8 op_zp = add ? 0x65u : 0xE5u;
+				if (j2 != nullptr && (j2->opcode == op_lo || j2->opcode == op_zp) &&
+				    j3 != nullptr && j3->opcode == 0x85u && j4 != nullptr &&
+				    j4->opcode == 0xA5u &&
+				    static_cast<eng::u8>(j4->operand) == static_cast<eng::u8>(a + 1u) &&
+				    j5 != nullptr && (j5->opcode == op_lo || j5->opcode == op_zp) &&
+				    j6 != nullptr && j6->opcode == 0x85u) {
+					const eng::u8 c = static_cast<eng::u8>(j3->operand);
+					const bool imm0 = (j2->opcode == op_lo);
+					const bool imm1 = (j5->opcode == op_lo);
+					const bool zp_ok = imm0 || (static_cast<eng::u8>(j5->operand) ==
+								    static_cast<eng::u8>(static_cast<eng::u8>(j2->operand) + 1u));
+					if (imm0 == imm1 && zp_ok &&
+					    static_cast<eng::u8>(j6->operand) == static_cast<eng::u8>(c + 1u)) {
+						out.append("    { const eng::u16 n2a_x = ");
+						ram16(a);
+						out.append("; const eng::u16 n2a_y = ");
+						if (imm0) {
+							const eng::u16 k =
+								static_cast<eng::u16>(static_cast<eng::u8>(j2->operand)) |
+								(static_cast<eng::u16>(static_cast<eng::u8>(j5->operand)) << 8u);
+							out.append("0x");
+							out.append_hex(k, 4u, true);
+							out.append("u");
+						} else {
+							ram16(static_cast<eng::u8>(j2->operand));
+						}
+						out.append("; const eng::u8 n2a_ah = static_cast<eng::u8>(n2a_x >> 8u), n2a_bh = static_cast<eng::u8>(n2a_y >> 8u);");
+						if (add) {
+							out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) + n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&n2a_ram[");
+							hx(c);
+							out.append("], n2a_r); cpu.C = (n2a_s > 0xFFFFu); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_bh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
+						} else {
+							out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) - n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&n2a_ram[");
+							hx(c);
+							out.append("], n2a_r); cpu.C = (n2a_x >= n2a_y); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u), n2a_nbh = static_cast<eng::u8>(~n2a_bh); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_nbh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
+						}
+						next = nx(p6);
+						return true;
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	/// Traduce una instrucción a una o varias líneas de C++.
@@ -2176,6 +2344,16 @@ private:
 				// Solo con el perfil Amiga encadenado (`--chain`); sin él se mantiene
 				// el comportamiento exacto anterior (host/tests).
 				cur_nz_live_ = !(chain_ && nz_dead_after(start, pc));
+				// Idioms multibyte (copia/const/compare/ADD/SUB 16 bits).
+				if (chain_ && fast_ram_ && no_cycles_) {
+					eng::u16 nmp = pc;
+					if (try_chain_multibyte(out, pc, nmp)) {
+						pc = nmp;
+						a_known = false;
+						vsa_n = 0;
+						continue;
+					}
+				}
 				emit_one_instruction(out, in, start);
 
 				// Actualiza el mapa: LDA #imm guarda el valor; STA zp/abs lo fija.
@@ -2298,15 +2476,6 @@ private:
 		out.append("    if (a < 0x2000u) { m.ram[a & 0x7FFu] = v; return; }\n");
 		out.append("    if (a < 0x4020u) { if (m.io_write != nullptr) { m.io_write(m, a, v); } return; }\n");
 		out.append("    if (a >= 0x6000u && a < 0x8000u) { m.wram[a - 0x6000u] = v; return; }\n}\n");
-		// Palabra little-endian (como el 6502) usando palabra del 68000: en big-endian se
-		// intercambian los bytes (el 68000 tiene `ror.w #8`); en little-endian es directo.
-		out.append("[[nodiscard]] static inline eng::u16 n2a_ld16(const eng::u8* p) {\n");
-		out.append("    eng::u16 w; __builtin_memcpy(&w, p, 2u);\n");
-		out.append("#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)\n");
-		out.append("    w = __builtin_bswap16(w);\n#endif\n    return w;\n}\n");
-		out.append("static inline void n2a_st16(eng::u8* p, eng::u16 w) {\n");
-		out.append("#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)\n");
-		out.append("    w = __builtin_bswap16(w);\n#endif\n    __builtin_memcpy(p, &w, 2u);\n}\n");
 		out.append("static N2A_State g_st;\nstatic N2A_Bus g_bus;\n");
 		out.append("/// Hook que el runtime fija para resolver eventos (VBlank/NMI) al ceder el\n");
 		out.append("/// codigo nativo. Si es `nullptr`, `game_main` termina en la primera cesion.\n");

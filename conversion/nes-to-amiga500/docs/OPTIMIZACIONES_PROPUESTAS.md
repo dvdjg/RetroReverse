@@ -241,7 +241,13 @@ La ROM de prueba `--emit-multibyte-rom` ahora cubre todo eso (check en `run.sh`)
 > los NROM del repo: **todos** los demás usan `JMP (ind)`, que no se puede forzar de forma segura (ver
 > abajo). `--best` los manda al backend por bloques (perfil Amiga optimizado), que es correcto.
 
-> **`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
+> **Backend por bloques (`--chain`).** Los idioms **sin ramas** (copia/const/compare/ADD/SUB 16 bits) se
+aplican también en el backend por bloques (`--amiga`), emitiendo sobre `cpu`/`n2a_ram`, para que los
+juegos que caen al fallback (Pac-Man, SMB…) se beneficien. `INC/DEC` de 16 bits (cruzan el `BNE`) de
+momento **solo en el nativo**. Cobertura medida: el patrón es estrecho (en SMB no aparece ninguno de
+los 5 exactos), así que la ganancia depende del juego.
+
+**`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
 regiones no se pueden entrar por el medio sin duplicar cada bloque como función (que es justo el
 codegen por bloques). Un despachador nativo a **entradas de región** sería **parcialmente incorrecto**
 (fallaría en targets internos). Por eso `--best` **cae al codegen por bloques** (con el perfil Amiga
