@@ -26,6 +26,14 @@ unsigned long g_fallback = 0;    ///< Instrucciones que caen al intérprete.
 unsigned long g_undecoded = 0;   ///< Caídas por dirección no decodificada (no por opcode).
 unsigned long g_ram = 0;         ///< Instrucciones ejecutadas en RAM (`$0000-$7FFF`).
 
+/// Secuencia de **inyección de entrada** (`N2A_INPUT=1`): pulsaciones del mando 1 (bit por
+/// botón), 8 frames cada una, para que el juego avance de menús al gameplay y la traza
+/// (`--pc-trace`/`--ind-targets`) cubra más código. Orden NES: A=01,B=02,Select=04,
+/// Start=08,Up=10,Down=20,Left=40,Right=80.
+constexpr eng::u8 kInputSeq[] = {0x00u, 0x08u, 0x00u, 0x01u, 0x00u, 0x08u, 0x02u, 0x00u,
+				 0x10u, 0x20u, 0x40u, 0x80u};
+bool g_input = false; ///< `true` si `N2A_INPUT` está activo.
+
 /// Hook que envuelve `FastCpu::step` para contar cobertura por opcode.
 int counting_step(void* ctx, n2a::CPU& cpu, n2a::NESMemory& mem) {
 	const eng::u16 pc = cpu.PC;
@@ -69,6 +77,7 @@ bool write_hot_facts(const char* path, const n2a::FastCpu& fc) {
 int main(int argc, char** argv) {
 	if (argc < 2) {
 		std::printf("uso: opcode_hist <rom.nes> [frames] [top] [hot-facts.txt]\n");
+		std::printf("     N2A_INPUT=1 inyecta pulsaciones del mando (mas cobertura)\n");
 		return 1;
 	}
 	const int frames = (argc > 2) ? std::atoi(argv[2]) : 300;
@@ -89,7 +98,12 @@ int main(int argc, char** argv) {
 	sys.fast_ctx = &fast;
 	sys.fast_step = &counting_step;
 
+	g_input = (std::getenv("N2A_INPUT") != nullptr);
 	for (int i = 0; i < frames; ++i) {
+		if (g_input) {
+			sys.pad1 = kInputSeq[(static_cast<unsigned>(i) / 8u) %
+					     (sizeof kInputSeq / sizeof kInputSeq[0])];
+		}
 		sys.run_frame();
 	}
 

@@ -40,6 +40,14 @@ struct IndPair {
 IndPair g_pairs[16384]; ///< Pares únicos observados.
 unsigned g_n = 0;       ///< Nº de pares únicos.
 unsigned g_max = 8192;  ///< Límite de pares (argumento opcional).
+
+/// Secuencia de **inyección de entrada** (`N2A_INPUT=1`): pulsaciones del mando 1 (bit por
+/// botón) que se mantienen 8 frames cada una, para que el juego avance de menús al gameplay
+/// y la traza cubra más código/saltos indirectos. `0` = sin pulsar. Orden NES estándar:
+/// A=`01`, B=`02`, Select=`04`, Start=`08`, Up=`10`, Down=`20`, Left=`40`, Right=`80`.
+constexpr eng::u8 kInputSeq[] = {0x00u, 0x08u, 0x00u, 0x01u, 0x00u, 0x08u, 0x02u, 0x00u,
+				 0x10u, 0x20u, 0x40u, 0x80u};
+bool g_input = false; ///< `true` si `N2A_INPUT` está activo.
 unsigned long g_sites_seen = 0; ///< `JMP ($zp)` ejecutados en total.
 bool g_overflow = false;        ///< Se alcanzó `g_max` y no se guardaron más.
 
@@ -97,6 +105,7 @@ bool write_ind(const char* path) {
 int main(int argc, char** argv) {
 	if (argc < 3) {
 		std::printf("uso: ind_targets <rom.nes> <salida.txt> [frames=300] [max_pares=8192]\n");
+		std::printf("     N2A_INPUT=1 inyecta pulsaciones del mando (mas cobertura)\n");
 		return 2;
 	}
 	const int frames = (argc > 3) ? std::atoi(argv[3]) : 300;
@@ -106,6 +115,7 @@ int main(int argc, char** argv) {
 			g_max = static_cast<unsigned>(m);
 		}
 	}
+	g_input = (std::getenv("N2A_INPUT") != nullptr);
 
 	n2a::LoadedRom rom;
 	n2a::NesSystem sys;
@@ -123,6 +133,10 @@ int main(int argc, char** argv) {
 	sys.fast_step = &hook_step;
 
 	for (int i = 0; i < frames; ++i) {
+		if (g_input) {
+			sys.pad1 = kInputSeq[(static_cast<unsigned>(i) / 8u) %
+					     (sizeof kInputSeq / sizeof kInputSeq[0])];
+		}
 		sys.run_frame();
 	}
 

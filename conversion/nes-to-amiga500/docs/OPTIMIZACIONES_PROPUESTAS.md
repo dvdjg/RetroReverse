@@ -261,6 +261,12 @@ decodifica. Medido en SMB: **1075 → 5622 instrucciones** (395 → 1723 bloques
 (ese código pasaba antes por el intérprete; ahora corre en el backend rápido). Es la vía **robusta y
 data-driven** para el techo de cobertura.
 
+**Ampliar la traza con inyección de entrada (`N2A_INPUT=1`) — hecho.** `opcode_hist` e `ind_targets`
+inyectan pulsaciones del mando (A/B/Start/cruceta, 8 frames cada una) para que el juego avance de
+menús al gameplay y la traza cubra más estados. Medido (300 frames): SMB PCs ejecutados
+2245 → **2736**; Pac-Man 512 → **1771**; DK 584 → **678**. En SMB los destinos indirectos suben
+27 → **32**. Mejora directa de la cobertura del backend por bloques (menos *fallback* al intérprete).
+
 **Hechos de valor (`--facts`) y `N2A_ASSUME`: dos correcciones + límite medido.** (1) El macro solo
 cubría `__builtin_assume` (MSVC/Clang); el **g++ 15.1 de m68k no expone ese builtin**, así que caía a
 *no-op*: ni el VSA ni los hechos cambiaban nada en el binario final (el host, que sí lo tiene, lo
