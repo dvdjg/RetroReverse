@@ -93,6 +93,10 @@ retardos, copias, render), no solo escrituras.
 
 ## 6. Backend nativo estilo descompilador (`--native`) — prototipo medido
 
+> **Reproducir:** `tools/transpiler/tests/gen_amiga_exp.sh [rom.nes]` transpila con `--amiga`,
+> `--native` y `--best`, compila a 68000 y ejecuta el arnés de frames; deja las salidas en
+> `transpiled/amiga-exp/` (gitignored). Ver su `README.md`.
+
 Motivación: las **micro-optimizaciones** del codegen por bloques compiten con el optimizador global
 de g++. Se probó el enfoque contrario: generar **C++ como un descompilador** para que sea g++ quien
 optimice.
