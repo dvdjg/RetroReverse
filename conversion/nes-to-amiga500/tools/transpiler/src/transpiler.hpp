@@ -184,6 +184,13 @@ public:
 		if (irq_ >= 0x8000u) {
 			push_work(irq_);
 		}
+		// Entradas extra de telemetría (PC ejecutados): completan el CFG en saltos
+		// indirectos. No aplican a PRG bancada (la ventana conmutable se analiza aparte).
+		if (!prg_banked_) {
+			for (eng::usize i = 0; i < extra_entries_.size(); ++i) {
+				push_work(extra_entries_[i]);
+			}
+		}
 		run_worklist();
 	}
 
@@ -588,6 +595,13 @@ public:
 	/// \param f Hecho a añadir (se copia).
 	void add_fact(const Fact& f) { (void)facts_.push_back(f); }
 
+	/// Añade un **punto de entrada** extra al desensamblado (p. ej. los PC ejecutados
+	/// observados por telemetría: `opcode_hist ... <hot.txt>`). Completa el CFG cuando
+	/// el análisis estático no puede seguir un salto indirecto/tabla. Llamar **antes**
+	/// de `disassemble()`; se ignora en PRG bancada (solo ventana fija).
+	/// \param a Dirección 6502 de inicio de código (`$8000-$FFFF`).
+	void add_entry_point(eng::u16 a) { (void)extra_entries_.push_back(a); }
+
 	/// Con `true`, **no** se emite la contabilidad de ciclos (`cpu.cycles += N`) ni
 	/// las penalizaciones de página/rama. Para destinos sin PPU ciclo-exacta
 	/// (Amiga/`--release`), donde los ciclos solo agobian al 68000.
@@ -731,6 +745,7 @@ private:
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> fallin_ {};        ///< Continuación del bloque previo.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> visited_ {};       ///< Direcciones ya desensambladas.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> worklist_ {};     ///< Pila de puntos de entrada.
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> extra_entries_ {}; ///< Entradas extra (telemetría de PC).
 	eng::util::Vector<Fact, eng::util::HeapAlloc> facts_ {};            ///< Hechos de valores (ver `add_fact`).
 
 	eng::usize count_ = 0;       ///< Instrucciones decodificadas.

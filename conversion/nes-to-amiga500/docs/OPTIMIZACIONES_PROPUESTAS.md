@@ -253,6 +253,14 @@ instrucción de otro bloque sin fusionarlos (que es lo que hace el nativo con et
 > para la mayoría de juegos es **descodificar más CFG** (saltos indirectos / tablas), no añadir
 > patrones.
 
+**Completar el CFG con telemetría de PC (`--pc-trace`) — hecho.** En vez de heurísticas frágiles de
+tablas de salto, se ejecuta la ROM (oráculo/`opcode_hist`) y se vuelca el **conjunto de PC
+ejecutados** (`hot <addr> <n>`, ya existente). El transpilador los usa como **puntos de entrada** del
+desensamblado (`add_entry_point`), de modo que el código alcanzado **solo por saltos indirectos** se
+decodifica. Medido en SMB: **1075 → 5622 instrucciones** (395 → 1723 bloques) y `.text` **94 → 296 KB**
+(ese código pasaba antes por el intérprete; ahora corre en el backend rápido). Es la vía **robusta y
+data-driven** para el techo de cobertura.
+
 **Tablas ROM → datos precomputados (HLE).** Evaluado: identificar tablas usadas (por acceso
 `abs,X`/`(zp),Y` a ROM) y **volcarlas ya transformadas** es un reconocimiento por juego (el transpilador
 no conoce la semántica de la tabla) y suele requerir HLE específico; no es un idiom genérico.

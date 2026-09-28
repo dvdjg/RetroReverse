@@ -432,6 +432,55 @@ bool g_chain = false;
 bool g_rom_direct = false;
 bool g_native = false;
 bool g_best = false;
+const char* g_pc_trace = nullptr; ///< Fichero de PC ejecutados (`--pc-trace`) para completar el CFG.
+
+/// Carga una **traza de PC** (`--pc-trace`): direcciones 6502 ejecutadas, en el formato
+/// de `opcode_hist ... <hot.txt>` (`hot <addr> <n>`) o una dirección por línea. Añade
+/// como **puntos de entrada** las direcciones con ejecuciones > 0, completando el CFG
+/// donde el análisis estático no puede seguir un salto indirecto/tabla.
+/// \return `true` si se leyó el fichero.
+bool load_pc_trace(const char* path, n2a::Transpiler& tp) {
+	ByteBuffer buf;
+	if (!n2a::read_whole_file(path, buf)) {
+		return false;
+	}
+	StringView text(reinterpret_cast<const char*>(buf.data()), buf.size());
+	eng::u32 count = 0u;
+	while (!text.empty()) {
+		const eng::usize nl = text.find('\n');
+		StringView line = (nl == StringView::npos) ? text : text.substr(0u, nl);
+		text = (nl == StringView::npos) ? StringView {} : text.substr(nl + 1u);
+		skip_ws(line);
+		if (line.empty() || line[0] == '#') {
+			continue;
+		}
+		StringView tok = next_token(line);
+		if (tok == "hot") {
+			tok = next_token(line);
+		}
+		eng::u16 addr = 0;
+		if (!parse_hex(tok, addr)) {
+			continue;
+		}
+		bool used = true;
+		if (!line.empty()) {
+			eng::u32 n = 0;
+			if (parse_hex32(next_token(line), n)) {
+				used = (n > 0u);
+			}
+		}
+		if (used && addr >= 0x8000u) {
+			tp.add_entry_point(addr);
+			++count;
+		}
+	}
+	Dyn msg;
+	msg.append("--pc-trace: ");
+	msg.append_u32(count);
+	msg.append(" puntos de entrada");
+	n2a::out_line(msg.view());
+	return true;
+}
 
 /// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
 bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
@@ -466,6 +515,9 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_rom_direct(g_rom_direct);
 	tp.set_native(g_native);
 	tp.set_best(g_best);
+	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
+		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
+	}
 	tp.disassemble();
 	tp.build_basic_blocks();
 	if (facts != nullptr && !load_facts(facts, tp)) {
@@ -792,6 +844,10 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--facts" && i + 1 < argc) {
 			facts_path = argv[++i];
+			continue;
+		}
+		if (arg == "--pc-trace" && i + 1 < argc) {
+			g_pc_trace = argv[++i];
 			continue;
 		}
 		if (arg == "--emit-lib") {
