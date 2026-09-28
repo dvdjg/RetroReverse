@@ -91,6 +91,50 @@ retardos, copias, render), no solo escrituras.
 
 ---
 
+## 6. Backend nativo estilo descompilador (`--native`) — prototipo medido
+
+Motivación: las **micro-optimizaciones** del codegen por bloques compiten con el optimizador global
+de g++. Se probó el enfoque contrario: generar **C++ como un descompilador** para que sea g++ quien
+optimice.
+
+**Qué emite `--native`** (solo PRG fija y sin opcodes indirectos/ilegales):
+
+- **Una función C++ por REGIÓN** (entrada = `reset`/NMI/IRQ/`JSR`), con BFS por aristas estáticas y
+  control de flujo con `goto`. Los `JSR` son llamadas C; los `RTS`, retornos.
+- **Estado del 6502 en variables locales** (`a/x/y/sp`, `c/z/n/v/d/i`), no en un `struct` compartido
+  con métodos opacos.
+- **ROM como literales/array `constexpr`**: `LDA $C1EB` → `0x07`; `LDA $tabla,X` → `PRG_ROM[(0x… + x)
+  & (kPrgSize-1)]`. Sin `read` ni `%`.
+- Memoria por `n2a_read`/`n2a_write` (stats `inline`, con hooks de E/S); g++ los inlinea y pliega el
+  rango para direcciones constantes.
+- Entradas exportadas `game_main`/`n2a_nmi`/`n2a_irq` (`[[gnu::used]]`).
+
+**Resultados (DK, GCC 15.1.0, `-m68000 -O3 -nostdlib`):**
+
+| Backend | `.text` |
+|---|---:|
+| Por bloques (`--amiga`) | ~299 KB |
+| **Nativo `--native`** | **76 KB** |
+
+g++ **inlinea toda la región** en sus llamadores y elimina redundancia; el código sale **~4× más
+pequeño** y sin el doble tráfico de estado. **Equivalencia host verificada** en `mini`/`branch`/`vsa`
+(loops, `JSR`/`RTS`, `ADC`, ramas) con el mismo estado final que el codegen por bloques.
+
+**Caveats (lo que falta):**
+
+- Sin **cesión por evento**: un bucle de espera de VBlank/NMI (`LDA $2002`/`JMP self`) se queda en
+  bucle. Hay que integrar `cpu.yield`/scheduler (como en el perfil `--chain`).
+- El runtime debe llamar a `n2a_nmi`/`n2a_irq` y sincronizar `N2A_State`/`N2A_Bus`.
+- Los mappers **bancados** y los **ilegales/`JMP (ind)`** caen al codegen por bloques (`native_ok()`).
+- Medición de **ciclos** pendiente (el estimador mapea `bb_*`, no etiquetas nativas): usar el
+  simulador de ciclos 68000.
+
+**Conclusión:** el enfoque descompilador **es viable y prometedor** (deja el trabajo global a g++).
+El siguiente paso es dotarlo de cesión por evento y medir 1:1; la vía de micro-optimizaciones
+(`--amiga`) queda como la alternativa de bajo riesgo.
+
+---
+
 ## Orden recomendado
 
 1. **Runtime/kernel en asm** del bucle caliente (PRNG) — máximo retorno inmediato, riesgo contenido.
