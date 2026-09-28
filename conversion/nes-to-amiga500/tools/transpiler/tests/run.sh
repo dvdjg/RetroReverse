@@ -95,7 +95,48 @@ compile_generated vsa 'int main() {
 	return (g_state.cpu.A == 0x2Au) ? 0 : 1;
 }'
 
-echo "[6/6] benchmark codegen vs interprete vs ejecutor rapido"
+echo "[6/7] perfil --amiga (chain+liveness+yield+ROM/ZP directas): equivalencia host"
+# El codigo de `--amiga` (bloques encadenados, lectura directa de ROM/ZP, helper de
+# desplazamiento multibyte con fallback portable y cesion `cpu.yield`) debe dar el
+# **mismo estado final** que la version base. Se comprueba en host con las mismas ROM.
+compile_amiga() {  # $1 = nombre del caso; $2 = cuerpo del main de comprobacion
+	local name="$1"
+	"$BIN" "$GEN/$name.nes" --amiga -o "$GEN/${name}_amiga.cpp"
+	cat > "$TMP/${name}_amiga_check.cpp" <<EOF
+#define N2A_NO_HOST_MAIN
+#include "$GEN/${name}_amiga.cpp"
+$2
+EOF
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$TMP/${name}_amiga_check.cpp" -o "$TMP/${name}_amiga_check"
+	"$TMP/${name}_amiga_check"
+}
+compile_amiga mini 'int main() {
+	game_main();
+	return (g_state.cpu.X == 1u && g_state.cpu.A == 0x23u && g_state.mem.ram[0] == 0x23u) ? 0 : 1;
+}'
+compile_amiga branch 'int main() {
+	game_main();
+	const bool ok = (g_state.cpu.A == 5u) && (g_state.cpu.X == 5u) &&
+			(g_state.mem.ram[0x10] == 5u) && (g_state.mem.ram[0] == 0u);
+	return ok ? 0 : 1;
+}'
+compile_amiga misc 'int main() {
+	game_main();
+	const bool ok = (g_state.cpu.A == 0x55u) && (g_state.cpu.X == 0u) &&
+			(g_state.mem.ram[0x10] == 0x40u) && (g_state.mem.ram[0x20] == 0x06u) &&
+			(g_state.mem.ram[0x40] == 0x55u);
+	return ok ? 0 : 1;
+}'
+compile_amiga vsa 'int main() {
+	game_main();
+	return (g_state.cpu.A == 0x2Au) ? 0 : 1;
+}'
+
+echo "[7/8] helpers rapidos del runtime (equivalencia n2a_ror_run/n2a_rol_run)"
+"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$ROOT/tests/fastops_test.cpp" -o "$TMP/fastops_test"
+"$TMP/fastops_test"
+
+echo "[8/8] benchmark codegen vs interprete vs ejecutor rapido"
 bash "$ROOT/tests/bench_codegen.sh"
 
 echo "TEST OK"
