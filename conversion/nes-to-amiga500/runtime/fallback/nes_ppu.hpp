@@ -460,6 +460,7 @@ struct Ppu {
 				(void)nt_off;
 				eng::u8 attr = attr_bits(nt_base, cx, cy);
 				eng::u16 pat = static_cast<eng::u16>(bg_base + tile * 16u + fine_y);
+				bool ex_direct = false; ///< `pat` ya es una dirección **absoluta** (modo ExRAM).
 				// Modo atributo extendido de la MMC5 ($5104 = 1): el atributo (paleta
 				// en bits 6-7) y el banco CHR (bits 0-5, 4 KB) salen de la ExRAM en el
 				// offset de la nametable. No se aplica dentro del tile del split vertical
@@ -472,6 +473,9 @@ struct Ppu {
 					const eng::u16 bank4k = static_cast<eng::u16>(
 						((ex & 0x3Fu) | (static_cast<eng::u16>(ext_attr_upper) << 6u)));
 					pat = static_cast<eng::u16>((bank4k << 12u) | (pat & 0x0FFFu));
+					// El banco lo elige la ExRAM como dirección **absoluta** en la ROM:
+					// NO se reaplica el banking `$5120` (mesen `GetExAttributeTileData`).
+					ex_direct = true;
 				}
 				const int bit = 7 - fine_x;
 				eng::u8 color;
@@ -491,8 +495,10 @@ struct Ppu {
 					}
 					value = tile_provider->color(enhance::TileSpace::Bg, attr, color);
 				} else {
-					const eng::u8 p0 = chr_byte(pat);
-					const eng::u8 p1 = chr_byte(static_cast<eng::u16>(pat + 8u));
+					const eng::u8 p0 = ex_direct ? chr_direct(pat) : chr_byte(pat);
+					const eng::u8 p1 = ex_direct
+								   ? chr_direct(static_cast<eng::u16>(pat + 8u))
+								   : chr_byte(static_cast<eng::u16>(pat + 8u));
 					color = static_cast<eng::u8>(((p0 >> bit) & 1u) | (((p1 >> bit) & 1u) << 1u));
 					value = (color == 0u)
 							? universal
@@ -635,6 +641,20 @@ private:
 		if (chr_read != nullptr) {
 			return chr_read(chr_ctx, off);
 		}
+		if (chr != nullptr && chr_size != 0u) {
+			return chr[off % chr_size];
+		}
+		if (chr_ram != nullptr) {
+			return chr_ram[off & 0x1FFFu];
+		}
+		return 0u;
+	}
+	/// Lectura **cruda** de la CHR ROM/RAM, **sin** el banking del mapper. La usa el modo
+	/// atributo extendido de la MMC5 (`$5104 = 1`): ahí el banco de 4 KB lo elige la ExRAM
+	/// como dirección **absoluta** en la ROM (`chrBank = (exram & $3F) | ($5130 << 6)`), y
+	/// mesen lee `_chrRom[(chrBank << 12) + (chrAddr & $FFF)]` sin pasar por `$5120`
+	/// (`MMC5::GetExAttributeTileData`). \param off Dirección absoluta en la CHR.
+	eng::u8 chr_direct(eng::u16 off) const {
 		if (chr != nullptr && chr_size != 0u) {
 			return chr[off % chr_size];
 		}

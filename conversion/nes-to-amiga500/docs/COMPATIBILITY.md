@@ -81,7 +81,7 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
 | Nobunaga's Ambition II | 5 (MMC5) | 0.6% |
 | Esper Dream 2 | 26 (VRC6b) | **100.0%** |
 | Mouryou Senki Madara | 26 (VRC6b) | **99.9%** |
-| Uncharted Waters | 5 (MMC5) | **45.8%** |
+| Uncharted Waters | 5 (MMC5) | 0.2% |
 
 ## Lectura
 
@@ -100,8 +100,8 @@ Importados con `bash runtime/test/import-dificiles.sh` (de `roms/nes/dificiles/*
 - **BUGS NUEVOS destapados** (frames completamente distintos a `mesen`):
   - **Esper Dream 2 (VRC6b/26): 100.0%** y **Mouryou Senki Madara (VRC6b/26): 99.9%** → la variante
     **VRC6b** pinta mal (probable bug de detección/mapeo de la variante 26, o CHR/nametable).
-  - **Uncharted Waters (MMC5/5): 45.8%** → MMC5 diverge de forma notoria; investigar (¿PRG-RAM de
-    512 KB, o CHR de 128 KB, o split?).
+  - ~~**Uncharted Waters (MMC5/5): 45.8%**~~ → **RESUELTO a 0.2%**: era el **CHR del fondo en el modo
+    atributo extendido de ExRAM** (`$5104=1`), no un problema de PRG-RAM/split (ver sección MMC5).
 - **4 juegos 0.3–92%** (ic 92.2%, metalstorm 14.2%, gradius 3.3%, smb 3.1%): el **límite de timing**
   `$2002`/NMI (ver [`RISKS.md`](RISKS.md), [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md)). Con el baseline
   corregido, **galaga y pacman ya NO están aquí** (0.9% / 0.3%): el límite afecta al **estado de CPU**
@@ -137,30 +137,22 @@ Pendientes reales (2026, tras la matriz corregida):
 - **Nametables por CHR ROM de la VRC6** (`$B003` bit 4): implementadas (mesen `VRC6.h::UpdatePpuBanking`)
   por completitud, aunque **ninguna ROM del catálogo las usa** (Esper Dream 2 tiene `bit4=0`); sin
   regresión en Akumajou (2.7% estructura).
-- **MMC5 (5)**: **Uncharted Waters 45.8%**. Investigado 2026 a fondo (histograma de color + estado):
-  - **`mesen`** pinta **casi todo negro** (59 377 px) + logo rojo pequeño; **nosotros** el centro/esquina
-    **sí** son negros (`fb=0F`) pero hay **~41 000 px no-negros repartidos por toda la pantalla**
-    (bbox x[1..255] y[0..239]) en lugar del logo pequeño.
-  - **Hipótesis descartadas** (medidas): (a) **modo atributo extendido de ExRAM** — implementado, diff
-    igual sin él; (b) **reloj de bus cycle-exact** — no cambia; (c) **selector `chrA` de CHR de la MMC5**
-    — implementado (correcto según mesen, sprites 8×16 → bancos 8-11), pero Uncharted tiene `$2000`
-    bit5=0 (8×8) → no aplica.
-  - La nametable (CIRAM) es **~965× tile 0** (bytes 0 = fondo) → debería salir negro; hay **56 tiles
-    distintos** en ~59 posiciones. El render pinta de más donde `mesen` pinta negro.
-  - **Dos problemas distintos (2026)**:
-    - **Timing (traza)**: con el harness corregido (`--det 0`: la comprobación de determinismo hacía
-      `save_state`/`load_state` y **rebobinaba** el core → varias pasadas), `trace_diff` a 40 frames da
-      **sin divergencia de camino**; el único evento real es un re-sync `O+7944` en el bucle
-      `$F506-$F50F` (`STA $2000/$2001` + `BIT $2002`/`BPL`): mesen ve VBlank, el oráculo **no** → gira
-      ~1 frame extra. **Misma** limitación de VBlank que ic/galaga/metalstorm (ver TIMING_ROADMAP.md).
-      El intento de arreglo (VBlank en `(241,1)` + quirk `_preventVblFlag`) mejoró la traza pero
-      **regresó** blastermaster/jurassicpark → **revertido**.
-    - **Render (el 45.8% del frame)** — **NO es timing** (el frame no cambió con el intento). Comparando
-      los PNG: mesen = negro + logo rojo **KOEI**; el oráculo = **patrón rojo repetido** por toda la
-      pantalla (¡tile 0 dibuja un patrón!) + el logo distorsionado. La nametable coincide (tile 0 en
-      ~965 celdas), así que el fallo es de **CHR/patrón del fondo** (banking MMC5: al frame 60
-      `modo=3 chrA=1 bancos=[6,6,6,7,6,6,6,6,0,0,0,0]`). **Siguiente**: comparar la página CHR
-      efectiva del fondo con mesen (dump `RRS1` extendido a CHR).
+- **MMC5 (5)**: **Uncharted Waters — RESUELTO a 0.2% (2026)**. El 45.8% era un bug de **CHR del fondo
+  en el modo atributo extendido de ExRAM** (`$5104 = 1`, que Uncharted usa):
+  - **mesen** lee la CHR del fondo de la **ROM directa** con el banco de 4 KB que elige la ExRAM
+    (`MMC5::GetExAttributeTileData` = `_chrRom[(chrBank << 12) + off]`, `chrBank = (exram & $3F) |
+    ($5130 << 6)`), **sin** pasar por el banking `$5120`.
+  - Nosotros aplicábamos `pat = (bank4k << 12) | (pat & $FFF)` pero luego `chr_byte(pat)`
+    **reaplicaba** el banking `$5120` → leíamos otro banco (el **6**, un patrón) en vez del que la
+    ExRAM indicaba → **patrón rojo por toda la pantalla**. Arreglado con `Ppu::chr_direct()` (lectura
+    cruda) cuando `ext_attr_mode`. **45.8% → 0.2%**; sin regresiones en la matriz.
+  - La clave fue la **comparación visual** (PNGs `ours` vs mesen): mesen = negro + logo **KOEI**;
+    nosotros, un patrón rojo repetido. Confirmado con el dump `$5104`/ExRAM (`exram_mode=1`).
+  - **Residuo de timing (traza, no del frame)**: el bucle de espera de VBlank `$F506-$F50F` produce un
+    re-sync `O+7944` (mesen ve VBlank, nosotros no → giramos ~1 frame). Es la **misma** limitación
+    sub-instrucción que ic/galaga/metalstorm (ver [TIMING_ROADMAP.md](TIMING_ROADMAP.md), Fase 4);
+    **no** afecta al frame de este juego. El intento de arreglo (VBlank en `(241,1)` +
+    `_preventVblFlag`) mejoró la traza pero **regresó** blastermaster/jurassicpark → **revertido**.
   - **Corrección importante (2026)**: el "volcado de nametables" de mesen era **falso** —
     `ppu->PeekRAM(0x2000+…)` usa `GetRegisterID(addr) = addr & 7`, así que devolvía los **registros
     PPU repetidos** (Control/Mask/Status/… = `90 90 10 90 f8…`), no la nametable; por eso las 4
@@ -177,7 +169,7 @@ Pendientes reales (2026, tras la matriz corregida):
     un frame tarde); y el harness de traza de mesen usa `--det 0` (pasada única limpia).
   - Gemfire/Laser/Nobunaga's/CV3 siguen a 0.0–3.1% (sin regresión con los cambios).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
-- **Transpilador**: *banking* (sigue **NROM-only**).
+- **Transpilador**: *banking* implementado (NROM/UxROM/MMC1/MMC3/MMC5/FME-7/VRC6; `banks_test.sh`).
 - **Timing `$2002`**: ic 92.2%, metalstorm 14.2%, gradius 3.3%, smb 3.1% (ver
   [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md)).
 

@@ -187,6 +187,15 @@ int main(int argc, char** argv) {
 		std::fwrite(sys.ppu.chr, 1, sys.ppu.chr_size, fp);
 		std::fclose(fp);
 	}
+	// CHR **efectivo** con el banking del mapper: los 8 KB de `$0000-$1FFF` tal como los
+	// lee el render (el `.chr` de arriba es la ROM cruda). Es lo que hay que comparar con
+	// mesen para ver si el tile del fondo sale del banco correcto.
+	if (FILE* fp = std::fopen("frame_probe.chreff", "wb")) {
+		for (eng::u16 a = 0; a < 0x2000u; ++a) {
+			std::fputc(sys.mapper.ppu_read(a), fp);
+		}
+		std::fclose(fp);
+	}
 	if (FILE* fp = std::fopen("frame_probe.nt", "wb")) {
 		std::fwrite(sys.ppu.vram, 1, sizeof(sys.ppu.vram), fp);
 		std::fclose(fp);
@@ -214,7 +223,8 @@ int main(int argc, char** argv) {
 		if (FILE* fp = std::fopen("frame_probe.mmc5", "wb")) {
 			unsigned char hdr[6] = {static_cast<unsigned char>(sys.ppu.nt_map_on ? 1u : 0u),
 						sys.ppu.nt_map[0], sys.ppu.nt_map[1], sys.ppu.nt_map[2],
-						sys.ppu.nt_map[3], 0u};
+						sys.ppu.nt_map[3],
+						sys.mapper.mmc5_exram_mode};
 			std::fwrite(hdr, 1, 6, fp);
 			if (sys.ppu.nt_exram != nullptr) {
 				std::fwrite(sys.ppu.nt_exram, 1, 0x400, fp);
