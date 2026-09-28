@@ -146,9 +146,14 @@ Pendientes reales (2026, tras la matriz corregida):
     — implementado (correcto según mesen, sprites 8×16 → bancos 8-11), pero Uncharted tiene `$2000`
     bit5=0 (8×8) → no aplica.
   - La nametable (CIRAM) es **~965× tile 0** (bytes 0 = fondo) → debería salir negro; hay **56 tiles
-    distintos** en ~59 posiciones. La causa sigue **sin cerrar**: el render pinta de más donde `mesen`
-    pinta negro. **Falta** una comparación **pixel a pixel** con `mesen` (dump de nametable/CHR de
-    `mesen`, hoy no disponible: el volcado de estado `RRS1` no está en el `.so`).
+    distintos** en ~59 posiciones. El render pinta de más donde `mesen` pinta negro.
+  - **Instrumentado 2026**: el **volcado `RRS1` de mesen** (nombre/CHR/paleta/OAM/RAM + **4
+    nametables**) ya está disponible en `mesen_libretro.so` (`MESEN_DUMP_FRAME`/`MESEN_STATE`). Primer
+    hallazgo (frame 60): las **nametables CIRAM de mesen están casi llenas** (896/1024 bytes ≠0, tiles
+    `90 90 10 90 f8…`), mientras la **`ppu.vram` de nuestro oráculo está casi vacía** (59/1024 y
+    0/1024). → la **fuente de nametable del MMC5** (CIRAM vs **ExRAM**/`nt_src_byte`, `$5105`) difiere:
+    `mesen` lee una fuente que nosotros no. **Siguiente**: volcar la **nametable efectiva** de nuestro
+    oráculo (`nt_src_byte`/ExRAM) y compararla byte a byte con la de mesen.
   - Gemfire/Laser/Nobunaga's/CV3 siguen a 0.0–3.1% (sin regresión con los cambios).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).
