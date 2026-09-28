@@ -2436,17 +2436,16 @@ private:
 								}
 							}
 						}
-					} else if (fast_ram_ && in.operand < 0x2000u) {
+					} else if (in.operand < 0x2000u) {
+						// RAM interna: se usa la expresión **pura** que el codegen
+						// escribe/lee de verdad — el alias local `n2a_ram[...]` con
+						// `--fast-ram`, o `cpu.mem->ram[...]` si no. **No** se usa
+						// `cpu.mem->read(...)`: no es una función pura, así que g++ no
+						// propaga su valor a los accesos siguientes.
 						Dyn expr;
-						expr.append("n2a_ram[0x");
+						expr.append(fast_ram_ ? "n2a_ram[0x" : "cpu.mem->ram[0x");
 						expr.append_hex(in.operand, 4u, true);
 						expr.append(']');
-						emit_fact_assume(out, in.operand, expr.view());
-					} else {
-						Dyn expr;
-						expr.append("cpu.mem->read(0x");
-						expr.append_hex(in.operand, 4u, true);
-						expr.append(')');
 						emit_fact_assume(out, in.operand, expr.view());
 					}
 				}

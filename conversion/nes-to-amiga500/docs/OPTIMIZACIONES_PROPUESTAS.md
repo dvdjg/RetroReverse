@@ -261,17 +261,24 @@ decodifica. Medido en SMB: **1075 → 5622 instrucciones** (395 → 1723 bloques
 (ese código pasaba antes por el intérprete; ahora corre en el backend rápido). Es la vía **robusta y
 data-driven** para el techo de cobertura.
 
-**Hechos de valor (`--facts`) y `N2A_ASSUME`: estaban inertes en el objetivo — corregido.** El macro
-`N2A_ASSUME` solo cubría `__builtin_assume` (MSVC/Clang); el **g++ 15.1 de m68k no expone ese builtin**,
-así que caía a *no-op*: ni el VSA ni los hechos cambiaban nada en el binario final (el host, que sí lo
-tiene, lo ocultaba). Arreglado: usa **`[[assume]]`** (C++23; `__has_cpp_attribute(assume)` = 1 en ese
-g++. verificado que **pliega** `x & 0xF0` a 0 con `x <= 0x0F`). Se añadió `-DN2A_NO_ASSUME` para medir
-A/B. Además, la suposición se emitía **antes** de la carga y sobre `cpu.mem->read(addr)` —una función
-**no pura** y que con `--fast-ram` el código ni usa (la carga real va por `n2a_ram[]`)—, de modo que
-quedaba **desconectada** del valor. Ahora se emite **después** de la instrucción que lee la dirección y
-sobre la **expresión que el código usa**: `cpu.A/X/Y` en cargas (`LDA/LDX/LDY`) y
-`n2a_ram[..]`/`cpu.mem->read(..)` en el resto (RMW `INC/DEC/ASL…`, `CMP`, `BIT`), solo en modos
-`Zp`/`Abs`. Los hechos deben venir validados por telemetría (`facts_from_run`) o a mano (tests).
+**Hechos de valor (`--facts`) y `N2A_ASSUME`: dos correcciones + límite medido.** (1) El macro solo
+cubría `__builtin_assume` (MSVC/Clang); el **g++ 15.1 de m68k no expone ese builtin**, así que caía a
+*no-op*: ni el VSA ni los hechos cambiaban nada en el binario final (el host, que sí lo tiene, lo
+ocultaba). Arreglado: usa **`[[assume]]`** (C++23; `__has_cpp_attribute(assume)` = 1 en ese g++; en un
+*probe* plegó `x & 0xF0` a 0 con `x <= 0x0F`). Se añadió `-DN2A_NO_ASSUME` para medir A/B. (2) La
+suposición se emitía **antes** de la carga y sobre `cpu.mem->read(addr)` —función **no pura** y que con
+`--fast-ram` el código ni usa (la carga va por `n2a_ram[]`)—, quedando **desconectada**. Ahora se emite
+**tras** la instrucción que lee y sobre la **expresión pura que el código usa**: `cpu.A/X/Y` en cargas
+(`LDA/LDX/LDY`) y `n2a_ram[..]`/`cpu.mem->ram[..]` en el resto (RMW `INC/DEC/ASL…`, `CMP`, `BIT`), solo
+en modos `Zp`/`Abs`.
+
+> **Límite medido (importante).** Con el estado del 6502 en `struct CPU` **detrás de un puntero**, la
+> suposición **no pliega**: un *probe* con `cpu.A = ram[0x20]; [[assume(cpu.A <= 0x0F)]]; return cpu.A & 0xF0;`
+> **no** se reduce a 0 (g++ no propaga la cota a través de `cpu.A`, que es memoria y puede estar
+> *aliased*). El mismo `[[assume]]` sobre una **variable local** **sí** pliega. Conclusión: los
+> hechos/`N2A_ASSUME` solo rinden en el backend **nativo/por regiones** (A/X/Y/flags en **locales**),
+> no en el backend por bloques con `cpu.*`. Es decir, la palanca real sigue siendo el paso
+> **estructural** (§2), no añadir hechos: primero estado en locales, luego las cotas.
 
 **Tablas ROM → datos precomputados (HLE).** Evaluado: identificar tablas usadas (por acceso
 `abs,X`/`(zp),Y` a ROM) y **volcarlas ya transformadas** es un reconocimiento por juego (el transpilador
