@@ -120,18 +120,37 @@ g++ **inlinea toda la región** en sus llamadores y elimina redundancia; el cód
 pequeño** y sin el doble tráfico de estado. **Equivalencia host verificada** en `mini`/`branch`/`vsa`
 (loops, `JSR`/`RTS`, `ADC`, ramas) con el mismo estado final que el codegen por bloques.
 
+**Ronda 2 (implementado en el nativo):**
+
+- **Cesión por evento**: `N2A_State::yield`; los bucles de espera (`LDA $2002…BEQ self`, `JMP self`)
+  ceden al runtime, y `game_main` itera llamando al hook `g_native_yield` (que resuelve
+  VBlank/NMI). Entradas `game_main`/`n2a_nmi`/`n2a_irq` exportadas (`[[gnu::used]]`).
+- **Arnés de frames** (`tests/native_frame.cpp`): modelo mínimo de VBlank (`$2002` devuelve y
+  limpia el bit 7) + NMI por cesión. DK: **60 frames en host, determinista** (`ram_sum=4D999D33`,
+  igual en ejecuciones repetidas), ~0,1 ms.
+- **Patrón nativo**: tiradas de `ROR/ROL zp` consecutivas → **un bucle** con el carry en una local.
+- **Selección de backend `--best`**: usa el nativo si `native_ok()` y, si no, el perfil Amiga
+  encadenado. Verificado: DK → nativo; `misc` (con `JMP (ind)`) → bloques.
+
+**Medida estática (DK, `-O3`):**
+
+| Backend | `.text` | instrucciones m68k |
+|---|---:|---:|
+| Por bloques (`--amiga`) | 298 868 B | 77 901 |
+| **Nativo (`--native`)** | **76 404 B** | **16 393** |
+
 **Caveats (lo que falta):**
 
-- Sin **cesión por evento**: un bucle de espera de VBlank/NMI (`LDA $2002`/`JMP self`) se queda en
-  bucle. Hay que integrar `cpu.yield`/scheduler (como en el perfil `--chain`).
-- El runtime debe llamar a `n2a_nmi`/`n2a_irq` y sincronizar `N2A_State`/`N2A_Bus`.
+- El arnés de frames es un **modelo aproximado** (un VBlank por cesión, sin PPU real): valida
+  control de flujo, determinismo y RAM, no fidelidad visual. La equivalencia exacta frente al
+  intérprete requiere integrar la PPU/runtime.
 - Los mappers **bancados** y los **ilegales/`JMP (ind)`** caen al codegen por bloques (`native_ok()`).
-- Medición de **ciclos** pendiente (el estimador mapea `bb_*`, no etiquetas nativas): usar el
-  simulador de ciclos 68000.
+- **Medición de ciclos 68000** pendiente: el estimador mapea `bb_*`, no etiquetas nativas. Con el
+  nativo inlinado, hay que medir con un **simulador de ciclos** o `-fno-inline` por región.
 
-**Conclusión:** el enfoque descompilador **es viable y prometedor** (deja el trabajo global a g++).
-El siguiente paso es dotarlo de cesión por evento y medir 1:1; la vía de micro-optimizaciones
-(`--amiga`) queda como la alternativa de bajo riesgo.
+**Conclusión:** el enfoque descompilador **es viable y prometedor** (deja el trabajo global a g++),
+y ya ejecuta frames con cesión por evento y selección automática de backend. La vía de
+micro-optimizaciones (`--amiga` + helpers asm) queda como la alternativa de bajo riesgo.
 
 ---
 
