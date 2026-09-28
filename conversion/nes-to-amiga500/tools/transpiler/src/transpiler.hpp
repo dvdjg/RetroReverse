@@ -525,7 +525,9 @@ public:
 		out.append("using n2a::NESMemory;\n\n");
 		emit_rom(out);
 		// Backend nativo (estilo descompilador): sustituye todo el codegen por bloques.
-		if (native_ && native_ok()) {
+		// Con `--best` se elige solo si la ROM lo soporta; si no, cae al codegen por
+		// bloques (con el perfil Amiga si el llamador lo activó).
+		if ((native_ || best_) && native_ok()) {
 			emit_native(out);
 			return;
 		}
@@ -629,6 +631,13 @@ public:
 	/// debe usar el codegen por bloques).
 	/// \param b `true` para activar el backend nativo.
 	void set_native(bool b) noexcept { native_ = b; }
+
+	/// Con `true`, elige automáticamente el mejor backend: el **nativo** si la ROM lo
+	/// soporta (`native_ok()`) y, si no, el codegen por bloques con el perfil Amiga
+	/// (`--chain`/`--rom-direct`/`--fast-ram`, que el llamador debe activar). Pensado
+	/// para el pipeline por juego.
+	/// \param b `true` para selección automática de backend.
+	void set_best(bool b) noexcept { best_ = b; }
 	/// \return `true` si el backend nativo puede emitir esta ROM (PRG fija y opcodes
 	/// soportados). Lo consulta el llamador para elegir el codegen.
 	[[nodiscard]] bool native_ok() const noexcept {
@@ -733,6 +742,7 @@ private:
 	bool chain_ = false;         ///< Si `true`, encadenar bloques (ver `set_chain`).
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
+	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
 	int cur_bank_ = -1;          ///< Banco del bloque en emisión (`-1` = ventana fija).
 	bool cur_nz_live_ = true;    ///< ¿`Z`/`N` viven tras la instrucción actual? (liveness, ver `nz_dead_after`).
@@ -2262,7 +2272,8 @@ private:
 		out.append("    eng::u8 a = 0, x = 0, y = 0, sp = 0xFD;\n");
 		out.append("    eng::u16 pc = 0;\n");
 		out.append("    bool c = false, z = false, n = false, v = false, d = false, i = true;\n");
-		out.append("    bool halted = false;\n};\n");
+		out.append("    bool halted = false;\n");
+		out.append("    bool yield = false; // cesion al runtime (espera de VBlank/NMI)\n};\n");
 		out.append("struct N2A_Bus {\n");
 		out.append("    eng::u8 ram[0x800] = {};\n");
 		out.append("    eng::u8 wram[0x2000] = {};\n");
@@ -2278,7 +2289,10 @@ private:
 		out.append("    if (a < 0x2000u) { m.ram[a & 0x7FFu] = v; return; }\n");
 		out.append("    if (a < 0x4020u) { if (m.io_write != nullptr) { m.io_write(m, a, v); } return; }\n");
 		out.append("    if (a >= 0x6000u && a < 0x8000u) { m.wram[a - 0x6000u] = v; return; }\n}\n");
-		out.append("static N2A_State g_st;\nstatic N2A_Bus g_bus;\n\n");
+		out.append("static N2A_State g_st;\nstatic N2A_Bus g_bus;\n");
+		out.append("/// Hook que el runtime fija para resolver eventos (VBlank/NMI) al ceder el\n");
+		out.append("/// codigo nativo. Si es `nullptr`, `game_main` termina en la primera cesion.\n");
+		out.append("static void (*g_native_yield)(N2A_State&, N2A_Bus&) = nullptr;\n\n");
 
 		// --- Entradas de región: reset/NMI/IRQ + destinos de JSR ---
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> entries {};
@@ -2317,9 +2331,15 @@ private:
 		// --- Entradas (reset/NMI/IRQ). `[[gnu::used]]` evita que g++ elimine las
 		// regiones solo alcanzables desde NMI/IRQ por ser `static` no referenciadas.
 		out.append("[[gnu::used]] void game_main() {\n");
-		out.append("    n2a_r_");
+		out.append("    for (;;) {\n");
+		out.append("        if (g_st.halted) { break; }\n");
+		out.append("        n2a_r_");
 		out.append_hex(reset_, 4u, true);
-		out.append("(&g_st, &g_bus);\n}\n");
+		out.append("(&g_st, &g_bus);\n");
+		out.append("        if (!g_st.yield) { break; }\n");
+		out.append("        g_st.yield = false;\n");
+		out.append("        if (g_native_yield != nullptr) { g_native_yield(g_st, g_bus); }\n");
+		out.append("    }\n}\n");
 		out.append("[[gnu::used]] void n2a_nmi() { n2a_r_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(&g_st, &g_bus); }\n");
@@ -2413,6 +2433,43 @@ private:
 				const Instruction& in = instr_[p];
 				const OpcodeInfo& info = kOpcodeTable[in.opcode];
 				term = &in;
+				// Patrón (idioma PRNG): tirada de `ROR/ROL zp` sobre direcciones
+				// consecutivas -> **un bucle** con el carry en una local, en vez de
+				// N rotaciones con acceso a memoria y flags por byte.
+				if ((in.opcode == 0x66u || in.opcode == 0x26u) && info.mode == AddrMode::Zp) {
+					const eng::u8 base = static_cast<eng::u8>(in.operand);
+					eng::u16 p2 = p;
+					int run = 0;
+					while (p2 < kSpace && has_instr_[p2] != 0u &&
+					       instr_[p2].opcode == in.opcode &&
+					       static_cast<eng::u8>(instr_[p2].operand) ==
+						       static_cast<eng::u8>(base + run)) {
+						++run;
+						p2 = static_cast<eng::u16>(p2 + 2u);
+						if (p2 < kSpace && has_instr_[p2] != 0u && leaders_[p2] != 0u) {
+							break;
+						}
+					}
+					if (run >= 3) {
+						const bool ror = (in.opcode == 0x66u);
+						out.append("    { eng::u8 n2a_c = r->c ? 1u : 0u; eng::u8* n2a_p = &m->ram[0x");
+						out.append_hex(base, 2u, true);
+						out.append("u];\n      for (int n2a_i = 0; n2a_i < ");
+						out.append_u32(static_cast<eng::u32>(run));
+						out.append("; ++n2a_i) {\n        const eng::u8 n2a_v = n2a_p[n2a_i];\n");
+						if (ror) {
+							out.append("        n2a_p[n2a_i] = static_cast<eng::u8>((n2a_v >> 1u) | (n2a_c << 7u)); n2a_c = static_cast<eng::u8>(n2a_v & 1u);\n");
+						} else {
+							out.append("        n2a_p[n2a_i] = static_cast<eng::u8>(static_cast<eng::u8>(n2a_v << 1u) | n2a_c); n2a_c = static_cast<eng::u8>(n2a_v >> 7u);\n");
+						}
+						out.append("      }\n      r->c = (n2a_c != 0u); const eng::u8 n2a_l = n2a_p[");
+						out.append_u32(static_cast<eng::u32>(run - 1));
+						out.append("]; r->z = (n2a_l == 0u); r->n = ((n2a_l & 0x80u) != 0u); }\n");
+						p = p2;
+						term = &instr_[static_cast<eng::u16>(p2 - 2u)];
+						continue;
+					}
+				}
 				emit_native_instruction(out, in);
 				p = static_cast<eng::u16>(p + info.size);
 				if (info.mode == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
@@ -2425,7 +2482,21 @@ private:
 			if (term != nullptr) {
 				const char* m = kOpcodeTable[term->opcode].mnemonic;
 				if (kOpcodeTable[term->opcode].mode == AddrMode::Rel) {
-					if (native_vis_[term->target] != 0u) {
+					if (term->target == b && block_reads_ppu_status(b)) {
+						// Bucle de espera de VBlank/sprite-0: cede al runtime en vez de
+						// girar en la propia region (el runtime resuelve VBlank/NMI).
+						out.append("    if (");
+						out.append(sv_equal(m, "BEQ") ? "r->z"
+							   : sv_equal(m, "BNE") ? "!r->z"
+							   : sv_equal(m, "BCC") ? "!r->c"
+							   : sv_equal(m, "BCS") ? "r->c"
+							   : sv_equal(m, "BMI") ? "r->n"
+							   : sv_equal(m, "BPL") ? "!r->n"
+							   : sv_equal(m, "BVS") ? "r->v"
+							   : sv_equal(m, "BVC") ? "!r->v"
+										: "false");
+						out.append(") { r->yield = true; return; }\n");
+					} else if (native_vis_[term->target] != 0u) {
 						out.append("    if (");
 						out.append(sv_equal(m, "BEQ") ? "r->z"
 							   : sv_equal(m, "BNE") ? "!r->z"
@@ -2446,7 +2517,10 @@ private:
 						out.append(";\n");
 					}
 				} else if (sv_equal(m, "JMP")) {
-					if (native_vis_[term->target] != 0u) {
+					if (term->target == b) {
+						// `JMP a si mismo`: espera de NMI; cede al runtime.
+						out.append("    r->yield = true; return;\n");
+					} else if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
 						out.append_hex(term->target, 4u, true);
 						out.append(";\n");

@@ -400,6 +400,7 @@ bool g_trace = false;
 bool g_chain = false;
 bool g_rom_direct = false;
 bool g_native = false;
+bool g_best = false;
 
 /// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
 bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
@@ -433,6 +434,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_chain(g_chain);
 	tp.set_rom_direct(g_rom_direct);
 	tp.set_native(g_native);
+	tp.set_best(g_best);
 	tp.disassemble();
 	tp.build_basic_blocks();
 	if (facts != nullptr && !load_facts(facts, tp)) {
@@ -822,6 +824,14 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--native") { // backend estilo descompilador (regiones + literales)
 			g_native = true;
+			continue;
+		}
+		if (arg == "--best") { // nativo si se puede; si no, perfil Amiga encadenado
+			g_best = true;
+			g_no_cycles = true;
+			g_chain = true;
+			g_rom_direct = true;
+			g_fast_ram = true;
 			continue;
 		}
 		if (arg == "--amiga") { // perfil Amiga/68000: sin ciclos + encadenado + ROM/ZP directas
