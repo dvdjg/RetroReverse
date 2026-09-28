@@ -96,7 +96,7 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int /*budget*/, i
 	}
 	BlockFn fn = nullptr;
 	if (kPrgBanked && pc >= 0x8000u && pc < 0xC000u) {
-		fn = n2a_banked_block(pc, bank, mem.prg_bank2);
+		fn = n2a_banked_block(pc, bank, mem.prg_bank2, mem.prg_bank3);
 	} else {
 		fn = n2a_fixed_block(pc);
 	}

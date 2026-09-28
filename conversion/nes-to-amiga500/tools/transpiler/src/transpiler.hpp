@@ -317,6 +317,7 @@ public:
 	void collect_switch_targets() {
 		switch_targets_.clear();
 		switch_targets2_.clear();
+		switch_targets3_.clear();
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (has_instr_[a] == 0u) {
 				continue;
@@ -326,13 +327,23 @@ public:
 				continue;
 			}
 			const eng::u16 t = in.target;
-			// MMC3: dos ventanas conmutables separadas ($8000-$9FFF y $A000-$BFFF).
+			// Ventanas conmutables por mapper: MMC3 (2×8 KB), FME-7 (3×8 KB).
 			eng::util::Vector<eng::u16, eng::util::HeapAlloc>* dst;
 			if (mapper_ == 4) {
 				if (t >= 0x8000u && t < 0xA000u) {
 					dst = &switch_targets_;
 				} else if (t >= 0xA000u && t < 0xC000u) {
 					dst = &switch_targets2_;
+				} else {
+					continue;
+				}
+			} else if (mapper_ == 69) {
+				if (t >= 0x8000u && t < 0xA000u) {
+					dst = &switch_targets_;
+				} else if (t >= 0xA000u && t < 0xC000u) {
+					dst = &switch_targets2_;
+				} else if (t >= 0xC000u && t < 0xE000u) {
+					dst = &switch_targets3_;
 				} else {
 					continue;
 				}
@@ -498,18 +509,21 @@ public:
 		emit_blocks_for(out, -1);
 		// UxROM (2) / MMC1 (1, modo 16K): decodifica la ventana conmutable **por
 		// banco** desde las entradas descubiertas en la ventana fija.
-		if (prg_banked_ && (mapper_ == 2 || mapper_ == 1 || mapper_ == 4)) {
+		if (prg_banked_ &&
+		    (mapper_ == 2 || mapper_ == 1 || mapper_ == 4 || mapper_ == 69)) {
 			collect_switch_targets();
 			eng::usize bank_instr = 0u;
 			eng::usize bank_blocks = 0u;
-			// MMC3: dos ventanas conmutables ($8000-$9FFF y $A000-$BFFF).
-			const int windows = (mapper_ == 4) ? 2 : 1;
+			// Ventanas conmutables: MMC3 = 2 (16 KB de $8000/$A000); FME-7 = 3.
+			const int windows = (mapper_ == 4) ? 2 : (mapper_ == 69 ? 3 : 1);
+			eng::util::Vector<eng::u16, eng::util::HeapAlloc>* wtargets[3] = {
+				&switch_targets_, &switch_targets2_, &switch_targets3_};
 			for (int w = 0; w < windows; ++w) {
-				win_ = (mapper_ == 4) ? w : -1;
+				win_ = (mapper_ == 4 || mapper_ == 69) ? w : -1;
 				for (eng::u32 b = 0; b < prg_bank_count_; ++b) {
 					reset_analysis();
 					bank_ = static_cast<int>(b);
-					disassemble_bank(w == 0 ? switch_targets_ : switch_targets2_);
+					disassemble_bank(*wtargets[w]);
 					build_basic_blocks();
 					bank_instr += count_;
 					bank_blocks += block_count_;
@@ -595,7 +609,8 @@ private:
 	eng::util::Vector<BlockInfo, eng::util::HeapAlloc> fixed_blocks_ {}; ///< Bloques de $C000+ (o NROM).
 	eng::util::Vector<BlockInfo, eng::util::HeapAlloc> bank_blocks_ {};  ///< Bloques de la ventana conmutable.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets_ {}; ///< Entradas de $8000-$BFFF (o W0 MMC3).
-	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets2_ {}; ///< Entradas de $A000-$BFFF (W1 MMC3).
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets2_ {}; ///< Entradas de $A000-$BFFF (W1).
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets3_ {}; ///< Entradas de $C000-$DFFF (W2 FME-7).
 	bool mirror_h_ = false;                                   ///< Mirroring horizontal (bit0 flags6).
 	bool has_trainer_ = false;                                ///< ¿Trae trainer de 512 B?
 	eng::u16 reset_ = 0;                                      ///< Vector de reset.
@@ -688,7 +703,7 @@ private:
 		// juego cambia de modo). Verificado byte-exact en Metroid/Mega Man 2 a 60
 		// frames (docs/TIMING_CODEGEN.md).
 		const bool codegen_ok = (mapper_ == 0 || mapper_ == 1 || mapper_ == 2 ||
-					 mapper_ == 3 || mapper_ == 4);
+					 mapper_ == 3 || mapper_ == 4 || mapper_ == 69);
 		return prg_size_ != 0u && codegen_ok;
 	}
 
@@ -763,6 +778,23 @@ private:
 					return {};
 				}
 				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0xA000u);
+			}
+		} else if (mapper_ == 69) {
+			// FME-7 (69): tres ventanas conmutables de 8 KB (`$8000/$A000/$C000` =
+			// `fme7_prg[0..2]`, `win_` 0/1/2) + `$E000-$FFFF` fija (último banco).
+			const eng::usize n8 = prg_size_ / 0x2000u;
+			if (win_ == 0) {
+				if (addr < 0x8000u || addr >= 0xA000u) return {};
+				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0x8000u);
+			} else if (win_ == 1) {
+				if (addr < 0xA000u || addr >= 0xC000u) return {};
+				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0xA000u);
+			} else if (win_ == 2) {
+				if (addr < 0xC000u || addr >= 0xE000u) return {};
+				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0xC000u);
+			} else {
+				if (addr < 0xE000u) return {};
+				off = (n8 >= 1u ? n8 - 1u : 0u) * 0x2000u + (addr - 0xE000u);
 			}
 		} else if (mapper_ == 2 || mapper_ == 1) {
 			// UxROM (2) y MMC1 (1) en modo 16K con banco conmutable en $8000: misma
@@ -1807,14 +1839,16 @@ private:
 			out.append_u32(static_cast<eng::u32>(n));
 		}
 		out.append(" };\n\n");
-		out.append("/// Devuelve el bloque de la ventana conmutable para (pc, b0, b1).\n");
-		out.append("/// MMC1/UxROM: `b0` = banco (`b1` ignorado). MMC3: `b0`=R6 ($8000-$9FFF),\n");
-		out.append("/// `b1`=R7 ($A000-$BFFF). Búsqueda **binaria** (tabla ordenada).\n");
-		out.append("[[maybe_unused]] static BlockFn n2a_banked_block(eng::u16 pc, eng::u8 b0, eng::u8 b1) {\n");
+		out.append("/// Devuelve el bloque de la(s) ventana(s) conmutable(s) para (pc, b0, b1, b2).\n");
+		out.append("/// MMC1/UxROM: `b0` = banco. MMC3: `b0`=R6 ($8000), `b1`=R7 ($A000).\n");
+		out.append("/// FME-7: `b0`/`b1`/`b2` = $8000/$A000/$C000. Búsqueda **binaria**.\n");
+		out.append("[[maybe_unused]] static BlockFn n2a_banked_block(eng::u16 pc, eng::u8 b0, eng::u8 b1, eng::u8 b2) {\n");
 		if (mapper_ == 4) {
-			out.append("    const eng::u8 bank = (pc < 0xA000u) ? b0 : b1;\n");
+			out.append("    (void)b2;\n    const eng::u8 bank = (pc < 0xA000u) ? b0 : b1;\n");
+		} else if (mapper_ == 69) {
+			out.append("    const eng::u8 bank = (pc < 0xA000u) ? b0 : ((pc < 0xC000u) ? b1 : b2);\n");
 		} else {
-			out.append("    (void)b1;\n    const eng::u8 bank = b0;\n");
+			out.append("    (void)b1;\n    (void)b2;\n    const eng::u8 bank = b0;\n");
 		}
 		out.append("    if (bank >= kPrgBankCount) { return nullptr; }\n");
 		out.append("    const BankBlock* t = kBankTables[bank];\n");

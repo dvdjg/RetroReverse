@@ -46,6 +46,7 @@ int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
 	const NESMemory* m = (mem_p != nullptr) ? static_cast<const NESMemory*>(mem_p) : cpu.mem;
 	const eng::u8 bank = (m != nullptr) ? m->prg_bank : 0u;
 	const eng::u8 bank2 = (m != nullptr) ? m->prg_bank2 : 0u;
+	const eng::u8 bank3 = (m != nullptr) ? m->prg_bank3 : 0u;
 	if (kPrgModeSensitive && bank == static_cast<eng::u8>(0xFFu)) {
 		// MMC1 en un modo de ventanas no soportado: no valen ni los bloques por
 		// banco ni los de la ventana fija -> fallback total al intérprete.
@@ -56,7 +57,7 @@ int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
 	}
 	BlockFn fn = nullptr;
 	if (kPrgBanked && pc >= 0x8000u && pc < 0xC000u) {
-		fn = n2a_banked_block(pc, bank, bank2);
+		fn = n2a_banked_block(pc, bank, bank2, bank3);
 	} else {
 		fn = n2a_fixed_block(pc);
 	}

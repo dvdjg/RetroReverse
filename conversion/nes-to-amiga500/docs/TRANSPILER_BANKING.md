@@ -184,9 +184,17 @@ basta con que `n2a_banked_block(pc, b0, b1)` **elija el banco por el rango del P
 R6, si no → R7); la tabla por banco ya sirve. Runtime: `NESMemory::prg_bank2` (R7) y espejo del mapper
 (`prg_bank=R6`, `prg_bank2=R7`; sentinela si el **bit de modo** R0.6 cambia → fallback). **ABI v3**.
 
-**Verificado** (`banks_test.sh`, 11 ROMs, framebuffer idéntico): MMC3 con **Mega Man 3/4, SMB3,
+**Verificado** (`banks_test.sh`, 12 ROMs, framebuffer idéntico): MMC3 con **Mega Man 3/4, SMB3,
 Crystalis, Tiny Toon, Metal Storm** además de UxROM (Contra/Castlevania) y MMC1 (Metroid/MM2/Blaster
 Master).
+
+### B3c — FME-7 (3×8 KB) — **HECHO** (2026)
+
+Extensión directa de MMC3: **tres** ventanas conmutables de 8 KB (`$8000/$A000/$C000` =
+`fme7_prg[0..2]`) + `$E000` fija. `prg_offset`/`collect_switch_targets`/`generate` con 3 ventanas;
+`NESMemory::prg_bank3` (ABI **v4**); `n2a_banked_block(pc, b0, b1, b2)` elige banco por rango de PC.
+**Mr. Gimmick byte-exact** (RAM 0/2048). *Batman Return of the Joker*: framebuffer 0.0 % pero RAM
+224/2048 (su **IRQ de FME-7 es por ciclo de CPU** → conviene incluirla en el scheduler, paso 3).
 
 <details><summary>Plan original (referencia)</summary>
 

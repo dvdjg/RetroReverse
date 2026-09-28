@@ -10,10 +10,24 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 RUNTIME="$ROOT/../../runtime"
 
-# UxROM (2), MMC1 (1) y MMC3 (4).
-ROMS="castlevania contra metroid megaman2 blastermaster megaman3 smb3 megaman4 crystalis tinytoonadventures metalstorm"
+# UxROM (2), MMC1 (1), MMC3 (4) y FME-7 (69). Un nombre por línea (admite espacios).
+ROMS="
+castlevania
+contra
+metroid
+megaman2
+blastermaster
+megaman3
+smb3
+megaman4
+crystalis
+tinytoonadventures
+metalstorm
+Mr. Gimmick (Europe)
+"
 ran=0
-for rom in $ROMS; do
+while IFS= read -r rom; do
+	[ -n "$rom" ] || continue
 	f="$RUNTIME/build/$rom.nes"
 	if [ ! -f "$f" ]; then
 		echo "SKIP $rom (sin ROM)"
@@ -28,7 +42,9 @@ for rom in $ROMS; do
 		echo "$out" | grep -E 'RAM|pixeles' | sed 's/^/    /'
 		exit 1
 	fi
-done
+done <<EOF
+$ROMS
+EOF
 if [ "$ran" = 0 ]; then
 	echo "SKIP: no hay ROMs bancadas"; exit 0
 fi

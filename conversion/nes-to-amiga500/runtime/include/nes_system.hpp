@@ -111,6 +111,7 @@ struct NesSystem {
 		mem.prg_size = m.prg_size;
 		mem.prg_bank = 0;
 		mem.prg_bank2 = 0;
+		mem.prg_bank3 = 0;
 	}
 
 	/// Activa/desactiva el **reloj de bus por acceso** (modelo dot-exacto del
@@ -495,6 +496,11 @@ private:
 					} else {
 						mem.prg_bank = static_cast<eng::u8>(0xFFu);
 					}
+				} else if (mapper.kind == MapperKind::Fme7) {
+					// FME-7: 3 ventanas de 8 KB ($8000/$A000/$C000).
+					mem.prg_bank = mapper.fme7_prg[0];
+					mem.prg_bank2 = mapper.fme7_prg[1];
+					mem.prg_bank3 = mapper.fme7_prg[2];
 				} else if (mapper.kind == MapperKind::Mmc1) {
 					// Solo el modo 16K con banco conmutable en $8000 coincide con
 					// el modelo del transpilado; en cualquier otro modo se invalida
