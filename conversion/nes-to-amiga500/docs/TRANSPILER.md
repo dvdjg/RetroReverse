@@ -186,12 +186,12 @@ nes_transpiler juego.nes -o generated/game.cpp
 
 ## Limitaciones del prototipo (a cerrar en F2/F9)
 
-- Mappers: NROM (0), CNROM (3), **UxROM (2)**, **MMC1 (1, modo 16K)**, **MMC3 (4)** y **FME-7 (69)**. Se
+- Mappers: NROM (0), CNROM (3), **UxROM (2)**, **MMC1 (1, modo 16K)**, **MMC3 (4)**, **FME-7 (69)** y **VRC6 (24/26)**. Se
   transpila por **banco** (bloques `bbB<b>_<addr>`) con despacho por banco
   (`NESMemory::prg_bank`/`prg_bank2`/`prg_bank3`); si una dirección no tiene bloque, cae al
   **intérprete**. Verificado **byte-exact** (`banks_test.sh`, 12 ROMs): UxROM (Contra/Castlevania),
   MMC1 (Metroid/MM2/Blaster Master), MMC3 (Mega Man 3/4/SMB3/Crystalis/Tiny Toon/Metal Storm) y FME-7
-  (Mr. Gimmick). MMC5/VRC6 **se reconocen** pero aún no se transpilan. Diseño:
+  (Mr. Gimmick) y VRC6 (Akumajou Densetsu). Solo **MMC5** queda por transpolar. Diseño:
   [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0–B3c hechos).
 - No detecta todavía **código automodificable** complejo ni todos los saltos indirectos → fallback.
 - `JSR/RTS` requieren un modelo de pila real en el runtime (push/pop de retorno).

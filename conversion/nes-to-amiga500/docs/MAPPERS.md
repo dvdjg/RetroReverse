@@ -127,9 +127,9 @@ La matriz por juego (71 ROMs) está en [`COMPATIBILITY.md`](COMPATIBILITY.md). T
 y **Batman RotJ (FME-7)**, **Batman - The Video Game (MMC1)** a **0.0%**; Akumajou (VRC6) / CV3 (MMC5)
 2.7%; Battletoads (AxROM) 1.9%. **Bugs abiertos**: **VRC6b (26)** —Esper Dream 2 100%, Mouryou 99.9%— y
 **MMC5** en **Uncharted Waters** 45.8%. El transpilador soporta **NROM/CNROM**, **UxROM (2)**,
-**MMC1 (1, modo 16K)**, **MMC3 (4)** y **FME-7 (69)** con **bloques por banco** y despacho por banco
-(`NESMemory::prg_bank`/`prg_bank2`/`prg_bank3`), verificado byte-exact (12 ROMs). **MMC5/VRC6** quedan
-abiertos en [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0–B3c hechos).
+**MMC1 (1, modo 16K)**, **MMC3 (4)**, **FME-7 (69)** y **VRC6 (24/26)** con **bloques por banco** y
+despacho por banco (`NESMemory::prg_bank`/`prg_bank2`/`prg_bank3`), verificado byte-exact (13 ROMs).
+Solo **MMC5** queda abierto en [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0–B3d hechos).
 
 ## Cierre (F9)
 

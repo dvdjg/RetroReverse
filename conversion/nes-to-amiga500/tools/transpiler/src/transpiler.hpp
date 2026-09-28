@@ -347,6 +347,15 @@ public:
 				} else {
 					continue;
 				}
+			} else if (mapper_ == 24 || mapper_ == 26) {
+				// VRC6: W0 = $8000-$BFFF (16 KB), W1 = $C000-$DFFF (8 KB).
+				if (t >= 0x8000u && t < 0xC000u) {
+					dst = &switch_targets_;
+				} else if (t >= 0xC000u && t < 0xE000u) {
+					dst = &switch_targets2_;
+				} else {
+					continue;
+				}
 			} else {
 				if (t < 0x8000u || t >= 0xC000u) {
 					continue;
@@ -509,18 +518,31 @@ public:
 		emit_blocks_for(out, -1);
 		// UxROM (2) / MMC1 (1, modo 16K): decodifica la ventana conmutable **por
 		// banco** desde las entradas descubiertas en la ventana fija.
-		if (prg_banked_ &&
-		    (mapper_ == 2 || mapper_ == 1 || mapper_ == 4 || mapper_ == 69)) {
+		const bool banked = prg_banked_ && (mapper_ == 2 || mapper_ == 1 ||
+						    mapper_ == 4 || mapper_ == 69 ||
+						    mapper_ == 24 || mapper_ == 26);
+		if (banked) {
 			collect_switch_targets();
 			eng::usize bank_instr = 0u;
 			eng::usize bank_blocks = 0u;
-			// Ventanas conmutables: MMC3 = 2 (16 KB de $8000/$A000); FME-7 = 3.
-			const int windows = (mapper_ == 4) ? 2 : (mapper_ == 69 ? 3 : 1);
+			// Ventanas conmutables: MMC3 = 2 (8 KB); FME-7 = 3 (8 KB);
+			// VRC6 = 2 (16 KB + 8 KB).
+			const int windows =
+				(mapper_ == 69) ? 3
+				: (mapper_ == 4 || mapper_ == 24 || mapper_ == 26) ? 2
+									 : 1;
+			const bool multi_win = (mapper_ == 4 || mapper_ == 69 ||
+						mapper_ == 24 || mapper_ == 26);
 			eng::util::Vector<eng::u16, eng::util::HeapAlloc>* wtargets[3] = {
 				&switch_targets_, &switch_targets2_, &switch_targets3_};
 			for (int w = 0; w < windows; ++w) {
-				win_ = (mapper_ == 4 || mapper_ == 69) ? w : -1;
-				for (eng::u32 b = 0; b < prg_bank_count_; ++b) {
+				win_ = multi_win ? w : -1;
+				eng::u32 nb = prg_bank_count_;
+				if (mapper_ == 24 || mapper_ == 26) {
+					// W0: bancos de 16 KB; W1: bancos de 8 KB.
+					nb = (w == 0) ? (prg_size_ / 0x4000u) : (prg_size_ / 0x2000u);
+				}
+				for (eng::u32 b = 0; b < nb; ++b) {
 					reset_analysis();
 					bank_ = static_cast<int>(b);
 					disassemble_bank(*wtargets[w]);
@@ -685,7 +707,12 @@ private:
 			prg_bank_count_ = prg_size_ / prg_bank_size_;
 			prg_banked_ = true;
 			break;
-		case 1: case 5: case 7: case 24: case 26: case 69: // 16 KB por banco.
+		case 24: case 26: // VRC6: ventana de 16 KB ($8000) + 8 KB ($C000); máx = bancos de 8 KB.
+			prg_bank_size_ = 0x2000u;
+			prg_bank_count_ = prg_size_ / 0x2000u;
+			prg_banked_ = true;
+			break;
+		case 1: case 5: case 7: case 69: // 16 KB por banco.
 			prg_bank_size_ = 0x4000u;
 			prg_bank_count_ = prg_size_ / prg_bank_size_;
 			prg_banked_ = true;
@@ -703,7 +730,8 @@ private:
 		// juego cambia de modo). Verificado byte-exact en Metroid/Mega Man 2 a 60
 		// frames (docs/TIMING_CODEGEN.md).
 		const bool codegen_ok = (mapper_ == 0 || mapper_ == 1 || mapper_ == 2 ||
-					 mapper_ == 3 || mapper_ == 4 || mapper_ == 69);
+					 mapper_ == 3 || mapper_ == 4 || mapper_ == 24 ||
+					 mapper_ == 26 || mapper_ == 69);
 		return prg_size_ != 0u && codegen_ok;
 	}
 
@@ -778,6 +806,20 @@ private:
 					return {};
 				}
 				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0xA000u);
+			}
+		} else if (mapper_ == 24 || mapper_ == 26) {
+			// VRC6 (24/26): `$8000-$BFFF` = 16 KB conmutable (`win_` 0, banco 16 KB),
+			// `$C000-$DFFF` = 8 KB conmutable (`win_` 1), `$E000-$FFFF` = último 8 KB.
+			const eng::usize n8 = prg_size_ / 0x2000u;
+			if (win_ == 0) {
+				if (addr < 0x8000u || addr >= 0xC000u) return {};
+				off = static_cast<eng::usize>(bank_) * 0x4000u + (addr - 0x8000u);
+			} else if (win_ == 1) {
+				if (addr < 0xC000u || addr >= 0xE000u) return {};
+				off = static_cast<eng::usize>(bank_) * 0x2000u + (addr - 0xC000u);
+			} else {
+				if (addr < 0xE000u) return {};
+				off = (n8 >= 1u ? n8 - 1u : 0u) * 0x2000u + (addr - 0xE000u);
 			}
 		} else if (mapper_ == 69) {
 			// FME-7 (69): tres ventanas conmutables de 8 KB (`$8000/$A000/$C000` =
@@ -1847,6 +1889,8 @@ private:
 			out.append("    (void)b2;\n    const eng::u8 bank = (pc < 0xA000u) ? b0 : b1;\n");
 		} else if (mapper_ == 69) {
 			out.append("    const eng::u8 bank = (pc < 0xA000u) ? b0 : ((pc < 0xC000u) ? b1 : b2);\n");
+		} else if (mapper_ == 24 || mapper_ == 26) {
+			out.append("    (void)b2;\n    const eng::u8 bank = (pc < 0xC000u) ? b0 : b1;\n");
 		} else {
 			out.append("    (void)b1;\n    (void)b2;\n    const eng::u8 bank = b0;\n");
 		}

@@ -24,6 +24,7 @@ crystalis
 tinytoonadventures
 metalstorm
 Mr. Gimmick (Europe)
+Akumajou Densetsu (Japan)
 "
 ran=0
 while IFS= read -r rom; do

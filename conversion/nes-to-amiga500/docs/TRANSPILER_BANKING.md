@@ -196,6 +196,13 @@ Extensión directa de MMC3: **tres** ventanas conmutables de 8 KB (`$8000/$A000/
 **Mr. Gimmick byte-exact** (RAM 0/2048). *Batman Return of the Joker*: framebuffer 0.0 % pero RAM
 224/2048 (su **IRQ de FME-7 es por ciclo de CPU** → conviene incluirla en el scheduler, paso 3).
 
+### B3d — VRC6 (24/26) — **HECHO** (2026)
+
+Ventanas de **tamaño variable**: `$8000-$BFFF` = 16 KB conmutable (`vrc6_prg0`), `$C000-$DFFF` = 8 KB
+conmutable (`vrc6_prg1`), `$E000-$FFFF` = último 8 KB. El bucle de análisis usa **nº de bancos por
+ventana** (16 KB vs 8 KB) y `n2a_banked_block(pc,b0,b1,b2)` elige `b0` si `pc<$C000`, si no `b1`.
+**Akumajou Densetsu byte-exact** (RAM 0/2048). `banks_test.sh` → **13 ROMs**.
+
 <details><summary>Plan original (referencia)</summary>
 
 MMC3 tiene **dos ventanas conmutables de 8 KB** (`$8000-$9FFF`=R6, `$A000-$BFFF`=R7) + **dos fijas**

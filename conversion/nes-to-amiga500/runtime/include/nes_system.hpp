@@ -501,6 +501,10 @@ private:
 					mem.prg_bank = mapper.fme7_prg[0];
 					mem.prg_bank2 = mapper.fme7_prg[1];
 					mem.prg_bank3 = mapper.fme7_prg[2];
+				} else if (mapper.kind == MapperKind::Vrc6) {
+					// VRC6: banco de 16 KB ($8000-$BFFF) y de 8 KB ($C000-$DFFF).
+					mem.prg_bank = static_cast<eng::u8>(mapper.vrc6_prg0 & 0x0Fu);
+					mem.prg_bank2 = static_cast<eng::u8>(mapper.vrc6_prg1 & 0x1Fu);
 				} else if (mapper.kind == MapperKind::Mmc1) {
 					// Solo el modo 16K con banco conmutable en $8000 coincide con
 					// el modelo del transpilado; en cualquier otro modo se invalida
