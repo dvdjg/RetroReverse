@@ -35,6 +35,7 @@ test-all: $(BIN)
 	bash tests/run.sh
 	bash tests/banks_test.sh
 	bash tests/static_size_test.sh
+	bash tests/vblank_wait_test.sh
 
 clean:
 	rm -rf build
