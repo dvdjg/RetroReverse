@@ -228,9 +228,10 @@ implementa el cartucho (bancos PRG/CHR) para **NROM (0), UxROM (2), CNROM (3), M
 MMC3 (4, incl. IRQ por flanco de A12)**, y ampliado: **VRC6 (24/26), MMC5 (5, subconjunto:
 PRG/CHR/WRAM/ExRAM/fill-mode/**split vertical**), AxROM (7) y FME-7 (69)**; el runner
 [`../runtime/tools/nes_frame.cpp`](../runtime/tools/nes_frame.cpp) parsea iNES/**NES 2.0**. Matriz
-completa en [`COMPATIBILITY.md`](COMPATIBILITY.md). El transpilador soporta **NROM/CNROM** y **UxROM
-(2)** con **bloques por banco** en la ventana conmutable y despacho por banco (F9/B1b + B2;
-ver [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md)); MMC1/MMC3 y el descubrimiento dinámico de
+completa en [`COMPATIBILITY.md`](COMPATIBILITY.md). El transpilador soporta **NROM/CNROM**, **UxROM
+(2)**, **MMC1 (1, modo 16K)** y **MMC3 (4)** con **bloques por banco** y despacho por banco (F9/B1b +
+B2 + B3a/B3b; byte-exact, ver [`TIMING_CODEGEN.md`](TIMING_CODEGEN.md) y
+[`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md)); **MMC5/VRC6/FME-7** y el descubrimiento dinámico de
 bancos siguen abiertos. De MMC5 quedan: nametables por ExRAM/CHR ROM, IRQ, multiplicador y audio.
 
 - Orden: **0 (NROM) → 2 (UxROM) → 3 (CNROM) → 1 (MMC1) → 4 (MMC3, con IRQ de scanline)**.

@@ -186,14 +186,12 @@ nes_transpiler juego.nes -o generated/game.cpp
 
 ## Limitaciones del prototipo (a cerrar en F2/F9)
 
-- Mappers: NROM (0), CNROM (3) y **UxROM (2)** (**B1b**): se transpila la **ventana fija**
-  (`$C000-$FFFF`) y la **conmutable** (`$8000-$BFFF`) **por banco** (`bbB0..bbB7`), con despacho por
-  banco elegido por `NESMemory::prg_bank`; si una dirección no tiene bloque, cae al **intérprete**
-  del runtime. Verificado en `gen_frame` (Castlevania UxROM: 0.0 % de píxeles distintos al
-  intérprete). MMC1/MMC3/MMC5/VRC6/FME-7 **se reconocen** (layout + diagnóstico) pero aún no se
-  transpilan. Misma raíz que el ejecutor rápido (`FastCpu` decodifica la PRG asumiendo mapeo fijo;
-  en bancadas el fallback es el intérprete). Diseño y plan:
-  [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0/B1a/B1b y B2 hechos).
+- Mappers: NROM (0), CNROM (3), **UxROM (2)**, **MMC1 (1, modo 16K)** y **MMC3 (4)**. Se transpila por
+  **banco** (bloques `bbB<b>_<addr>`) con despacho por banco (`NESMemory::prg_bank`/`prg_bank2`); si
+  una dirección no tiene bloque, cae al **intérprete**. Verificado **byte-exact** (`banks_test.sh`, 11
+  ROMs): Contra/Castlevania (UxROM), Metroid/MM2/Blaster Master (MMC1), Mega Man 3/4/SMB3/Crystalis/
+  Tiny Toon/Metal Storm (MMC3). MMC5/VRC6/FME-7 **se reconocen** pero aún no se transpilan. Diseño:
+  [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0–B2 + B3a MMC1 + B3b MMC3 hechos).
 - No detecta todavía **código automodificable** complejo ni todos los saltos indirectos → fallback.
 - `JSR/RTS` requieren un modelo de pila real en el runtime (push/pop de retorno).
 - Los ciclos se cuentan por bloque (aproximado) para alimentar PPU/APU.

@@ -71,12 +71,12 @@ nes_transpiler --emit-bench-rom  ../../generated/bench.nes
 nes_transpiler --emit-cnrom-rom  ../../generated/cnrom.nes
 ```
 
-Acepta **NROM (mapper 0)**, **CNROM (3)** y **UxROM (2)**. En UxROM (**F9/B1b**) se transpila la
-**ventana fija** `$C000-$FFFF` (último banco) **y** la **conmutable** `$8000-$BFFF` **por banco**
-(`bbB0..bbB7`), con despacho por banco (`NESMemory::prg_bank`) y fallback al **intérprete** si una
-dirección no tiene bloque. El resto de mappers bancados (MMC1/MMC3/MMC5/VRC6/FME-7) se **reconocen**
-(layout + diagnóstico `mapper`/bancos) pero aún no se decodifican por banco: trabajo abierto de F9,
-con diseño y plan en [`../../docs/TRANSPILER_BANKING.md`](../../docs/TRANSPILER_BANKING.md).
+Acepta **NROM (0)**, **CNROM (3)**, **UxROM (2)**, **MMC1 (1, modo 16K)** y **MMC3 (4)**. Se transpila
+**por banco** (bloques `bbB<b>_<addr>` con despacho por banco `NESMemory::prg_bank`/`prg_bank2`) y se
+cae al **intérprete** si una dirección no tiene bloque; si el juego cambia a un modo no soportado
+(MMC1/MMC3), el runtime lo invalida (sentinel) y se usa el intérprete. **Verificado byte-exact**
+(`banks_test.sh`, 11 ROMs: UxROM, MMC1 y MMC3). MMC5/VRC6/FME-7 se **reconocen** pero aún no se
+decodifican: plan en [`../../docs/TRANSPILER_BANKING.md`](../../docs/TRANSPILER_BANKING.md).
 
 ### 7z (entrada y salida)
 

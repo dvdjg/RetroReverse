@@ -169,12 +169,57 @@ el banking**, sino que **cualquier bloque transpilado** (también los de la vent
 estos juegos: es el **timing por bloque** (MMC1 es *cycle-sensitive*: banking de **CHR** a mitad de
 frame y sondeos de `$2002`), el mismo límite conocido de [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md).
 
-**Implicación para B3**: MMC1 (y MMC3) **dependen de que el bloque transpilado pueda ceder en el
-evento** (NMI/IRQ/sprite-0) para que el evento se resuelva por instrucción, no por bloque. Se probó el
-avance de PPU por acceso (ticks en el generado) y **no cambia nada** (ver
-[`TIMING_ROADMAP.md`](TIMING_ROADMAP.md) paso 2b): el requisito es **mantener `cpu.PC` por
-instrucción** (punto de reanudación), un cambio de fondo del codegen. **Revertido**: MMC1 vuelve a
-"reconocido, no transpilado" (fallback total).
+**B3 — MMC1 (modo 16K): HECHO (2026).** Con la traza *codegen↔intérprete*
+([`TIMING_CODEGEN.md`](TIMING_CODEGEN.md)) se localizó la causa: `io_write` fijaba
+`mapper.cpu_cycle = interp.cycles`, pero en el codegen `interp.cycles` no avanza → el **filtro de 2
+ciclos** del MMC1 **descartaba escrituras** de registro (ctrl/CHR). Arreglado usando el contador
+**global** `cpu.cycles`. Resultado: **Metroid y Mega Man 2 byte-exact a 60 frames (0.0 %)**;
+`NROM/CNROM/UxROM/MMC1` transpilables.
+
+### B3b — MMC3 (4×8 KB) — **HECHO** (2026)
+
+Implementado el modelo de **dos ventanas conmutables de 8 KB** (`$8000-$9FFF`=R6, `$A000-$BFFF`=R7)
++ dos fijas (`$C000-$DFFF`=n8-2, `$E000-$FFFF`=n8-1). Como las direcciones son únicas por ventana,
+basta con que `n2a_banked_block(pc, b0, b1)` **elija el banco por el rango del PC** (`pc < $A000` →
+R6, si no → R7); la tabla por banco ya sirve. Runtime: `NESMemory::prg_bank2` (R7) y espejo del mapper
+(`prg_bank=R6`, `prg_bank2=R7`; sentinela si el **bit de modo** R0.6 cambia → fallback). **ABI v3**.
+
+**Verificado** (`banks_test.sh`, 11 ROMs, framebuffer idéntico): MMC3 con **Mega Man 3/4, SMB3,
+Crystalis, Tiny Toon, Metal Storm** además de UxROM (Contra/Castlevania) y MMC1 (Metroid/MM2/Blaster
+Master).
+
+<details><summary>Plan original (referencia)</summary>
+
+MMC3 tiene **dos ventanas conmutables de 8 KB** (`$8000-$9FFF`=R6, `$A000-$BFFF`=R7) + **dos fijas**
+(`$C000-$DFFF`=n8-2, `$E000-$FFFF`=n8-1), y un **bit de modo** (R0 bit6) que las intercambia. El
+modelo actual (1 conmutable + 1 fija) no basta. Cambios:
+
+1. **Transpiler**: generalizar a **lista de ventanas** `{base, tamaño, fijo|conmutable}`; `prg_offset`
+   con `(ventana, banco)`; `collect_switch_targets` por ventana; `generate()` itera `ventana × banco`;
+   bloques `bbB<banco>_<addr>` (la dirección distingue la ventana).
+2. **Runtime**: espejo de **dos** bancos (`prg_bank`=R6, `prg_bank2`=R7); el plugin elige tabla por
+   rango de PC; **sentinela de modo** (R0 bit6) → fallback. **IRQ de raster A12** (ya modelada en el
+   mapper) para el timing.
+3. **Verificación**: `banks_test.sh` con `megaman3`/`smb3`/`kirby`.
+
+Infraestructura ya lista: bancos, despacho disperso, `--trace`/`dbg_trace`, ticks, `fast_ticks`.
+
+</details>
+
+Auditando el código (métodos de `CPU` del codegen vs intérprete) se encontraron y **arreglaron 3
+divergencias de fidelidad reales** (verificadas sin regresión: `CPU metodos OK`, `gen_frame NROM
+codegen == interprete`, `RUNTIME OK`):
+
+1. **`CPU::BRK`**: empujaba `PC+2`, pero el bloque **no mantiene el PC por instrucción** → dirección de
+   retorno incorrecta si `BRK` no es la 1ª instrucción del bloque. Ahora el generado fija el PC real.
+2. **NOP ilegales** (`0x0C`, `0x1C`, `0x04`…): el codegen no leía memoria; el intérprete **sí** (efecto
+   de direccionamiento, p. ej. leer `$2002` limpia VBlank). Ahora leen.
+3. **`(zp,X)`/`(zp),Y`**: el codegen no **envolvía** el puntero de página cero (`0xFF → 0x100`); el
+   intérprete usa `& 0xFF`. Nuevo `NESMemory::read_zp16`.
+
+Ninguno resolvió MMC1 → la causa está en otra parte (probable **decodificación del banco fijo** o
+cobertura). **Revertido** MMC1 a "reconocido, no transpilado". Siguiente: un **trace
+codegen↔intérprete** para localizar la primera divergencia de estado.
 
 > Diagnóstico conservado: `N2A_MODE` en `tools/transpiler/tests/gen_frame.cpp` permite reproducir el
 > análisis (fallback/fixed/banked) en cualquier ROM.
