@@ -108,20 +108,30 @@ L_C000:
 }
 ```
 
-Despacho por dirección (para saltos indirectos, interrupciones y entrada desde fuera de un bloque):
+Despacho por dirección (para saltos indirectos, interrupciones y entrada desde fuera de un bloque).
+Es **disperso** (no una tabla densa de 64K punteros): una entrada `{dirección, ciclos, fn}` por bloque,
+**ordenada** + **búsqueda binaria** (barato en RAM: `.bss = 0`):
 
 ```cpp
-using BasicBlockFn = void(*)(CPU&);
-static BasicBlockFn dispatch_table[0x10000] = {};
+using BlockFn = void (*)(CPU&);
+struct Block { eng::u16 start; eng::u16 cycles; BlockFn fn; };
+static const Block kFixedBlocks[] = { { 0xC000, 7, bb_C000 }, /* … */ };
+static const eng::u16 kFixedCount = /* nº de bloques */;
 
-void init_dispatch_table() {
-    dispatch_table[0xC000] = bb_C000;
-    // ...
+static BlockFn n2a_fixed_block(eng::u16 pc) {   // búsqueda binaria
+    eng::u16 lo = 0, hi = kFixedCount;
+    while (lo < hi) {
+        const eng::u16 mid = lo + (hi - lo) / 2;
+        if (kFixedBlocks[mid].start == pc) return kFixedBlocks[mid].fn;
+        if (kFixedBlocks[mid].start < pc) lo = mid + 1; else hi = mid;
+    }
+    return nullptr;
 }
+
 void game_reset(CPU& cpu) {
     cpu.PC = cpu.read16(0xFFFC);
     while (true) {
-        auto fn = dispatch_table[cpu.PC];
+        auto fn = n2a_fixed_block(cpu.PC);
         if (fn) fn(cpu);
         else    interpret_one_instruction(cpu);   // fallback
     }
@@ -176,10 +186,14 @@ nes_transpiler juego.nes -o generated/game.cpp
 
 ## Limitaciones del prototipo (a cerrar en F2/F9)
 
-- Solo mapper 0 (NROM) al principio; el resto llega en F9. Misma raíz que el ejecutor rápido
-  (`FastCpu` decodifica la PRG asumiendo mapeo fijo): ver
-  [`FAST_EXECUTOR.md`](FAST_EXECUTOR.md) §"Mappers (CNROM)" — el *banking* exige bloques por banco
-  **y** reloj de PPU por acceso para conservar la equivalencia.
+- Mappers: NROM (0), CNROM (3) y **UxROM (2)** (**B1b**): se transpila la **ventana fija**
+  (`$C000-$FFFF`) y la **conmutable** (`$8000-$BFFF`) **por banco** (`bbB0..bbB7`), con despacho por
+  banco elegido por `NESMemory::prg_bank`; si una dirección no tiene bloque, cae al **intérprete**
+  del runtime. Verificado en `gen_frame` (Castlevania UxROM: 0.0 % de píxeles distintos al
+  intérprete). MMC1/MMC3/MMC5/VRC6/FME-7 **se reconocen** (layout + diagnóstico) pero aún no se
+  transpilan. Misma raíz que el ejecutor rápido (`FastCpu` decodifica la PRG asumiendo mapeo fijo;
+  en bancadas el fallback es el intérprete). Diseño y plan:
+  [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0/B1a/B1b y B2 hechos).
 - No detecta todavía **código automodificable** complejo ni todos los saltos indirectos → fallback.
 - `JSR/RTS` requieren un modelo de pila real en el runtime (push/pop de retorno).
 - Los ciclos se cuentan por bloque (aproximado) para alimentar PPU/APU.

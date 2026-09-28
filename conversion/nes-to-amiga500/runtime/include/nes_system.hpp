@@ -106,6 +106,7 @@ struct NesSystem {
 		}
 		mem.prg = m.prg;
 		mem.prg_size = m.prg_size;
+		mem.prg_bank = 0;
 	}
 
 	/// Activa/desactiva el **reloj de bus por acceso** (modelo dot-exacto del
@@ -152,7 +153,10 @@ struct NesSystem {
 	/// \return Ciclos de CPU consumidos por el bloque.
 	int step_block(int* out_instrs) {
 		if (fast_run != nullptr) {
-			const int budget = cycles_to_scanline();
+			// Presupuesto hasta el próximo evento del PPU (no hasta fin de
+			// scanline): el bloque rápido se corta en la frontera del evento para
+			// no adelantar VBlank/sprite-0 (scheduler de eventos, Fase 3).
+			const int budget = cycles_to_next_event();
 			int n = 0;
 			int cyc = fast_run(fast_ctx, cpu, mem, budget, &n);
 			if (cyc <= 0) {
@@ -462,9 +466,25 @@ private:
 			mapper.cur_scan = ppu.scanline;
 			mapper.cpu_write(a, v);
 			// Conmutación de bancos de PRG ($8000-$FFFF): invalida la decodificación
-			// del ejecutor rápido (si lo hay) para que se rehaga a través del mapper.
-			if (a >= 0x8000u && fast_invalidate != nullptr) {
-				fast_invalidate(fast_ctx);
+			// del ejecutor rápido (si lo hay) para que se rehaga a través del mapper
+			// y actualiza el espejo `mem.prg_bank` que usa el despacho por banco del
+			// código transpilado (F9/B1b).
+			if (a >= 0x8000u) {
+				if (mapper.kind == MapperKind::Uxrom) {
+					mem.prg_bank = mapper.prg_bank;
+				} else if (mapper.kind == MapperKind::Mmc1) {
+					// Solo el modo 16K con banco conmutable en $8000 coincide con
+					// el modelo del transpilado; en cualquier otro modo se invalida
+					// con el sentinel 0xFF (el plugin cae al intérprete).
+					const bool mode16 = (mapper.mmc1_ctrl & 0x08u) != 0u;
+					const bool slot8000 = (mapper.mmc1_ctrl & 0x04u) != 0u;
+					mem.prg_bank = (mode16 && slot8000)
+							       ? static_cast<eng::u8>(mapper.mmc1_prg & 0x0Fu)
+							       : static_cast<eng::u8>(0xFFu);
+				}
+				if (fast_invalidate != nullptr) {
+					fast_invalidate(fast_ctx);
+				}
 			}
 			return;
 		}
@@ -477,6 +497,18 @@ private:
 	[[nodiscard]] int cycles_to_scanline() const {
 		const int b = (340 - static_cast<int>(ppu.dot)) / 3;
 		return b < 0 ? 0 : b;
+	}
+
+	/// Máximo de ciclos de CPU antes del **próximo evento observable** del PPU
+	/// (VBlank, pre-render, sprite-0, fin de frame; ver `Ppu::next_event_dots`).
+	/// Sustituye a `cycles_to_scanline()` como presupuesto del ejecutor rápido:
+	/// así el bloque termina en la frontera del evento (o antes), se resuelve el
+	/// NMI/IRQ y la PPU no se adelanta a los eventos. `0` fuerza una sola
+	/// instrucción (evento a <1 ciclo), como en `cycles_to_scanline`.
+	/// \return Ciclos hasta el próximo evento (>= 0).
+	[[nodiscard]] int cycles_to_next_event() const {
+		const eng::u32 dots = ppu.next_event_dots();
+		return static_cast<int>(dots / 3u);
 	}
 
 	/// Avanza la PPU `cpu_cycles*3` dots (341 dots por línea). Al cambiar de

@@ -10,5 +10,6 @@ Registro de decisiones de arquitectura del marco. Formato corto:
 | [0003](0003-higs-unica-entrada-reimpl.md) | La HIGS es la única entrada de la reimplementación | aceptado |
 | [0004](0004-migracion-amiga-reverse.md) | Repositorio único (marco + subproyecto Amiga) | aceptado |
 | [0005](0005-pilar-conversion-plataformas.md) | Tercer pilar: conversión a plataformas destino | aceptado |
+| [0006](0006-compresion-zx0.md) | Compresión de archivos transpilados para Amiga: ZX0 único | aceptado |
 
 Para añadir una ADR: copiar la plantilla de 0001, numerar correlativo y añadir a la tabla.

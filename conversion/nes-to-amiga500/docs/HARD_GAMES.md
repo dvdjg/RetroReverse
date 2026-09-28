@@ -1,64 +1,73 @@
-# Juegos "difíciles" (para el backend Mega Drive) — inventario
+# Juegos difíciles — inventario (oráculo vs transpilador)
 
-ROMs traídas de `F:\roms\nes` a `roms/nes/dificiles/` (contenido **no versionado**; ver `.gitignore`),
-para probar el futuro backend **Mega Drive** y, de paso, los límites del **oráculo**. Se listan los
-mappers y el estado actual en nuestro emulador (que hoy soporta NROM/UxROM/CNROM/MMC1 básico).
+Inventario de los juegos que ponen a prueba el pipeline NES→Amiga. **Fuente de verdad de cifras:
+[`COMPATIBILITY.md`](COMPATIBILITY.md)**; estado de mappers: [`MAPPERS.md`](MAPPERS.md).
 
-## MMC3 (IRQ por scanline, CHR banking fino) — mapper 4
+> Este documento nació como inventario para un **backend Mega Drive**, hoy **descartado**
+> (el 68000/OCS del A500 con Copper/Blitter encaja mejor vía transpilación + HLE). Se conserva
+> reenfocado a lo que realmente importa: dónde se atasca el **oráculo** y dónde el **transpilador**.
 
-| Juego | mapper | PRG/CHR | oráculo |
-|---|---:|---|---|
-| Super Mario Bros. 3 (USA) (Rev A) | 4 | 256K/128K | no soportado |
-| Kirby's Adventure (USA) (Rev A) | 4 | 512K/256K | no soportado |
-| Mega Man 3/4/5/6 | 4 | 256-512K | no soportado |
-| Crystalis (USA) | 4 | 256K/128K | no soportado |
-| Adventure Island 3 (USA) | 4 | 128K/128K | no soportado |
-| Tiny Toon Adventures (USA) | 4 | 128K/128K | no soportado |
-| Batman: Return of the Joker (USA) | **69** (FME-7) | 128K/256K | no soportado |
-| Metal Storm (USA) | 4 | 128K/256K | no soportado |
-| Shatterhand (USA) | 4 | 128K/128K | no soportado |
-| Ninja Gaiden II/III | 4 | 128K/128K | no soportado |
-| Super C (USA) | 4 | 128K/128K | no soportado |
+## 1. Oráculo — estado por juego (60 frames vs `mesen`)
 
-## MMC5 (multiplicador, RAM extra, modos gráficos) — mapper 5
+El **oráculo** (CPU 6502 + PPU/APU software) soporta los mappers NROM/UxROM/CNROM/MMC1/MMC3, y un
+subconjunto de **MMC5** y **VRC6**, más AxROM y FME‑7. La mayoría de la matriz está a **0.0 %**.
 
-Castlevania III (USA), Uncharted Waters (USA), Laser Invasion (USA), Gemfire (USA), Nobunaga's
-Ambition II (USA) → **no soportado**.
+| Juego | mapper | estructura vs mesen | Nota |
+|---|---:|---:|---|
+| Gemfire, Mr. Gimmick, Batman RotJ, Batman TV, dk, dkjr, metroid, megaman3/5/6, … | varios | **0.0 %** | sin divergencia |
+| Nobunaga's Ambition II | 5 (MMC5) | 0.6 % | |
+| Contra, galaga | 2 / 0 | 0.9 % | |
+| Battletoads | 7 (AxROM) | 1.9 % | CHR‑RAM |
+| Castlevania III / Akumajou Densetsu / Crystalis | 5 / 24 / 4 | 2.7 % | |
+| smb | 0 | 3.1 % | límite de timing `$2002` |
+| metalstorm | 4 | 14.2 % | límite de timing `$2002` |
+| gradius | 3 | 3.3 % | límite de timing `$2002` |
+| **Uncharted Waters** | 5 (MMC5) | **45.8 %** | **bug abierto** (ver §3) |
+| **ic** | 0 | **92.2 %** | límite de timing `$2002` |
+| Esper Dream 2 / Mouryou Senki Madara | 26 (VRC6b) | "100 %" | **inconcluyente**: pantalla en blanco sin *input* |
 
-## VRC6/VRC7 (Konami; sonido extra + CHR granular + IRQ) — mapper 24/26
+## 2. Qué falta de verdad (por prioridad)
 
-Akumajou Densetsu (JP, VRC6=24), Esper Dream 2 (JP, 26), Mouryou Senki Madara (JP, 26) →
-**no soportado**.
+| # | Falta | Dónde | Impacto |
+|---:|---|---|---|
+| 1 | **Banking en el transpilador** (sigue NROM-only) | `tools/transpiler/` | **techo real de conversión**: casi todo el catálogo comercial usa MMC1/MMC3/… |
+| 2 | **Input-injection** en el harness de validación | `runtime/test/` | hace medibles RPG/intros y splits; quita los "100 %" falsos |
+| 3 | **Uncharted Waters (MMC5) 45.8 %** | PPU/MMC5 | 1 juego, pero valida el mapper más duro |
+| 4 | **Timing `$2002`/NMI** (ic, metalstorm, gradius, smb) | oráculo | fidelidad de **estado**; **no bloquea** el port (el Amiga usa Copper/Blitter) |
+| 5 | **MMC5 audio de expansión** + banco CHR del split | runtime | solo audio |
 
-## AxROM (CHR-RAM, 1 pantalla) — mapper 7
+El trabajo nº 1 se abre y detalla en
+[`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md). El nº 4 tiene su plan acotado en
+[`TIMING_ROADMAP.md`](TIMING_ROADMAP.md).
 
-Battletoads (USA) → **no soportado** (256K PRG, **0K CHR = CHR-RAM**).
+## 3. Detalle de los casos difíciles
 
-## Sunsoft FME-7 — mapper 69
+### MMC5 — `Uncharted Waters` 45.8 % (bug abierto)
+`mesen` pinta casi todo negro + un logo rojo; nosotros pintamos ~41 000 px no negros repartidos.
+Hipótesis **descartadas** (medidas): modo atributo extendido de ExRAM, reloj de bus cycle-exact,
+selector `chrA` (no aplica: `$2000` bit5=0). Falta una comparación **pixel a pixel** con `mesen`
+(dump de nametable/CHR; el volcado `RRS1` no está en el `.so`). Gemfire/Laser/Nobunaga's/CV3 no
+regresan (0.0–3.1 %).
 
-Mr. Gimmick (Europe) → **no soportado**.
+### VRC6b (26) — Esper Dream 2 / Mouryou Senki Madara ("100 %")
+**NO es un bug de mapper**: a 60/200/400 frames ambos frames son de **un solo color** (pantallas en
+blanco esperando *input*). El "100 %" es la métrica contando la **diferencia de color de fondo** en
+pantalla plana. Requiere **input-injection** para ser verificable.
 
-## PPU dependiente del ciclo
+### Timing `$2002`/NMI (ic 92.2 %, metalstorm 14.2 %, gradius 3.3 %, smb 3.1 %)
+Una **sola raíz**: la sincronización PPU/NMI **sub‑instrucción** (no cycle-exact). El oráculo
+sincroniza la PPU por instrucción, `mesen` por ciclo → el bucle `LDA $2002/BPL` sale una iteración
+antes/después y el NMI cae en otra frontera. No es bloqueante para el Amiga. Plan y alternativas
+descartadas: [`TIMING_ROADMAP.md`](TIMING_ROADMAP.md), [`RISKS.md`](RISKS.md).
 
-Battletoads (7), Jurassic Park (4), Metal Storm (4), Shatterhand (4), Mr. Gimmick (69) → requieren
-timing de PPU fino (que el emulador del oráculo ya aproxima) y mappers no soportados.
+### Juegos que exigen precisión de PPU fina
+Battletoads (AxROM, CHR‑RAM), Jurassic Park, Metal Storm, Shatterhand, Mr. Gimmick → ya renderizan
+(0.0–1.9 %) gracias al PPU por frontera de bloque + dot; lo que queda es el timing de arriba.
 
-## Bugs de PPU/temporizado (necesitan los mappers, pero también precisión)
+## 4. Transpilador — techo de compatibilidad
 
-Contra (2), Super C (4), Ninja Gaiden II/III (4), Batman (4) → streaming de CHR.
-
----
-
-## Conclusión para el backend Mega Drive
-
-La MD **no tiene** IRQ por scanline programable (el MMC3 la usa), **no permite cambiar tiles durante
-el render** (la NES sí), y su VRAM es rígida para streaming de CHR. Por eso los MMC3/MMC5/VRC hacen
-falta efectos que la MD no puede replicar sin reescribir el motor. La estrategia de este proyecto
-(transpilar + HLE + Copper) encaja mucho mejor en **Amiga** (Copper = co-procesador de vídeo) que en
-MD; en MD harían falta técnicas distintas (más Blitter, tilemaps precalculados).
-
-## Nota: usarlos en el oráculo PC
-
-Antes de portar nada, conviene que el **oráculo** los ejecute para tener referencia. Hoy eso exige
-más mappers en `runtime/include/nes_mapper.hpp`: **MMC3 (4)** es el siguiente (reutiliza el IRQ de
-CPU que ya existe); después MMC5/7/69. Varios de estos juegos ya renderizan si el mapper lo permite.
+El **oráculo** soporta mappers y el **transpilador** ya traduce **NROM/CNROM** y **UxROM (2)** con
+**bloques por banco** (F9/B1b + B2): p. ej. Castlevania/Contra (UxROM) se transpilan y, dentro
+de `NesSystem`, dan el **mismo framebuffer** que el intérprete. Los mappers con **banking más complejo**
+(MMC1/MMC3/MMC5/VRC6/FME‑7) todavía no se transpilan, aunque el oráculo los ejecute. Ese trabajo está
+abierto en [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (siguiente: B3).

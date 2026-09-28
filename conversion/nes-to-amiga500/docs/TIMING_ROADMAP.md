@@ -123,6 +123,37 @@ frame. El `budget` del ejecutor rápido pasa de "hasta fin de scanline" a "hasta
 (0 si el evento cae dentro del bloque → cae a intérprete/instrucción y este a **ciclo/bus**).
 *Verificación*: equivalencia + `gate`; `trace_diff` de los 6 juegos.
 
+> **Paso 1 (hecho, 2026): primitivo `Ppu::next_event_dots()`.** Devuelve la distancia en **dots**
+> hasta el próximo evento observable (set VBlank 241, pre-render/clear 261, sprite-0 en su dot, fin
+> de frame 262→0), con la paridad NTSC (línea 261 = 340 dots en frames impares). Es **aditivo** (no
+> toca el bucle → cero regresión) y está cubierto por
+> [`../runtime/fallback/test/ppu_events_test.cpp`](../runtime/fallback/test/ppu_events_test.cpp)
+> (`PPU_EVENTS OK`). Falta incluir **IRQ de mapper** (MMC3 A12) en el mínimo.
+>
+> **Paso 2a (hecho, 2026): cablear el ejecutor rápido.** `NesSystem::step_block` usa ahora
+> `budget = cycles_to_next_event()` (= `next_event_dots()/3`) en vez de `cycles_to_scanline()`; el
+> bloque rápido termina en la frontera del evento y se resuelve el NMI/IRQ. **Sin regresión**:
+> `RUNTIME OK`, `interp == fast` OK (bf/gradius), matriz de compatibilidad intacta.
+> ⚠️ **No mueve la puerta por sí solo**: la compatibilidad se mide con el **intérprete/oráculo**, y
+> los 4 juegos del límite son divergencia **sub-dot** del oráculo vs mesen (Fases 4/5). Tampoco toca
+> MMC1/MMC3 (su ejecutor rápido es N/A y el camino transpilado **ignora** el budget).
+>
+> **Paso 2b (el núcleo duro): probado y revertido — el fallo NO es el orden de acceso.**
+> Se emitió avance de PPU **por acceso** en el código generado (`cpu.mem->tick(base)` antes de cada
+> instrucción + penalizaciones), con un flag `NesSystem::fast_ticks` para que el host no re-relojee.
+> Resultado: **NROM sigue exacto** (`codegen == interprete`, `ram_diff=0`) — los ticks son correctos —
+> pero **MMC1 no cambia en absoluto** (Metroid 20.1 % con `fixed` y `banked`, idéntico a sin ticks).
+> Conclusión: la divergencia **no es el orden de acceso a la PPU**.
+>
+> **El bloqueo real**: el **NMI/evento se resuelve a granularidad de bloque** (el host comprueba
+> `nmi_occurred` tras el bloque), y un bloque **no puede ceder a mitad** porque el **código generado
+> no mantiene `cpu.PC` por instrucción** (solo en los saltos; ver [`OPTIMIZATION.md`](OPTIMIZATION.md)
+> §"¿Hace falta mantener el PC?"). Sin PC por instrucción no hay punto de reanudación tras el evento.
+> Fraccionar el bloque exige **mantener/actualizar el PC por instrucción** (o un mecanismo de
+> reanudación) → cambio de fondo del codegen. Por eso MMC1/MMC3 quedan bloqueados hasta abordarlo
+> (ver [`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) §B3). **Revertido**: el camino limpio se
+> recupera (`RUNTIME OK`).
+
 ### Fase 4 — Lectura cycle-exacta de `$2002`
 
 > **Resultado negativo 2026 (muestreo temprano, medido).** Se probó muestrear `$2002`

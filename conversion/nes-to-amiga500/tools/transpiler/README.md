@@ -71,8 +71,12 @@ nes_transpiler --emit-bench-rom  ../../generated/bench.nes
 nes_transpiler --emit-cnrom-rom  ../../generated/cnrom.nes
 ```
 
-Acepta **NROM (mapper 0) y CNROM (3)**, ambos con PRG fija (CNROM solo conmuta CHR, vía el mapper del
-runtime). UxROM/MMC1 (bancos de PRG) no se pueden decodificar estáticamente todavía.
+Acepta **NROM (mapper 0)**, **CNROM (3)** y **UxROM (2)**. En UxROM (**F9/B1b**) se transpila la
+**ventana fija** `$C000-$FFFF` (último banco) **y** la **conmutable** `$8000-$BFFF` **por banco**
+(`bbB0..bbB7`), con despacho por banco (`NESMemory::prg_bank`) y fallback al **intérprete** si una
+dirección no tiene bloque. El resto de mappers bancados (MMC1/MMC3/MMC5/VRC6/FME-7) se **reconocen**
+(layout + diagnóstico `mapper`/bancos) pero aún no se decodifican por banco: trabajo abierto de F9,
+con diseño y plan en [`../../docs/TRANSPILER_BANKING.md`](../../docs/TRANSPILER_BANKING.md).
 
 ### 7z (entrada y salida)
 
@@ -132,7 +136,8 @@ código. Se genera con la telemetría del runtime
 - Ramas y `JMP` absoluto → `cpu.PC = destino; return;` (vuelven al despacho, para que el runtime
   pueda avanzar la PPU entre bloques); `JMP (ind)` → `cpu.JMP_ind`.
 - `JSR` → `cpu.JSR_abs(destino, retorno); return;`; `RTS`/`RTI` recuperan de la pila.
-- Tabla de despacho `dispatch_table[0x10000]`, `g_state`, `game_main()` y `main()` de host tras
+- Despacho **disperso** (tablas `{addr, ciclos, fn}` ordenadas + búsqueda binaria; `.bss = 0`),
+  `g_state`, `game_main()` y `main()` de host tras
   `#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)`.
 - Cada bloque lleva una **ficha** (rango 6502, qué hace, quién lo llama, recursos), según la regla
   de código autodocumentado de [`../../../../AGENTS.md`](../../../../AGENTS.md).
@@ -146,7 +151,12 @@ código. Se genera con la telemetría del runtime
 
 ```bash
 bash tests/run.sh          # o: make test
+bash tests/uxrom_test.sh   # UxROM (mapper 2): bloques por banco == intérprete (0.0 % píxeles)
 ```
+
+`uxrom_test.sh` transpila una ROM UxROM (por defecto `runtime/build/castlevania.nes`; o pásale otra,
+p. ej. `contra.nes`) y comprueba que el codegen, dentro de `NesSystem`, da el **mismo framebuffer**
+que el intérprete. Sin ROM, se salta (CI sin ROMs).
 
 Compila la herramienta, genera **tres** ROMs propias, las transpila, compila el C++ generado **con el
 runtime** (`-I ../../runtime/include`) y comprueba el estado final:
@@ -179,3 +189,22 @@ Los cambios en `eng/core` se validaron con la suite host de Amiga-Cpp (`tools/ru
 todas las categorías pasan. El único ajuste fue `tests/host/core/073_basic_type_traits` (ahora
 comprueba `sizeof(u32)==4` en vez de la identidad con `unsigned long`, que ya no se cumple en LP64).
 El aviso `header-impl` sobre `eng/ai/planning/goap.hpp` es preexistente y ajeno a estos cambios.
+
+## Empaquetado para Amiga (RRPK)
+
+Cuando el destino sea **Amiga 500** y exista el build del plugin en 68000, `--emit-lib` debe
+empaquetar los rangos con el **packer** ([`../packer/`](../packer/README.md)) en un contenedor
+`RRPK` (todo ZX0; ver [ADR 0006](../../../../docs/adr/0006-compresion-zx0.md)), etiquetando cada
+segmento por tipo para que el cargador del Amiga lo descomprima y salte a ejecutarlo:
+
+| rango | tipo | códec |
+|---|---|---|
+| secciones `.text` | `code` | `zx0` |
+| `.rodata`/`.data` | `data` | `zx0` |
+| PRG de la ROM | `prg` | `zx0` |
+| CHR de la ROM | `chr` | `zx0` |
+
+Punto de entrada: [`../packer/pack_amiga.sh`](../packer/pack_amiga.sh)
+`code.bin data.bin juego.nes juego.rrpk` (extrae PRG/CHR del `.nes`, empaqueta y verifica el
+round-trip). Hoy el build del plugin en 68000 está pendiente del engine de Amiga; este contrato deja
+la llamada definida para cuando exista.

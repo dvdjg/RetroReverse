@@ -247,7 +247,8 @@ Compilación m68k recomendada: `-O2/-O3 -m68000` (o `-m68020` en A1200) `-mshort
 ### ¿Hace falta mantener el PC?
 
 Dentro de un bloque (código recto) el PC **no se toca** hoy. Entre bloques sí, porque el despachador
-(`dispatch_table[cpu.PC]`) selecciona el bloque. El PC **sigue siendo necesario** para: **saltos
+**disperso** (`n2a_fixed_block(cpu.PC)` / `n2a_banked_block(...)`) selecciona el bloque. El PC **sigue
+siendo necesario** para: **saltos
 indirectos/computados**, **subrutinas** (salvo que se usen llamadas nativas), **NMI/IRQ**, y el
 **fallback al intérprete** para **código en RAM/automodificado** (estado completo, incluido PC).
 

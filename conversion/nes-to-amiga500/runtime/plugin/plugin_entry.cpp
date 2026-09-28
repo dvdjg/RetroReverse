@@ -38,17 +38,35 @@ int n2a_mapper(void) { return kMapper; }
 int n2a_mirroring(void) { return kMirroring; }
 
 int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
-	(void)mem_p;
 	n2a::CPU& cpu = *static_cast<n2a::CPU*>(cpu_p);
 	const eng::u16 pc = cpu.PC;
-	if (dispatch_table[pc] == nullptr) {
+	// Ventana conmutable ($8000-$BFFF) en mappers bancados (UxROM, F9/B1b): el
+	// bloque depende del banco de PRG activo, que el sistema mantiene en
+	// `NESMemory::prg_bank` en cada conmutación.
+	const NESMemory* m = (mem_p != nullptr) ? static_cast<const NESMemory*>(mem_p) : cpu.mem;
+	const eng::u8 bank = (m != nullptr) ? m->prg_bank : 0u;
+	if (kPrgModeSensitive && bank == static_cast<eng::u8>(0xFFu)) {
+		// MMC1 en un modo de ventanas no soportado: no valen ni los bloques por
+		// banco ni los de la ventana fija -> fallback total al intérprete.
+		if (instrs != nullptr) {
+			*instrs = 0;
+		}
+		return 0;
+	}
+	BlockFn fn = nullptr;
+	if (kPrgBanked && pc >= 0x8000u && pc < 0xC000u) {
+		fn = n2a_banked_block(pc, bank);
+	} else {
+		fn = n2a_fixed_block(pc);
+	}
+	if (fn == nullptr) {
 		if (instrs != nullptr) {
 			*instrs = 0;
 		}
 		return 0; // sin bloque (RAM/salto calculado): lo resuelve el gestor
 	}
 	const eng::u32 before = cpu.cycles;
-	dispatch_table[pc](cpu);
+	fn(cpu);
 	if (instrs != nullptr) {
 		*instrs = 1;
 	}

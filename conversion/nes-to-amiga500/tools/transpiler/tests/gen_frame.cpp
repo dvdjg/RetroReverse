@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "../../runtime/include/nes_system.hpp"
 #include "../../runtime/host/fastcpu.hpp"
@@ -33,9 +34,39 @@ n2a::FastCpu g_fast; ///< Motor rápido para el fallback (RAM y saltos calculado
 /// (salto calculado), devuelve 0 y el `NesSystem` cae al intérprete.
 int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* n) {
 	const eng::u16 pc = cpu.PC;
-	if (dispatch_table[pc] == nullptr) {
-		// Sin bloque estático (RAM o salto calculado): usa el ejecutor rápido, que
-		// decodifica RAM bajo demanda. Si él tampoco puede, cae al intérprete.
+	// Modo de diagnóstico (N2A_MODE=fallback|fixed) para aislar el despacho.
+	const char* md = std::getenv("N2A_MODE");
+	if (md != nullptr && std::strcmp(md, "fallback") == 0) {
+		if (n != nullptr) {
+			*n = 0;
+		}
+		return 0;
+	}
+	const bool force_fixed = (md != nullptr && std::strcmp(md, "fixed") == 0);
+	// Ventana conmutable en mappers bancados (UxROM/MMC1): el bloque depende del
+	// banco. En MMC1, un modo no soportado invalida el modelo (sentinel 0xFF).
+	const eng::u8 bank = mem.prg_bank;
+	if (kPrgModeSensitive && bank == static_cast<eng::u8>(0xFFu)) {
+		if (n != nullptr) {
+			*n = 0;
+		}
+		return 0; // fallback total al intérprete
+	}
+	BlockFn fn = nullptr;
+	if (kPrgBanked && !force_fixed && pc >= 0x8000u && pc < 0xC000u) {
+		fn = n2a_banked_block(pc, bank);
+	} else {
+		fn = n2a_fixed_block(pc);
+	}
+	if (fn == nullptr) {
+		// Sin bloque estático: en bancadas el **intérprete** (mapper-aware) es la
+		// referencia correcta; en NROM/CNROM vale el ejecutor rápido.
+		if (kPrgBanked || force_fixed) {
+			if (n != nullptr) {
+				*n = 0;
+			}
+			return 0;
+		}
 		const int c = n2a::FastCpu::step(&g_fast, cpu, mem);
 		if (n != nullptr) {
 			*n = (c > 0) ? 1 : 0;
@@ -44,7 +75,7 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* 
 	}
 	(void)budget; // la cesión por instrucción está pendiente (ver FAST_EXECUTOR.md)
 	const eng::u32 before = cpu.cycles;
-	dispatch_table[pc](cpu);
+	fn(cpu);
 	if (n != nullptr) {
 		*n = 1;
 	}

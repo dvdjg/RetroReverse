@@ -322,6 +322,64 @@ struct Ppu {
 		}
 	}
 
+	/// Dots de una línea según la paridad NTSC (la pre-render 261 pierde 1 dot en
+	/// frames impares). Mismo criterio que `tick_dot`.
+	[[nodiscard]] eng::u16 wrap_dots(eng::u16 line) const {
+		return (line == 261u && odd_frame) ? 340u : 341u;
+	}
+
+	/// Dots desde `(l0,d0)` hasta `(l1,d1)`, con `l1 >= l0`, dentro del frame.
+	/// Cuenta los dots del resto de la línea actual, las líneas intermedias (341
+	/// cada una; 340 la 261 en frames impares) y `d1` dentro de la línea destino.
+	[[nodiscard]] eng::u32 dots_between(eng::u16 l0, eng::u16 d0, eng::u16 l1,
+					    eng::u16 d1) const {
+		if (l1 < l0) {
+			return 0u;
+		}
+		if (l1 == l0) {
+			return (d1 >= d0) ? static_cast<eng::u32>(d1 - d0) : 0u;
+		}
+		eng::u32 d = static_cast<eng::u32>(wrap_dots(l0)) - d0;
+		d += static_cast<eng::u32>(l1 - l0 - 1u) * 341u;
+		if (odd_frame && l0 < 261u && l1 > 261u) {
+			d -= 1u; // la línea 261 intermedia tuvo 340
+		}
+		d += d1;
+		return d;
+	}
+
+	/// Dots hasta el **próximo evento observable** del PPU: set de VBlank (línea
+	/// 241), pre-render/clear (261), sprite-0 hit (en su dot) o fin de frame
+	/// (262→0). Base del **scheduler de eventos** (timing, Fase 3:
+	/// `docs/TIMING_ROADMAP.md`). No muta estado; el mínimo está acotado por el fin
+	/// de frame, así que siempre es `>= 1`.
+	/// \return Dots hasta el próximo evento (puede superar 65535: un frame son
+	///         89342 dots), por eso `eng::u32`.
+	[[nodiscard]] eng::u32 next_event_dots() const {
+		eng::u32 best = dots_between(scanline, dot, 262u, 0u); // fin de frame
+		if (scanline < 241u) {
+			const eng::u32 d = dots_between(scanline, dot, 241u, 0u); // set VBlank
+			if (d < best) {
+				best = d;
+			}
+		}
+		if (scanline < 261u) {
+			const eng::u32 d = dots_between(scanline, dot, 261u, 0u); // pre-render
+			if (d < best) {
+				best = d;
+			}
+		}
+		if (sprite0_line != 0xFFFFu && (status & 0x40u) == 0u &&
+		    (sprite0_line > scanline ||
+		     (sprite0_line == scanline && sprite0_dot >= dot))) {
+			const eng::u32 d = dots_between(scanline, dot, sprite0_line, sprite0_dot);
+			if (d < best) {
+				best = d;
+			}
+		}
+		return best;
+	}
+
 	/// Dibuja el **fondo** completo en `fb` (sin sprites) aplicando scroll y
 	/// attribute tables. Usa `chr` como pattern tables.
 	void render_background() {

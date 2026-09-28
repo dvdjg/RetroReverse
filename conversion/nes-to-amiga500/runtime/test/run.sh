@@ -32,6 +32,9 @@ fi
 echo "[2/5] PPU software (fallback)"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/fallback" "$ROOT/fallback/test/ppu_test.cpp" -o "$ROOT/build/ppu_test"
 "$ROOT/build/ppu_test"
+echo "[2b/5] eventos del PPU (scheduler de timing)"
+"$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/fallback" "$ROOT/fallback/test/ppu_events_test.cpp" -o "$ROOT/build/ppu_events_test"
+"$ROOT/build/ppu_events_test"
 
 echo "[3/5] APU software (fallback)"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$ROOT/fallback" "$ROOT/fallback/test/apu_test.cpp" -o "$ROOT/build/apu_test"

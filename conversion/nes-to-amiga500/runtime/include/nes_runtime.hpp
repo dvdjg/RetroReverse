@@ -67,6 +67,11 @@ struct NESMemory {
 	const eng::u8* prg = nullptr;
 	/// Tamaño de la PRG-ROM en bytes: 16 KB se espeja, 32 KB no.
 	eng::u32 prg_size = 0;
+	/// **Banco de PRG activo** (espejo del estado del mapper), para el despacho
+	/// del código transpilado por banco (UxROM/…): el plugin lo lee para elegir
+	/// la tabla de bloques de la ventana conmutable `$8000-$BFFF`. El sistema lo
+	/// mantiene actualizado en cada conmutación de banco. NROM/CNROM: 0.
+	eng::u8 prg_bank = 0;
 
 	// --- Hooks opcionales del sistema (PPU/APU/mapper/input) ---
 	/// Cookie que se pasa a los hooks de E/S.

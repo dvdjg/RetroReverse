@@ -28,6 +28,19 @@ limitaciones honestas y cómo se mitigan.
 | **Dos caminos HLE/fallback** divergen | estado emulado único; tests diferenciales HLE vs fallback |
 | **Deriva a "port mirando captura"** | prohibido: la fuente de verdad es la ROM y el estado emulado |
 
+### RAM del código generado: despacho **disperso** (F9, 2026)
+
+El despacho del codegen usaba una tabla **densa** `dispatch_table[0x10000]` (un puntero por dirección
+6502): **256 KB en 68000** (512 KB en host) reservados y puestos a cero al cargar, con **<1 %**
+entradas útiles (p. ej. 215 de 65 536). En un A500 es inaceptable.
+
+**Corregido**: despacho **disperso** — una entrada `{dirección, ciclos, fn}` por bloque, tabla ordenada
++ **búsqueda binaria** (igual que la ventana conmutable). Resultado medido: **`.bss = 0`** y tablas de
+unos pocos KB. Guardado por `tools/transpiler/tests/static_size_test.sh` (prohíbe `[0x10000]` y
+limita el `.bss` a 16 KB). Ver
+[`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) y [`RUNTIME_AMIGA.md`](RUNTIME_AMIGA.md)
+§"Presupuesto de RAM del código generado".
+
 ### Límite real: sincronización PPU/NMI **por instrucción** (no por ciclo) (2026)
 
 **Una sola raíz para los 6 juegos "malos".** Tras arreglar los mappers (MMC1 completo, MMC3) y el

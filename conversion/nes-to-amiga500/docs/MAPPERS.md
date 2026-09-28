@@ -126,8 +126,10 @@ La matriz por juego (71 ROMs) está en [`COMPATIBILITY.md`](COMPATIBILITY.md). T
 `nes_frame` (que no cargaba los mappers nuevos) la matriz real es: **Gemfire (MMC5)**, **Mr. Gimmick**
 y **Batman RotJ (FME-7)**, **Batman - The Video Game (MMC1)** a **0.0%**; Akumajou (VRC6) / CV3 (MMC5)
 2.7%; Battletoads (AxROM) 1.9%. **Bugs abiertos**: **VRC6b (26)** —Esper Dream 2 100%, Mouryou 99.9%— y
-**MMC5** en **Uncharted Waters** 45.8%. El transpilador sigue siendo **NROM-only**; el *banking* con
-**tablas de despacho por banco** es lo pendiente (F2/F9).
+**MMC5** en **Uncharted Waters** 45.8%. El transpilador soporta **NROM/CNROM** y **UxROM (2)** con
+**bloques por banco** en la ventana conmutable (`bbB0..bbB7`, F9/B1b) y despacho por banco
+(`NESMemory::prg_bank`, F9/B2); el resto de mappers bancados queda abierto en
+[`TRANSPILER_BANKING.md`](TRANSPILER_BANKING.md) (B0/B1a/B1b y B2 hechos).
 
 ## Cierre (F9)
 

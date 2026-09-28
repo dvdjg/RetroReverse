@@ -38,3 +38,25 @@ jobs:
         run: make -C tools/orchestrator test
       - name: Sintaxis de scripts de shell
         run: for f in scripts/*.sh; do bash -n "$f" || exit 1; done
+
+  # El transpiler necesita `eng/core` (repo privado Amiga-Cpp) y ROMs propias, que
+  # el CI público NO tiene; por eso aquí solo se validan invariantes estáticos y
+  # la sintaxis de los tests. Los tests completos (run.sh / uxrom_test.sh /
+  # static_size_test.sh) se ejecutan en local/CI con el engine y las ROMs.
+  transpiler-static:
+    name: Transpiler (invariantes estáticos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sin tabla de despacho densa (256 KB de RAM en 68000)
+        run: |
+          if grep -rnE 'static +BlockFn +dispatch_table\[0x10000\]' \
+               conversion/nes-to-amiga500/tools/transpiler/src; then
+            echo "FALLA: se ha reintroducido dispatch_table[0x10000]" >&2
+            exit 1
+          fi
+      - name: Sintaxis de los tests del transpiler
+        run: |
+          for f in conversion/nes-to-amiga500/tools/transpiler/tests/*.sh; do
+            bash -n "$f" || exit 1
+          done

@@ -26,6 +26,22 @@ Todo lo que el hardware lee debe estar en Chip RAM (`MEMF_CHIP | MEMF_CLEAR`):
 | Audio buffer | ≈ 2 KB | muestras para el mixer |
 | **Total** | **≈ 75 KB** | cabe en 512 KB (dejando sitio para la ROM en RAM) |
 
+### Presupuesto de RAM del código generado (plugin transpilado)
+
+El plugin lleva, además de los buffers de arriba:
+
+| Parte | Dónde | Tamaño típico | Notas |
+|---|---|---|---|
+| `PRG_ROM` (+ `CHR_ROM`) | `.rodata` | tamaño de la ROM (128 KB en Contra) | se **comprime** en el `.rrpk` y se **descomprime** al cargar (ZX0) |
+| Código de bloques (`bb_*`, `bbB*`) | `.text` | decenas–cientos de KB | tamaño real del 68000 generado |
+| Tablas de despacho | `.rodata` | **≈ KB** (1 entrada × bloque) | **dispersas** (ordenadas + búsqueda binaria) |
+| Estado (`g_state`: CPU + `NESMemory`) | `.bss` | ~3 KB | |
+
+> **Corregido (F9)**: el despacho usaba una tabla densa `dispatch_table[0x10000]` = **256 KB en 68000**
+> (casi toda a cero). Ahora es **dispersa** (una entrada `{addr, ciclos, fn}` por bloque, ordenada +
+> búsqueda binaria): `.bss = 0` y tablas de unos pocos KB. Guardado por
+> [`../tools/transpiler/tests/static_size_test.sh`](../tools/transpiler/tests/static_size_test.sh).
+
 ```cpp
 constexpr int SCREEN_W = 256, SCREEN_H = 240;
 constexpr int BUFFER_W = 272, BUFFER_H = 256;     // margen de scroll
@@ -104,8 +120,7 @@ void run_nes_frame(NESMemory& mem) {
     int used = 0;
     while (!ppu.frame_complete()) {
         if (ppu.nmi_pending()) { ppu.clear_nmi(); cpu.PC = cpu.read16(0xFFFA); }  // NMI
-        uint16_t pc = cpu.PC;
-        auto fn = dispatch_table[pc];
+        auto fn = n2a_fixed_block(cpu.PC);   // despacho disperso (búsqueda binaria)
         if (fn) fn(cpu); else interpret_one_instruction(cpu);
         int cycles = cpu.last_block_cycles();
         ppu.clock(cycles); mem.apu.clock(cycles);

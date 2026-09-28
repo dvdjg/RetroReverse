@@ -406,7 +406,21 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	}
 	n2a::Transpiler tp;
 	if (!tp.load(bytes.data(), bytes.size())) {
-		n2a::err_line("error: ROM no valida (iNES NROM/CNROM, PRG fija)");
+		if (tp.prg_banked()) {
+			// Mapper con PRG bancada: el oráculo lo ejecuta, pero el codegen por
+			// banco es el trabajo pendiente de F9 (docs/TRANSPILER_BANKING.md).
+			Dyn e;
+			e.append("error: mapper ");
+			e.append_s32(tp.mapper());
+			e.append(" con PRG bancada (");
+			e.append_u32(tp.prg_bank_count());
+			e.append(" bancos de ");
+			e.append_u32(tp.prg_bank_size());
+			e.append(" B); transpilacion por banco pendiente (F9/B1)");
+			n2a::err_line(e.view());
+		} else {
+			n2a::err_line("error: ROM no valida (iNES NROM/CNROM, PRG fija)");
+		}
 		return false;
 	}
 	tp.set_no_cycles(g_no_cycles);
@@ -431,6 +445,15 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	s.append("  -> ");
 	s.append(out_cpp);
 	n2a::out_line(s.view());
+	if (tp.prg_banked()) {
+		Dyn w;
+		w.append("nota: mapper ");
+		w.append_s32(tp.mapper());
+		w.append(" (");
+		w.append_u32(tp.prg_bank_count());
+		w.append(" bancos): ventana fija + ventana conmutable por banco (fallback al interprete si no hay bloque)");
+		n2a::out_line(w.view());
+	}
 	return true;
 }
 
