@@ -150,13 +150,16 @@ código. Se genera con la telemetría del runtime
 ## Test
 
 ```bash
-bash tests/run.sh          # o: make test
-bash tests/uxrom_test.sh   # UxROM (mapper 2): bloques por banco == intérprete (0.0 % píxeles)
+bash tests/run.sh          # o: make test     (ROMs propias mínimas)
+make test-all              # batería completa (necesita eng/core + ROMs propias)
+bash tests/banks_test.sh   # bankswitching: UxROM/MMC1/MMC3/MMC5/FME-7/VRC6 (0.0 % px)
+bash tests/static_size_test.sh
 ```
 
-`uxrom_test.sh` transpila una ROM UxROM (por defecto `runtime/build/castlevania.nes`; o pásale otra,
-p. ej. `contra.nes`) y comprueba que el codegen, dentro de `NesSystem`, da el **mismo framebuffer**
-que el intérprete. Sin ROM, se salta (CI sin ROMs).
+`make test-all` es lo que debe correr un **CI con engine** (no el CI público, que no tiene `eng/core`
+ni ROMs): `run.sh` (equivalencia) + `banks_test.sh` (bancos, 14 ROMs) + `static_size_test.sh`
+(guarda de `.bss`). `banks_test.sh`/`uxrom_test.sh` comprueban que el codegen, dentro de `NesSystem`,
+da el **mismo framebuffer** que el intérprete; sin ROM se **saltan**.
 
 Compila la herramienta, genera **tres** ROMs propias, las transpila, compila el C++ generado **con el
 runtime** (`-I ../../runtime/include`) y comprueba el estado final:

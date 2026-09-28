@@ -41,8 +41,9 @@ jobs:
 
   # El transpiler necesita `eng/core` (repo privado Amiga-Cpp) y ROMs propias, que
   # el CI público NO tiene; por eso aquí solo se validan invariantes estáticos y
-  # la sintaxis de los tests. Los tests completos (run.sh / uxrom_test.sh /
-  # static_size_test.sh) se ejecutan en local/CI con el engine y las ROMs.
+  # la sintaxis de los tests. La batería completa (`make -C tools/transpiler
+  # test-all`: run.sh + banks_test.sh + static_size_test.sh) se ejecuta en un
+  # runner con engine + ROMs (self-hosted), no en el CI público.
   transpiler-static:
     name: Transpiler (invariantes estáticos)
     runs-on: ubuntu-latest
