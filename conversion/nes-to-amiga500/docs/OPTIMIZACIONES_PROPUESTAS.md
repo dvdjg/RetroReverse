@@ -15,7 +15,7 @@ grafo de bloques → emitir/llamar a una rutina equivalente*. Candidatos:
 | 1 | `ROR/ROL zp` sobre direcciones consecutivas (PRNG) | `n2a_ror_run`/`n2a_rol_run` (asm `roxr/roxl`) | **hecho** |
 | 2 | `LDX #n; DEX; BNE` / `DEY; BNE` (retardo) | retardo *baked* / espera a `VHPOSR` | reconocido (`raster_idioms`), sin sustituir |
 | 3 | Relleno/copia `STA (zp),Y; DEY; BNE` | `memset`/`memcpy` en asm o **Blitter** | propuesto |
-| 4 | Suma/resta multibyte (`CLC; LDA a; ADC b; STA c; LDA a+1; ADC #0; STA c+1; …`) | `ADDX`/`SUBX` multibyte, o suma de 16/32 bits | propuesto |
+| 4 | Suma/resta multibyte (`CLC; LDA a; ADC b; STA c; LDA a+1; ADC #0; STA c+1; …`) | `ADDX`/`SUBX` multibyte, o suma de 16/32 bits | parcial (ver §9) |
 | 5 | Comparación de 16 bits (`LDA a; CMP #lo; LDA a+1; SBC #hi`) | comparación de 32 bits | propuesto |
 | 6 | Multiplicación/división por constante | `lsl`/`lea` / recíproco (g++ ya lo hace) | g++ |
 | 7 | LCG/PRNG y su tabla derivada | **memoizar la secuencia** / precalcular | propuesto |
@@ -195,6 +195,27 @@ Prueba `probe_const.cpp` (`-m68000 -O3`):
 - **(4) Mappers bancados:** verificado que `--best` **cae al codegen por bloques** en MMC1 (Metroid),
   UxROM (Contra) y MMC3 (Mega Man 3) y compila a 68000. El nativo bancado exige ventana conmutable +
   despacho dinámico (trabajo futuro).
+
+---
+
+## 9. Idioms multibyte en el nativo (hecho, parcial)
+
+El backend nativo reconoce idioms **sin ramas** dentro de un bloque y los emite como operaciones de
+**16 bits**, para que g++ use `move.w`/`add.w` en vez de byte a byte:
+
+| Idioma 6502 | Emisión nativa | 68000 |
+|---|---|---|
+| `LDA #k0; STA c; LDA #k1; STA c+1` | `ram[c]=k0; ram[c+1]=k1` | `move.w #imm,(a)` |
+| `LDA zp a; STA zp c; LDA zp a+1; STA zp c+1` | copia de 16 bits (`memcpy`) | `move.w` (a menudo **const-propagation**) |
+
+Ejemplo real (DK, `--native`): el NMI pone un puntero `$00/$01` → `move.w #imm,(g_bus+…)`. En la ROM
+de prueba `multibyte` g++ **propaga la constante** de la copia (`move.w #13330` directo). Validado en
+host (misma RAM que el codegen por bloques) y en 68000 (`run.sh`).
+
+**Pendiente (necesita absorber el cruce de bloque):** `INC lo; BNE skip; INC hi` (16 bits ++) y la
+aritmética `ADC` en cadena: el `BNE` intermedio **termina el bloque**, así que hay que reconocer el
+idiom sobre el **flujo linearizado de la región** (no por bloque) y absorber la rama interna. Es el
+siguiente paso para los "registros grandes" en algoritmos matemáticos.
 
 ---
 
