@@ -341,6 +341,8 @@ void print_usage(const char* argv0) {
 	(void)argv0;
 	n2a::out_line("nes_transpiler (fase 1) — NES (iNES/NROM) → C++23 (eng/core)");
 	n2a::out_line("Uso: nes_transpiler <entrada.nes> [-o <salida.cpp>] [--facts <hechos.txt>]");
+	n2a::out_line("     [--chain] [--rom-direct] [--fast-ram] [--no-cycles] [--native] [--best]");
+	n2a::out_line("     [--pc-trace <hot.txt>] [--ind-targets <ind.txt>]  (telemetria de opcode_hist/ind_targets)");
 	n2a::out_line("     --emit-mini-rom   <salida.nes>");
 	n2a::out_line("     --emit-branch-rom <salida.nes>");
 	n2a::out_line("     --emit-misc-rom   <salida.nes>");
@@ -433,6 +435,45 @@ bool g_rom_direct = false;
 bool g_native = false;
 bool g_best = false;
 const char* g_pc_trace = nullptr; ///< Fichero de PC ejecutados (`--pc-trace`) para completar el CFG.
+const char* g_ind_targets = nullptr; ///< Fichero de destinos de `JMP (ind)` (`--ind-targets`) por sitio.
+
+/// Carga un fichero de **destinos indirectos** (`--ind-targets`, de `ind_targets`):
+/// líneas `ind <sitio> <destino>` (hex, con o sin `0x`). Habilita el despacho
+/// nativo de `JMP (ind)`. \return `true` si se leyó el fichero.
+bool load_ind_targets(const char* path, n2a::Transpiler& tp) {
+	ByteBuffer buf;
+	if (!n2a::read_whole_file(path, buf)) {
+		return false;
+	}
+	StringView text(reinterpret_cast<const char*>(buf.data()), buf.size());
+	eng::u32 count = 0u;
+	while (!text.empty()) {
+		const eng::usize nl = text.find('\n');
+		StringView line = (nl == StringView::npos) ? text : text.substr(0u, nl);
+		text = (nl == StringView::npos) ? StringView {} : text.substr(nl + 1u);
+		skip_ws(line);
+		if (line.empty() || line[0] == '#') {
+			continue;
+		}
+		StringView tok = next_token(line);
+		if (tok == "ind") {
+			tok = next_token(line);
+		}
+		eng::u16 site = 0;
+		eng::u16 target = 0;
+		if (!parse_hex(tok, site) || !parse_hex(next_token(line), target)) {
+			continue;
+		}
+		tp.add_ind_target(site, target);
+		++count;
+	}
+	Dyn msg;
+	msg.append("--ind-targets: ");
+	msg.append_u32(count);
+	msg.append(" pares (sitio,destino)");
+	n2a::out_line(msg.view());
+	return true;
+}
 
 /// Carga una **traza de PC** (`--pc-trace`): direcciones 6502 ejecutadas, en el formato
 /// de `opcode_hist ... <hot.txt>` (`hot <addr> <n>`) o una dirección por línea. Añade
@@ -518,6 +559,9 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
 		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
 	}
+	if (g_ind_targets != nullptr && !load_ind_targets(g_ind_targets, tp)) {
+		n2a::err_line("error: no se pudo leer los destinos indirectos (--ind-targets)");
+	}
 	tp.disassemble();
 	tp.build_basic_blocks();
 	if (facts != nullptr && !load_facts(facts, tp)) {
@@ -526,6 +570,15 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	}
 	Dyn gen;
 	tp.generate(gen);
+	if (g_native && !tp.native_ok()) {
+		Dyn nr;
+		nr.append("backend nativo: no (motivo: ");
+		nr.append(tp.native_reject_reason());
+		nr.append(" @ 0x");
+		nr.append_hex(tp.native_reject_addr(), 4u, true);
+		nr.append(")");
+		n2a::out_line(nr.view());
+	}
 	if (!n2a::write_whole_file(out_cpp, gen.view())) {
 		n2a::err_line("error: no se pudo escribir el .cpp");
 		return false;
@@ -848,6 +901,10 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--pc-trace" && i + 1 < argc) {
 			g_pc_trace = argv[++i];
+			continue;
+		}
+		if (arg == "--ind-targets" && i + 1 < argc) {
+			g_ind_targets = argv[++i];
 			continue;
 		}
 		if (arg == "--emit-lib") {

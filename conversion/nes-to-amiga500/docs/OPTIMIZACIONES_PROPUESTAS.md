@@ -284,12 +284,35 @@ en modos `Zp`/`Abs`.
 `abs,X`/`(zp),Y` a ROM) y **volcarlas ya transformadas** es un reconocimiento por juego (el transpilador
 no conoce la semántica de la tabla) y suele requerir HLE específico; no es un idiom genérico.
 
-**`JMP (ind)`/`JSR (ind)` — decisión.** Un salto indirecto puede apuntar a **mitad de región**, y las
-regiones no se pueden entrar por el medio sin duplicar cada bloque como función (que es justo el
-codegen por bloques). Un despachador nativo a **entradas de región** sería **parcialmente incorrecto**
-(fallaría en targets internos). Por eso `--best` **cae al codegen por bloques** (con el perfil Amiga
-optimizado) en juegos con indirectos — que es la vía **correcta**. Perseguir native con indirectos
-exigiría duplicar bloques (volver al modelo por bloques) o un intérprete de respaldo enlazado.
+**`JMP (ind)` en el nativo — HECHO con telemetría de sitios (`--ind-targets`).** El bloqueo real
+(por qué el nativo caía al por bloques en casi todos los NROM) era el `JMP ($zp)` (`$6C`, el único
+salto indirecto del 6502; **no** hay `JSR (ind)`). Resuelto así:
+
+1. **Colector** `runtime/tools/ind_targets` ejecuta la ROM y registra, **por sitio**, el par
+   `(sitio $6C → destino observado)` en un fichero `ind <sitio> <destino>`.
+2. El transpilador (`--ind-targets`) guarda esos pares y, en el backend nativo, **trae los destinos
+   observados de cada sitio a la MISMA región** (etiquetas `L_xxxx`) y emite el `JMP (ind)` como
+   `switch (destino) { case T: goto L_T; … default: miss }`. Un `JMP` es salto de **cola** y se
+   resuelve **intra-región** (`goto`), así que **no crece la pila C** (el modelo por regiones + llamada
+   C de `JSR` se mantiene). El *page-wrap* del 6502 (`(ptr&0xFF00)|((ptr+1)&0xFF)`) se reproduce.
+   Destino no observado ⇒ hook `g_native_ind_miss` (el runtime puede ceder) o `halted`.
+3. Entradas de la traza (`--pc-trace`) y destinos indirectos se marcan como **líderes** (entradas
+   reales), lo que también arregla el check "destino de `JSR` decodificado" cuando hay traza.
+
+**Medido:** los **destinos por sitio son pocos** (SMB: 1 sitio→27; Ms. Pac-Man: 1→4; Pac-Man: 1→1),
+así que **no hay explosión de regiones**. Resultado: **Ms. Pac-Man ya es nativo** (`.text`
+**113 628 B** vs **181 492 B** del por bloques); SMB queda excluido por **código en RAM** (hace
+`JSR $0173` a una rutina copiada a RAM, indecodificable estáticamente), limitación legítima.
+
+**Bug preexistente corregido (lo destapó la prueba nativa de `misc`):** los desplazamientos
+**acumulador** (`ASL A`/`ROL A`/`LSR A`/`ROR A`, opcodes `$0A`/`$2A`/`$4A`/`$6A`) se emitían como si
+fueran de **memoria** (`(n2a_read(0)|n2a_read(1)<<8)+Y`): no existía rama `AddrMode::Acc`. El
+`misc` nunca había corrido nativo, por eso no se veía. Ahora operan sobre `r->a`.
+
+**Límite restante:** un `JMP (ind)` con **sitio no observado** (traza corta) rechaza el nativo
+(`native_ok`); basta alargar la traza o quedarse en el por bloques. Y el **código en RAM** sigue
+excluyendo juegos que copian rutinas (SMB). Ambos quedan como trabajo futuro (tabla resuelta
+estáticamente / intérprete de respaldo enlazado).
 
 ---
 

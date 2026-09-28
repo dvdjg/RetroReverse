@@ -435,6 +435,21 @@ public:
 				}
 			}
 		}
+		// Puntos de entrada de la **telemetría** (`--pc-trace`) y **destinos
+		// indirectos observados** (`--ind-targets`) son entradas reales: se marcan
+		// como líderes para que el codegen pueda iniciar ahí una región (nativo) o un
+		// bloque, y para que los checks de entrada (p. ej. destino de `JSR`) los acepten.
+		for (eng::usize i = 0; i < extra_entries_.size(); ++i) {
+			if (extra_entries_[i] < kSpace && has_instr_[extra_entries_[i]] != 0u) {
+				mark_leader(extra_entries_[i]);
+			}
+		}
+		for (eng::usize i = 0; i < ind_target_.size(); ++i) {
+			const eng::u16 t = ind_target_[i];
+			if (t < kSpace && has_instr_[t] != 0u) {
+				mark_leader(t);
+			}
+		}
 		compute_block_metadata();
 	}
 
@@ -602,6 +617,33 @@ public:
 	/// \param a Dirección 6502 de inicio de código (`$8000-$FFFF`).
 	void add_entry_point(eng::u16 a) { (void)extra_entries_.push_back(a); }
 
+	/// Registra el **destino observado** de un `JMP (ind)` en el sitio `site`
+	/// (telemetría de `ind_targets <rom> <out>`, consumida por `--ind-targets`).
+	/// Permite al backend nativo emitir un **despacho** (`switch`) en lugar de
+	/// caer al intérprete. Deduplica el par. Llamar **antes** de `disassemble()`.
+	/// \param site   `PC` del opcode `$6C`.
+	/// \param target `PC` destino observado (inicio de instrucción).
+	void add_ind_target(eng::u16 site, eng::u16 target) {
+		for (eng::usize i = 0; i < ind_site_.size(); ++i) {
+			if (ind_site_[i] == site && ind_target_[i] == target) {
+				return;
+			}
+		}
+		(void)ind_site_.push_back(site);
+		(void)ind_target_.push_back(target);
+	}
+
+	/// \return Nº de destinos observados para el sitio `site` (`0` si no hay datos).
+	[[nodiscard]] eng::usize ind_targets_count(eng::u16 site) const {
+		eng::usize n = 0;
+		for (eng::usize i = 0; i < ind_site_.size(); ++i) {
+			if (ind_site_[i] == site) {
+				++n;
+			}
+		}
+		return n;
+	}
+
 	/// Con `true`, **no** se emite la contabilidad de ciclos (`cpu.cycles += N`) ni
 	/// las penalizaciones de página/rama. Para destinos sin PPU ciclo-exacta
 	/// (Amiga/`--release`), donde los ciclos solo agobian al 68000.
@@ -654,22 +696,45 @@ public:
 	void set_best(bool b) noexcept { best_ = b; }
 	/// \return `true` si el backend nativo puede emitir esta ROM (PRG fija y opcodes
 	/// soportados). Lo consulta el llamador para elegir el codegen.
+	/// \return El **motivo** por el que `native_ok()` rechazó la ROM (cadena vacía si
+	/// la aceptó). Diagnóstico para el pipeline; no altera el comportamiento.
+	[[nodiscard]] const char* native_reject_reason() const noexcept { return native_reject_; }
+	/// \return Dirección asociada al último rechazo de `native_ok()` (0 si no aplica).
+	[[nodiscard]] eng::u16 native_reject_addr() const noexcept { return native_reject_addr_; }
+
 	[[nodiscard]] bool native_ok() const noexcept {
-		if (prg_banked_ || prg_size_ == 0u || (prg_size_ & (prg_size_ - 1u)) != 0u) {
+		native_reject_ = "";
+		if (prg_banked_) {
+			native_reject_ = "PRG bancada";
+			return false;
+		}
+		if (prg_size_ == 0u || (prg_size_ & (prg_size_ - 1u)) != 0u) {
+			native_reject_ = "PRG no potencia de 2";
 			return false;
 		}
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (has_instr_[a] == 0u) {
 				continue;
 			}
+			// `JMP (ind)` (`$6C`): soportado **solo si** hay destinos observados
+			// (`--ind-targets`) para ese sitio; entonces se emite un despacho `switch`.
+			if (instr_[a].opcode == 0x6Cu) {
+				if (ind_targets_count(static_cast<eng::u16>(a)) == 0u) {
+					native_reject_ = "JMP (ind) sin destinos (--ind-targets)";
+					return false; // sin objetivos conocidos: fallback al por bloques
+				}
+				continue;
+			}
 			if (!native_supported(kOpcodeTable[instr_[a].opcode])) {
+				native_reject_ = "opcode no soportado en nativo";
 				return false;
 			}
-			// Todo destino de `JSR` debe ser inicio de bloque (entrada de región).
+			// Todo destino de `JSR` debe estar **decodificado** (será entrada de región).
 			const Instruction& in = instr_[a];
 			if (sv_equal(kOpcodeTable[in.opcode].mnemonic, "JSR") && has_operand(in) &&
-			    !(in.target < kSpace && has_instr_[in.target] != 0u &&
-			      leaders_[in.target] != 0u)) {
+			    !(in.target < kSpace && has_instr_[in.target] != 0u)) {
+				native_reject_ = "destino de JSR no decodificado";
+				native_reject_addr_ = static_cast<eng::u16>(a);
 				return false;
 			}
 		}
@@ -746,6 +811,8 @@ private:
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> visited_ {};       ///< Direcciones ya desensambladas.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> worklist_ {};     ///< Pila de puntos de entrada.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> extra_entries_ {}; ///< Entradas extra (telemetría de PC).
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> ind_site_ {};     ///< Sitios de `JMP (ind)` (ver `add_ind_target`).
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> ind_target_ {};   ///< Destino observado paralelo a `ind_site_`.
 	eng::util::Vector<Fact, eng::util::HeapAlloc> facts_ {};            ///< Hechos de valores (ver `add_fact`).
 
 	eng::usize count_ = 0;       ///< Instrucciones decodificadas.
@@ -757,6 +824,8 @@ private:
 	bool chain_ = false;         ///< Si `true`, encadenar bloques (ver `set_chain`).
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
+	mutable const char* native_reject_ = ""; ///< Motivo del último rechazo de `native_ok()` (diagnóstico).
+	mutable eng::u16 native_reject_addr_ = 0; ///< Dirección asociada al rechazo (p. ej. el `JSR`).
 	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
 	/// VSA de índices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
@@ -2573,12 +2642,17 @@ private:
 		out.append("static N2A_State g_st;\nstatic N2A_Bus g_bus;\n");
 		out.append("/// Hook que el runtime fija para resolver eventos (VBlank/NMI) al ceder el\n");
 		out.append("/// codigo nativo. Si es `nullptr`, `game_main` termina en la primera cesion.\n");
-		out.append("static void (*g_native_yield)(N2A_State&, N2A_Bus&) = nullptr;\n\n");
+		out.append("static void (*g_native_yield)(N2A_State&, N2A_Bus&) = nullptr;\n");
+		out.append("/// Hook para un `JMP (ind)` cuyo destino no estaba entre los observados\n");
+		out.append("/// (`--ind-targets`). Si es `nullptr`, el codigo nativo se detiene.\n");
+		out.append("static void (*g_native_ind_miss)(N2A_State&, N2A_Bus&, eng::u16) = nullptr;\n\n");
 
 		// --- Entradas de región: reset/NMI/IRQ + destinos de JSR ---
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> entries {};
 		const auto add_entry = [&](eng::u16 a) {
-			if (a < kSpace && has_instr_[a] != 0u && leaders_[a] != 0u) {
+			// Una entrada de región solo necesita estar decodificada; puede no ser un
+			// líder estático (p. ej. destino de `JSR` alcanzado por telemetría).
+			if (a < kSpace && has_instr_[a] != 0u) {
 				for (eng::usize i = 0; i < entries.size(); ++i) {
 					if (entries[i] == a) {
 						return;
@@ -2632,6 +2706,32 @@ private:
 		out.append("#endif\n");
 	}
 
+	/// Emite el **despacho de un `JMP (ind)`** (`$6C`) con los destinos observados
+	/// (`--ind-targets`) del sitio `site`. Reproduce el *page-wrap* del 6502
+	/// (`(ptr & 0xFF00) | ((ptr+1) & 0xFF)`), y salta con `goto L_xxxx`
+	/// (**intra-región**, porque un `JMP` es salto de cola y no debe crecer la pila C).
+	/// Si el destino no está entre los observados, cede al runtime
+	/// (`g_native_ind_miss`) o se detiene (`halted`).
+	/// \param out  Salida.
+	/// \param site `PC` del `JMP ($zp)`.
+	void emit_native_ind_dispatch(Dyn& out, eng::u16 site) const {
+		const eng::u16 ptr = instr_[site].operand;
+		out.append("    { const eng::u16 n2a_p = 0x");
+		out.append_hex(ptr, 4u, true);
+		out.append("u; const eng::u16 n2a_t = static_cast<eng::u16>(static_cast<eng::u16>(n2a_read(*m, n2a_p)) | (static_cast<eng::u16>(n2a_read(*m, static_cast<eng::u16>((n2a_p & 0xFF00u) | ((n2a_p + 1u) & 0x00FFu)))) << 8u)); switch (n2a_t) {");
+		for (eng::usize i = 0; i < ind_site_.size(); ++i) {
+			if (ind_site_[i] != site) {
+				continue;
+			}
+			out.append(" case 0x");
+			out.append_hex(ind_target_[i], 4u, true);
+			out.append("u: goto L_");
+			out.append_hex(ind_target_[i], 4u, true);
+			out.append(";");
+		}
+		out.append(" default: if (g_native_ind_miss != nullptr) { g_native_ind_miss(*r, *m, n2a_t); } else { r->pc = n2a_t; r->halted = true; } return; } }\n");
+	}
+
 	/// Emite una **región** (función C++) del backend nativo: BFS de bloques desde
 	/// `entry` por aristas estáticas (caída/rama/`JMP`; el retorno de `JSR` continúa en la
 	/// región; el destino de `JSR` es otra región). Etiquetas `L_xxxx` + `goto`.
@@ -2642,10 +2742,26 @@ private:
 		}
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> stack {};
 		const auto visit = [&](eng::u16 b) {
-			if (b < kSpace && has_instr_[b] != 0u && leaders_[b] != 0u &&
-			    native_vis_[b] == 0u) {
+			if (b < kSpace && has_instr_[b] != 0u && native_vis_[b] == 0u) {
 				native_vis_[b] = 1u;
 				(void)stack.push_back(b);
+			}
+		};
+		// Visita los **destinos observados** de un `JMP (ind)` (telemetría de
+		// `ind_targets`). No exigen ser `leader` estático: son inicios de instrucción
+		// vistos en ejecución, así que se emiten como etiquetas `L_xxxx` **en esta misma
+		// región** y el `JMP (ind)` se resuelve con un `switch` + `goto` intra-región
+		// (un `JMP` es salto de cola: no debe crecer la pila de llamadas C).
+		const auto visit_ind = [&](eng::u16 site) {
+			for (eng::usize i = 0; i < ind_site_.size(); ++i) {
+				if (ind_site_[i] != site) {
+					continue;
+				}
+				const eng::u16 t = ind_target_[i];
+				if (t < kSpace && has_instr_[t] != 0u && native_vis_[t] == 0u) {
+					native_vis_[t] = 1u;
+					(void)stack.push_back(t);
+				}
 			}
 		};
 		visit(entry);
@@ -2675,7 +2791,11 @@ private:
 					visit(term->target);
 					visit(next);
 				} else if (sv_equal(m, "JMP")) {
-					visit(term->target);
+					if (md == AddrMode::Ind) {
+						visit_ind(term->addr); // destinos observados (--ind-targets)
+					} else {
+						visit(term->target);
+					}
 				} else if (sv_equal(m, "JSR")) {
 					visit(next); // retorno del JSR (continúa en la región)
 				} else if (!sv_equal(m, "RTS") && !sv_equal(m, "RTI") &&
@@ -2964,7 +3084,10 @@ private:
 						out.append(";\n");
 					}
 				} else if (sv_equal(m, "JMP")) {
-					if (term->target == b) {
+					if (kOpcodeTable[term->opcode].mode == AddrMode::Ind) {
+						// `JMP ($zp)`: despacho por los destinos observados.
+						emit_native_ind_dispatch(out, term->addr);
+					} else if (term->target == b) {
 						// `JMP a si mismo`: espera de NMI; cede al runtime.
 						out.append("    r->yield = true; return;\n");
 					} else if (native_vis_[term->target] != 0u) {
@@ -3411,9 +3534,19 @@ private:
 			return;
 		}
 		if (sv_equal(m, "ASL") || sv_equal(m, "LSR") || sv_equal(m, "ROL") || sv_equal(m, "ROR")) {
-			out.append("    { eng::u8 n2a_v = n2a_read(*m, ");
-			emit_native_ea(out, in);
-			out.append(");");
+			// Modo **acumulador** (`ASL A`/`ROL A`/`LSR A`/`ROR A`, opcodes
+			// `$0A`/`$2A`/`$4A`/`$6A`): operan sobre `r->a`, no sobre memoria (el
+			// modo `Acc` no tiene operando efectivo). El resto opera sobre memoria.
+			const bool acc = (in.opcode == 0x0Au || in.opcode == 0x2Au ||
+					  in.opcode == 0x4Au || in.opcode == 0x6Au);
+			out.append("    { eng::u8 n2a_v = ");
+			if (acc) {
+				out.append("r->a;");
+			} else {
+				out.append("n2a_read(*m, ");
+				emit_native_ea(out, in);
+				out.append(");");
+			}
 			if (sv_equal(m, "ASL")) {
 				out.append(" r->c = ((n2a_v & 0x80u) != 0u); n2a_v = static_cast<eng::u8>(n2a_v << 1u);");
 			} else if (sv_equal(m, "LSR")) {
@@ -3423,9 +3556,14 @@ private:
 			} else {
 				out.append(" { const eng::u8 n2a_c = r->c ? 1u : 0u; r->c = ((n2a_v & 1u) != 0u); n2a_v = static_cast<eng::u8>((n2a_v >> 1u) | (n2a_c << 7u)); }");
 			}
-			out.append(" n2a_write(*m, ");
-			emit_native_ea(out, in);
-			out.append(", n2a_v); r->z = (n2a_v == 0u); r->n = ((n2a_v & 0x80u) != 0u); }\n");
+			if (acc) {
+				out.append(" r->a = n2a_v;");
+			} else {
+				out.append(" n2a_write(*m, ");
+				emit_native_ea(out, in);
+				out.append(", n2a_v);");
+			}
+			out.append(" r->z = (n2a_v == 0u); r->n = ((n2a_v & 0x80u) != 0u); }\n");
 			return;
 		}
 		if (sv_equal(m, "INX")) { out.append("    r->x = static_cast<eng::u8>(r->x + 1u);"); setzn("r->x"); out.append('\n'); return; }

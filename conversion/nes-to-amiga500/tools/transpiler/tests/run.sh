@@ -166,6 +166,28 @@ compile_native multibyte 'int main() {
 			(g_bus.ram[0x70] == 0x85u) && (g_st.a == 0x85u);
 	return ok ? 0 : 1;
 }'
+# `JMP (ind)` en el **nativo**: despacho por los destinos observados
+# (`--ind-targets`). La ROM `misc` hace `JMP ($30)` -> $8022 y ademas ejercita los
+# desplazamientos **acumulador** (`ASL A`/`ROR A`/`LSR A`), antes mal emitidos.
+compile_native_ind() {  # $1 = nombre; $2 = cuerpo del main
+	local name="$1"
+	"$BIN" "$GEN/$name.nes" --native --ind-targets "$TMP/$name.ind.txt" -o "$GEN/${name}_native_ind.cpp"
+	cat > "$TMP/${name}_native_ind_check.cpp" <<EOF
+#define N2A_NO_HOST_MAIN
+#include "$GEN/${name}_native_ind.cpp"
+$2
+EOF
+	"$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$TMP/${name}_native_ind_check.cpp" -o "$TMP/${name}_native_ind_check"
+	"$TMP/${name}_native_ind_check"
+}
+printf 'ind 801F 8022\n' > "$TMP/misc.ind.txt"
+compile_native_ind misc 'int main() {
+	game_main();
+	const bool ok = (g_st.a == 0x55u) && (g_st.x == 0u) &&
+			(g_bus.ram[0x10] == 0x40u) && (g_bus.ram[0x20] == 0x06u) &&
+			(g_bus.ram[0x40] == 0x55u);
+	return ok ? 0 : 1;
+}'
 
 echo "[8/9] helpers rapidos del runtime (equivalencia n2a_ror_run/n2a_rol_run)"
 "$CXX" $FLAGS -I"$ENG_INC" -I"$RUNTIME_INC" "$ROOT/tests/fastops_test.cpp" -o "$TMP/fastops_test"
