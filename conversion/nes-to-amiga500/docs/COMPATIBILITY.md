@@ -147,29 +147,28 @@ Pendientes reales (2026, tras la matriz corregida):
     bit5=0 (8×8) → no aplica.
   - La nametable (CIRAM) es **~965× tile 0** (bytes 0 = fondo) → debería salir negro; hay **56 tiles
     distintos** en ~59 posiciones. El render pinta de más donde `mesen` pinta negro.
-  - **Instrumentado 2026**: el **volcado `RRS1` de mesen** (paleta/OAM/RAM + **4 nametables**) está
-    disponible en `mesen_libretro.so` (`MESEN_DUMP_FRAME`/`MESEN_STATE`); y
-    `frame_probe <rom> 60 --dump-nametables` vuelca la **nametable efectiva** del oráculo
-    (`frame_probe.nteff`) + `$5105`/ExRAM (`frame_probe.mmc5`).
-  - **Hallazgo (frame 60)**: mesen tiene las 4 nametables **llenas** (896/1024 bytes ≠0, tiles
-    `90 90 10 90 f8…`); en el oráculo **tanto la CIRAM como la ExRAM están casi vacías** (59/1024 y
-    60/1024) con `nt_map=[0,0,0,0]` (`$5105=0`). Es decir, **el contenido de la nametable difiere
-    mucho**: el juego escribió ~840 bytes que mesen tiene y nosotros no. Esto apunta a un **síntoma de
-    la divergencia de ejecución** (45.8 %), no a un simple `$5105` mal mapeado (nuestras dos fuentes de
-    nametable están igual de vacías).
-  - **Diagnóstico `port_matrix` (2026)**: la tabla incluye ahora una columna **`NT≠0`** (bytes no-cero
-    de la nametable efectiva, `nes_frame … nt_nz`). Uncharted Waters marca **236** frente a ~1900–4000
-    de los juegos sanos → delata el problema sin depender de mesen.
-  - **`trace_diff` (2026)**: a **10 frames** el camino CPU del oráculo **coincide** con mesen (solo
-    re-syncs benignos, sin divergencia de camino) → la CPU no es el problema a corto plazo. A 60
-    frames mesen **reinicia la traza** (timestamp salta a `ts=8`, secuencia `$F500`) → las trazas
-    largas de mesen son **poco fiables** y la "divergencia de camino" de 60 frames es un **artefacto**
-    del harness. **Siguiente**: (a) corregir el harness de traza de mesen para una **pasada única
-    limpia**; (b) con eso, `trace_diff` a ~20–40 frames para ver si la CPU diverge durante la carga de
-    la nametable. La ruta de escritura `$2007` del oráculo sí captura las escrituras (1020 bytes a
-    NT0), así que no es un problema de ruteo sino de **contenido/tiempo**.
-  - **Aplicado**: `$5105` ahora actualiza `ppu.nt_map` **en la escritura** (antes solo al inicio de
-    frame, un frame tarde) — correcto en cualquier caso, aunque no cambia el resultado de Uncharted.
+  - **Causa raíz (2026, confirmada)**: es la **misma limitación de timing sub-instrucción de VBlank**
+    que afecta a ic/galaga/metalstorm/pacman. Con el harness de traza **corregido** (`--det 0`: la
+    comprobación de determinismo hacía `save_state`/`load_state` y **rebobinaba** el core → varias
+    pasadas con `ts` reiniciado), `trace_diff` a **40 frames** da **sin divergencia de camino**; el
+    único evento real es un re-sync `O+7944` en el bucle `$F506-$F50F` (`STA $2000/$2001` +
+    `BIT $2002`/`BPL`): mesen sale del bucle (ve VBlank), el oráculo **no** → gira ~1986 iteraciones
+    extra (**~1 frame**), pierde una espera de VBlank y el juego **avanza su máquina de estados
+    saltándose la carga de nametable** de ese frame. No es específico de MMC5.
+  - **Corrección importante (2026)**: el "volcado de nametables" de mesen era **falso** —
+    `ppu->PeekRAM(0x2000+…)` usa `GetRegisterID(addr) = addr & 7`, así que devolvía los **registros
+    PPU repetidos** (Control/Mask/Status/… = `90 90 10 90 f8…`), no la nametable; por eso las 4
+    salían **idénticas** con 896 bytes ≠0. Corregido a `mapper->GetMemoryValue(NametableRam, …)`.
+    Con la nametable **real**: mesen NT0=59 y NT3=59 (≠0) y **nuestra nametable efectiva coincide**
+    (NT0 y NT3 `iguales=True`) → **la nametable NO era el problema**; el hallazgo previo queda
+    **retractado**.
+  - **Diagnóstico `port_matrix` (2026)**: columna **`NT≠0`** (nametable efectiva, `nes_frame … nt_nz`).
+    Uncharted marca **236** (una sola página CIRAM aliasada en 4 NT) — legítimo, no anomalía; la
+    herramienta avisa solo si `NT≠0=0` habiendo divergencia.
+  - **Herramientas**: `frame_probe <rom> 60 --dump-nametables` (nametable efectiva del oráculo) y el
+    volcado `RRS1` de mesen (`MESEN_DUMP_FRAME`/`MESEN_STATE`, ya con nametable RAM real).
+  - **Aplicado**: `$5105` actualiza `ppu.nt_map` **en la escritura** (antes solo al inicio de frame,
+    un frame tarde); y el harness de traza de mesen usa `--det 0` (pasada única limpia).
   - Gemfire/Laser/Nobunaga's/CV3 siguen a 0.0–3.1% (sin regresión con los cambios).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).

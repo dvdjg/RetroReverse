@@ -95,9 +95,16 @@ case "$MODE" in
 			flag="$(awk -v g="$s" -v w="$want" -v t="$TOL" 'BEGIN{print(g+0>w+0+t)?" REGRESION":""}')"
 		fi
 		[ -n "$flag" ] && [ "$flag" != " (varianza; ignorada)" ] && rc=1
+		# Aviso (no bloqueante): nametable efectiva **totalmente vacía** con el frame
+		# divergiendo → probable fallo de carga/mapeo de nametable (no es regresión).
+		ntw=""
+		if [ -n "$t" ] && [ "$t" -eq 0 ] && [ "$s" != "flat" ] &&
+			awk -v g="$s" 'BEGIN{exit !(g+0>0)}'; then
+			ntw=" NT≠0=0 (¿nametable sin cargar?)"
+		fi
 		sfmt="$s"; [ "$s" != "flat" ] && sfmt="$s%"
 		wfmt="$want"; [ -n "$want" ] && [ "$want" != "flat" ] && wfmt="$want%"
-		printf '| %s | %s | %s%s |\n' "$n" "$sfmt" "${wfmt:-?}" "$flag"
+		printf '| %s | %s | %s%s%s |\n' "$n" "$sfmt" "${wfmt:-?}" "$flag" "$ntw"
 	done < <(rows)
 	exit "$rc"
 	;;

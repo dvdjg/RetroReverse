@@ -104,15 +104,19 @@ instrucción. `dbg_fast2 bf.nes 60000` → **60000 pasos idénticos**; `equivale
 **Pendiente**: el **±1 ciclo** del cruce del VBlank (causa del jam del frame 6 de bioniccommando).
 Para cerrarlo habría que muestrear el flag a resolución de ciclo (como mesen), no de instrucción.
 
-### Límite del volcado de nametables de mesen (MMC5/VRC6)
+### Volcado de nametables de mesen: era falso (corregido) y trazas de varias pasadas
 
-El volcado `RRS1` de mesen (`Core/CPU.cpp`) incluye `ppu->PeekRAM(0x2000…)` = **CIRAM**. En un
-cartucho con **mapeo de nametables propio** (MMC5 `$5105` → CIRAM/ExRAM/fill; VRC6 con nametables
-por CHR-ROM) la fuente **efectiva** puede **no** ser CIRAM; comparar `RRS1` con nuestra nametable
-efectiva puede inducir a error. Para MMC5 hay que volcar la fuente **resuelta** (ExRAM/fill) o el
-**bitmap de la nametable tras el render**, no CIRAM a secas. Además, al pedir trazas largas a mesen
-éste **reinicia** (timestamp vuelve a `ts=8` en `$F500`), así que `trace_diff` debe limitarse a la
-**primera pasada** (o el harness debe garantizar una pasada única).
+**Bug corregido (2026)**: el volcado `RRS1` leía las nametables con `ppu->PeekRAM(0x2000…)`. Como
+`GetRegisterID(addr) = addr & 0x07` (`Core/PPU.h:163`), eso devolvía **los registros PPU repetidos**
+(patrón `90 90 10 90 f8 …`), **no** la nametable; por eso las 4 salían idénticas. Corregido a
+`mapper->GetMemoryValue(DebugMemoryType::NametableRam, …)`. Con la nametable real, nuestras NT0/NT3
+coinciden con mesen.
+
+**Trazas de varias pasadas**: `vertical_slice` hace por defecto una comprobación de determinismo que
+`save_state`/`load_state` y **rebobina** el core → la traza de mesen contiene varias pasadas con el
+`_cycleCount` reiniciado (`ts` salta a `ts=8`). Hay que usar **`--det 0`** para una pasada única.
+
+Ver `../tools/mesen-patches/README.md` para el parche completo (el core está gitignoreado).
 
 ## Estado
 
