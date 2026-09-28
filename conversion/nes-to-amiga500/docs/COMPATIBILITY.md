@@ -147,14 +147,20 @@ Pendientes reales (2026, tras la matriz corregida):
     bit5=0 (8×8) → no aplica.
   - La nametable (CIRAM) es **~965× tile 0** (bytes 0 = fondo) → debería salir negro; hay **56 tiles
     distintos** en ~59 posiciones. El render pinta de más donde `mesen` pinta negro.
-  - **Causa raíz (2026, confirmada)**: es la **misma limitación de timing sub-instrucción de VBlank**
-    que afecta a ic/galaga/metalstorm/pacman. Con el harness de traza **corregido** (`--det 0`: la
-    comprobación de determinismo hacía `save_state`/`load_state` y **rebobinaba** el core → varias
-    pasadas con `ts` reiniciado), `trace_diff` a **40 frames** da **sin divergencia de camino**; el
-    único evento real es un re-sync `O+7944` en el bucle `$F506-$F50F` (`STA $2000/$2001` +
-    `BIT $2002`/`BPL`): mesen sale del bucle (ve VBlank), el oráculo **no** → gira ~1986 iteraciones
-    extra (**~1 frame**), pierde una espera de VBlank y el juego **avanza su máquina de estados
-    saltándose la carga de nametable** de ese frame. No es específico de MMC5.
+  - **Dos problemas distintos (2026)**:
+    - **Timing (traza)**: con el harness corregido (`--det 0`: la comprobación de determinismo hacía
+      `save_state`/`load_state` y **rebobinaba** el core → varias pasadas), `trace_diff` a 40 frames da
+      **sin divergencia de camino**; el único evento real es un re-sync `O+7944` en el bucle
+      `$F506-$F50F` (`STA $2000/$2001` + `BIT $2002`/`BPL`): mesen ve VBlank, el oráculo **no** → gira
+      ~1 frame extra. **Misma** limitación de VBlank que ic/galaga/metalstorm (ver TIMING_ROADMAP.md).
+      El intento de arreglo (VBlank en `(241,1)` + quirk `_preventVblFlag`) mejoró la traza pero
+      **regresó** blastermaster/jurassicpark → **revertido**.
+    - **Render (el 45.8% del frame)** — **NO es timing** (el frame no cambió con el intento). Comparando
+      los PNG: mesen = negro + logo rojo **KOEI**; el oráculo = **patrón rojo repetido** por toda la
+      pantalla (¡tile 0 dibuja un patrón!) + el logo distorsionado. La nametable coincide (tile 0 en
+      ~965 celdas), así que el fallo es de **CHR/patrón del fondo** (banking MMC5: al frame 60
+      `modo=3 chrA=1 bancos=[6,6,6,7,6,6,6,6,0,0,0,0]`). **Siguiente**: comparar la página CHR
+      efectiva del fondo con mesen (dump `RRS1` extendido a CHR).
   - **Corrección importante (2026)**: el "volcado de nametables" de mesen era **falso** —
     `ppu->PeekRAM(0x2000+…)` usa `GetRegisterID(addr) = addr & 7`, así que devolvía los **registros
     PPU repetidos** (Control/Mask/Status/… = `90 90 10 90 f8…`), no la nametable; por eso las 4

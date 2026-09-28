@@ -219,6 +219,16 @@ int main(int argc, char** argv) {
 			if (sys.ppu.nt_exram != nullptr) {
 				std::fwrite(sys.ppu.nt_exram, 1, 0x400, fp);
 			}
+			// Estado CHR de la MMC5 (diagnóstico de render): modo ($5101), juego A/B,
+			// bits altos ($5130) y los 12 bancos ($5120-$512B).
+			unsigned char ch[3 + 12];
+			ch[0] = sys.mapper.mmc5_chr_mode;
+			ch[1] = sys.mapper.mmc5_chr_a ? 1u : 0u;
+			ch[2] = sys.mapper.mmc5_chr_upper;
+			for (int i = 0; i < 12; ++i) {
+				ch[3 + i] = sys.mapper.mmc5_chr_banks[i];
+			}
+			std::fwrite(ch, 1, sizeof ch, fp);
 			std::fclose(fp);
 		}
 		std::printf("escrito frame_probe.nteff|mmc5\n");

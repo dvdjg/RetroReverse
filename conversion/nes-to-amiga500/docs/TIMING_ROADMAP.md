@@ -170,6 +170,15 @@ frame. El `budget` del ejecutor rápido pasa de "hasta fin de scanline" a "hasta
 > divergen por la misma causa** (timing de VBlank/NMI), no por bugs de mapper. Igual que MMC5.
 > Es decir: **un solo límite** transversal a todos los mappers nuevos.
 >
+> **Resultado negativo 2026 (quirk `_preventVblFlag`).** Se intentó alinear la semántica con
+> mesen: levantar VBlank en **`(241, dot 1)`** (en vez de al entrar en la 241) y sustituir la
+> máscara `(241, dot<3)` por el quirk real `_preventVblFlag` (leer `$2002` en `(241, dot 0)`
+> impide el flag ese frame). Mejoró la **traza** (desapareció el re-sync `O+7944` de Uncharted: el
+> bucle `$F506-$F50F` deja de perder un frame) pero **regresó** `blastermaster` (0.0→9.1%) y
+> `jurassicpark` (0.0→13.7%) al mover `nmi_occurred` 1 dot → cambia el *interleaving* del NMI.
+> Uncharted **no mejoró** (sigue 45.8%; su divergencia de frame es de **render/CHR**, no de timing,
+> ver `COMPATIBILITY.md`). **Revertido**; confirma que el fix exige subdivisión **ciclo a ciclo**.
+>
 > **Resultados negativos previos 2026 (acotan el problema).**
 > 1. **La fase es neutra.** Con Fase 2 activa (no-snap), adelantar la **fase del PPU en el reset**
 >    (`-DN2A_PPU_PHASE=0/5/7/9/10/12`) es **neutro total** (idx 43447): la lectura y el flag son

@@ -29,10 +29,10 @@ mapper_of() { # lee el mapper del header iNES sin depender de jq
 	echo $(( ( $7 >> 4 ) | ( $8 & 0xF0 ) ))
 }
 
-hash_of() { # hash del framebuffer del oráculo
+hash_of() { # hash del framebuffer del oráculo (el token `hash=`, NO `nt_hash=`)
 	local rom="$1"
 	"$ROOT/build/nes_frame" "$rom" /dev/null "$FRAMES" 2>/dev/null |
-		sed -n 's/.*hash=\([0-9a-f]*\).*/\1/p'
+		awk '{for(i=1;i<=NF;i++) if($i ~ /^hash=/){sub(/^hash=/,"",$i); print $i; exit}}'
 }
 
 nt_of() { # bytes no-cero de la nametable efectiva del oráculo (diagnóstico)
@@ -96,10 +96,11 @@ case "$MODE" in
 		fi
 		[ -n "$flag" ] && [ "$flag" != " (varianza; ignorada)" ] && rc=1
 		# Aviso (no bloqueante): nametable efectiva **totalmente vacía** con el frame
-		# divergiendo → probable fallo de carga/mapeo de nametable (no es regresión).
+		# muy divergente → probable fallo de carga/mapeo de nametable. Umbral alto
+		# (25%) para no marcar los VRC6/CHR-ROM (NT≠0=0 legítimo: Mr. Gimmick, CV3…).
 		ntw=""
 		if [ -n "$t" ] && [ "$t" -eq 0 ] && [ "$s" != "flat" ] &&
-			awk -v g="$s" 'BEGIN{exit !(g+0>0)}'; then
+			awk -v g="$s" 'BEGIN{exit !(g+0>25)}'; then
 			ntw=" NT≠0=0 (¿nametable sin cargar?)"
 		fi
 		sfmt="$s"; [ "$s" != "flat" ] && sfmt="$s%"

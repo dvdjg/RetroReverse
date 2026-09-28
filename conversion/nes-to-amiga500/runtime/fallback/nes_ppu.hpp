@@ -162,9 +162,10 @@ struct Ppu {
 			// VBlank en el ciclo **exacto** del acceso; esa diferencia de ~1 ciclo hace que
 			// los bucles `LDA $2002` de espera de VBlank de 6 juegos (ic/galaga/pacman/
 			// metalstorm/jurassicpark/blastermaster) salgan una iteración antes o después.
-			// SOLUCIÓN: subdividir la instrucción aquí — calcular el ciclo exacto del acceso
-			// de datos y evaluar el flag con la PPU avanzada a **ese** dot (no al siguiente);
-			// o sincronizar PPU/CPU ciclo a ciclo. Mover la ventana del flag NO basta.
+			// Intento 2026 (levantar VBlank en `(241,1)` + quirk `_preventVblFlag` en
+			// `(241,0)`, como mesen): mejoró la traza pero **regresó** blastermaster y
+			// jurassicpark (0.0% → 9.1/13.7%) al mover `nmi_occurred` 1 dot → revertido.
+			// SOLUCIÓN REAL: lockstep PPU/CPU ciclo a ciclo (ver TIMING_ROADMAP.md).
 			eng::u8 r = static_cast<eng::u8>(status & 0xE0u);
 #ifdef N2A_PPU_READ_PROBE
 			{
