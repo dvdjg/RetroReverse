@@ -35,6 +35,12 @@ hash_of() { # hash del framebuffer del oráculo
 		sed -n 's/.*hash=\([0-9a-f]*\).*/\1/p'
 }
 
+nt_of() { # bytes no-cero de la nametable efectiva del oráculo (diagnóstico)
+	local rom="$1"
+	"$ROOT/build/nes_frame" "$rom" /dev/null "$FRAMES" 2>/dev/null |
+		sed -n 's/.*nt_nz=\([0-9]*\).*/\1/p'
+}
+
 struct_of() { # % estructural vs mesen; "flat" si la comparación es inconcluyente
 	local line
 	line="$(ROM="$1" FRAMES="$FRAMES" bash "$ROOT/test/diff_mesen.sh" 2>/dev/null | tail -1)"
@@ -59,7 +65,8 @@ rows() {
 		fi
 		# Tab como separador: los nombres de ROM traen espacios y `read` por
 		# espacios partiría el nombre (bug histórico del baseline).
-		printf '%s\t%s\t%s\t%s\n' "$name" "$(mapper_of "$rom")" "$(hash_of "$rom")" "$(struct_of "$rom")"
+		printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$(mapper_of "$rom")" "$(hash_of "$rom")" \
+			"$(struct_of "$rom")" "$(nt_of "$rom")"
 	done
 }
 
@@ -67,7 +74,7 @@ case "$MODE" in
 --update)
 	: > "$BASELINE"
 	echo "# Baseline (mapper hash estructura vs mesen, $FRAMES frames)." >> "$BASELINE"
-	while IFS=$'\t' read -r n m h s; do printf '%s %s\n' "$n" "${s:-?}" >> "$BASELINE"; done < <(rows)
+	while IFS=$'\t' read -r n m h s t; do printf '%s %s\n' "$n" "${s:-?}" >> "$BASELINE"; done < <(rows)
 	echo "baseline actualizado: $BASELINE"
 	;;
 --gate)
@@ -79,7 +86,7 @@ case "$MODE" in
 	# `rows` se evalúa UNA vez y como proceso sustituido (`< <(...)`) para que el
 	# bucle corra en el shell actual y `rc` se propague al `exit` (con `rows | while`
 	# el bucle va en un subshell y `rc` se pierde).
-	while IFS=$'\t' read -r n m h s; do
+	while IFS=$'\t' read -r n m h s t; do
 		want="$(awk -v x="$n" '$1==x{print $2}' "$BASELINE")"
 		flag=""
 		if printf '%s' "$n" | grep -qE "$VARIANCE_RE"; then
@@ -95,10 +102,10 @@ case "$MODE" in
 	exit "$rc"
 	;;
 *)
-	printf '| ROM | mapper | hash (oráculo) | estructura vs mesen |\n|---|---:|---|---:|\n'
-	rows | while IFS=$'\t' read -r n m h s; do
+	printf '| ROM | mapper | hash (oráculo) | estructura vs mesen | NT≠0 |\n|---|---:|---|---:|---:|\n'
+	rows | while IFS=$'\t' read -r n m h s t; do
 		sfmt="$s"; [ "$s" != "flat" ] && sfmt="$s%"
-		printf '| %s | %s | %s | %s |\n' "$n" "$m" "$h" "$sfmt"
+		printf '| %s | %s | %s | %s | %s |\n' "$n" "$m" "$h" "$sfmt" "${t:-?}"
 	done
 	;;
 esac

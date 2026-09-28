@@ -156,9 +156,20 @@ Pendientes reales (2026, tras la matriz corregida):
     60/1024) con `nt_map=[0,0,0,0]` (`$5105=0`). Es decir, **el contenido de la nametable difiere
     mucho**: el juego escribió ~840 bytes que mesen tiene y nosotros no. Esto apunta a un **síntoma de
     la divergencia de ejecución** (45.8 %), no a un simple `$5105` mal mapeado (nuestras dos fuentes de
-    nametable están igual de vacías). **Siguiente**: `trace_diff.py` (oráculo vs mesen) para ver si el
-    oráculo **deja de escribir la nametable** antes por una divergencia de CPU; si no, revisar el
-    capado de escrituras `$2007` en MMC5.
+    nametable están igual de vacías).
+  - **Diagnóstico `port_matrix` (2026)**: la tabla incluye ahora una columna **`NT≠0`** (bytes no-cero
+    de la nametable efectiva, `nes_frame … nt_nz`). Uncharted Waters marca **236** frente a ~1900–4000
+    de los juegos sanos → delata el problema sin depender de mesen.
+  - **`trace_diff` (2026)**: a **10 frames** el camino CPU del oráculo **coincide** con mesen (solo
+    re-syncs benignos, sin divergencia de camino) → la CPU no es el problema a corto plazo. A 60
+    frames mesen **reinicia la traza** (timestamp salta a `ts=8`, secuencia `$F500`) → las trazas
+    largas de mesen son **poco fiables** y la "divergencia de camino" de 60 frames es un **artefacto**
+    del harness. **Siguiente**: (a) corregir el harness de traza de mesen para una **pasada única
+    limpia**; (b) con eso, `trace_diff` a ~20–40 frames para ver si la CPU diverge durante la carga de
+    la nametable. La ruta de escritura `$2007` del oráculo sí captura las escrituras (1020 bytes a
+    NT0), así que no es un problema de ruteo sino de **contenido/tiempo**.
+  - **Aplicado**: `$5105` ahora actualiza `ppu.nt_map` **en la escritura** (antes solo al inicio de
+    frame, un frame tarde) — correcto en cualquier caso, aunque no cambia el resultado de Uncharted.
   - Gemfire/Laser/Nobunaga's/CV3 siguen a 0.0–3.1% (sin regresión con los cambios).
 - **MMC5**: audio de expansión (`$5000-$5015`) y banco CHR del split (`$5202`).
 - **Transpilador**: *banking* (sigue **NROM-only**).

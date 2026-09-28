@@ -478,6 +478,21 @@ private:
 			mapper.cpu_cycle = cpu.cycles;
 			mapper.cur_scan = ppu.scanline;
 			mapper.cpu_write(a, v);
+			// MMC5: `$5105` cambia el **mapeo de nametables** en runtime. Si el juego
+			// cambia `$5105` y escribe la nametable en el MISMO frame, hay que
+			// aplicarlo ya (antes se fijaba solo en `run_frame`, un frame tarde).
+			if (mapper.kind == MapperKind::Mmc5) {
+				if (a == 0x5105u) {
+					for (int i = 0; i < 4; ++i) {
+						ppu.nt_map[i] = static_cast<eng::u8>(
+							(mapper.mmc5_nametable >> (i * 2)) & 0x03u);
+					}
+				} else if (a == 0x5104u) {
+					ppu.ext_attr_mode = (mapper.mmc5_exram_mode == 1u);
+				} else if (a == 0x5130u) {
+					ppu.ext_attr_upper = mapper.mmc5_chr_upper;
+				}
+			}
 			// Conmutación de bancos de PRG ($8000-$FFFF): invalida la decodificación
 			// del ejecutor rápido (si lo hay) para que se rehaga a través del mapper
 			// y actualiza el espejo `mem.prg_bank` que usa el despacho por banco del

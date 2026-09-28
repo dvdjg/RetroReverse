@@ -76,8 +76,23 @@ int main(int argc, char** argv) {
 	std::fwrite(rgb, 1, sizeof rgb, out);
 	std::fclose(out);
 
-	std::printf("nes_frame: mapper=%u PRG=%u CHR=%u frames=%d hash=%016llx -> %s\n",
+	// Nametable **efectiva** (resuelta por el mapeo del cartucho: CIRAM/ExRAM/fill)
+	// como diagnóstico: si está casi vacía (p. ej. MMC5 mal mapeado) pero el juego
+	// dibuja tiles, el `nt_nz` (~0) delata el problema aunque el hash del frame no.
+	eng::u8 nt[4096];
+	int nt_nz = 0;
+	for (int i = 0; i < 4; ++i) {
+		for (int o = 0; o < 0x400; ++o) {
+			const eng::u8 b = nes.ppu.nt_effective(i, static_cast<eng::u16>(o));
+			nt[i * 0x400 + o] = b;
+			nt_nz += (b != 0) ? 1 : 0;
+		}
+	}
+
+	std::printf("nes_frame: mapper=%u PRG=%u CHR=%u frames=%d hash=%016llx nt_hash=%016llx "
+		    "nt_nz=%d -> %s\n",
 		    g_loaded.mapper_no, g_loaded.prg_size, g_loaded.chr_size, frames,
-		    static_cast<unsigned long long>(fnv1a(rgb, sizeof rgb)), argv[2]);
+		    static_cast<unsigned long long>(fnv1a(rgb, sizeof rgb)),
+		    static_cast<unsigned long long>(fnv1a(nt, sizeof nt)), nt_nz, argv[2]);
 	return 0;
 }
