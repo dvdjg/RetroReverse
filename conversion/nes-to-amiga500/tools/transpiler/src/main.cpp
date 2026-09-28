@@ -397,6 +397,8 @@ constexpr int kCodegenVersion = 2;
 bool g_no_cycles = false;
 bool g_fast_ram = false;
 bool g_trace = false;
+bool g_chain = false;
+bool g_rom_direct = false;
 
 /// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
 bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
@@ -427,6 +429,8 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_no_cycles(g_no_cycles);
 	tp.set_fast_ram(g_fast_ram);
 	tp.set_trace(g_trace);
+	tp.set_chain(g_chain);
+	tp.set_rom_direct(g_rom_direct);
 	tp.disassemble();
 	tp.build_basic_blocks();
 	if (facts != nullptr && !load_facts(facts, tp)) {
@@ -804,6 +808,21 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--trace") { // traza por instrucción (comparar con el intérprete)
 			g_trace = true;
+			continue;
+		}
+		if (arg == "--chain") { // encadenar bloques (requiere --no-cycles)
+			g_chain = true;
+			continue;
+		}
+		if (arg == "--rom-direct") { // lecturas directas de PRG_ROM (datos fijos)
+			g_rom_direct = true;
+			continue;
+		}
+		if (arg == "--amiga") { // perfil Amiga/68000: sin ciclos + encadenado + ROM/ZP directas
+			g_no_cycles = true;
+			g_chain = true;
+			g_rom_direct = true;
+			g_fast_ram = true;
 			continue;
 		}
 

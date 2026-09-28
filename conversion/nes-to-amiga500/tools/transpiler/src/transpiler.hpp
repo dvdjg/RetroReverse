@@ -597,6 +597,23 @@ public:
 	/// \param b `true` para activar el acceso directo a RAM de página cero.
 	void set_fast_ram(bool b) noexcept { fast_ram_ = b; }
 
+	/// Con `true`, **encadena los bloques** por control de flujo estático: un salto,
+	/// caída o `JMP` con destino conocido se emite como **llamada en cola** al bloque
+	/// siguiente (`return bb_XXXX(cpu);`), y `JSR`/`RTS` como **llamada/retorno C**
+	/// (`bb_call(cpu); return bb_ret(cpu);` / `cpu.pull16(); return;`). Evita el
+	/// despachador por búsqueda binaria en cada bloque (el mayor coste en 68000).
+	/// Solo se activa con `--no-cycles`: sin cesión por deadline el control se
+	/// transfiere directamente y el runtime debe ceder en los puntos de evento.
+	/// \param b `true` para encadenar bloques.
+	void set_chain(bool b) noexcept { chain_ = b; }
+
+	/// Con `true`, las lecturas de la ventana fija de ROM (NROM/CNROM, `Abs`/`AbsX`/
+	/// `AbsY`) se emiten como **acceso directo a `PRG_ROM[...]`** (constexpr) en vez
+	/// de pasar por `NESMemory::read` (que decodifica región y hace `idx % prg_size`,
+	/// una libcall de 32 bits en 68000). Permite a g++ ver los datos fijos.
+	/// \param b `true` para emitir lecturas directas de ROM.
+	void set_rom_direct(bool b) noexcept { rom_direct_ = b; }
+
 	/// Número de mapper iNES de la ROM cargada.
 	[[nodiscard]] int mapper() const noexcept { return mapper_; }
 	/// Tamaño de la PRG-ROM en bytes.
@@ -674,6 +691,10 @@ private:
 	bool no_cycles_ = false;     ///< Si `true`, no emitir ciclos (ver `set_no_cycles`).
 	bool fast_ram_ = false;      ///< Si `true`, zero-page con acceso directo (ver `set_fast_ram`).
 	bool trace_ = false;         ///< Si `true`, emitir `N2A_TRACE` por instrucción (ver `set_trace`).
+	bool chain_ = false;         ///< Si `true`, encadenar bloques (ver `set_chain`).
+	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
+	int cur_bank_ = -1;          ///< Banco del bloque en emisión (`-1` = ventana fija).
+	bool cur_nz_live_ = true;    ///< ¿`Z`/`N` viven tras la instrucción actual? (liveness, ver `nz_dead_after`).
 
 	// --- Utilidades internas ---
 
@@ -1044,6 +1065,81 @@ private:
 		out.append_hex(addr, 4u, true);
 	}
 
+	/// \return `true` si `a` es un **inicio de bloque** decodificado (destino válido
+	/// para encadenar con una llamada directa `bb_XXXX(cpu)`).
+	[[nodiscard]] bool is_block(eng::u16 a) const noexcept {
+		return a < kSpace && has_instr_[a] != 0u && leaders_[a] != 0u;
+	}
+
+	/// \return `true` si el bloque que empieza en `start` **lee el estado del PPU**
+	/// (`$2002`), señal de un bucle de espera de VBlank/sprite-0. Con `--chain` estos
+	/// bucles **ceden** al runtime (`cpu.yield = true; return;`) en vez de encadenarse
+	/// consigo mismos, para que el runtime pueda avanzar el PPU/NMI.
+	[[nodiscard]] bool block_reads_ppu_status(eng::u16 start) const noexcept {
+		eng::u16 pc = start;
+		for (;;) {
+			if (has_instr_[pc] == 0u || (pc != start && leaders_[pc] != 0u)) {
+				break;
+			}
+			const Instruction& in = instr_[pc];
+			const OpcodeInfo& info = kOpcodeTable[in.opcode];
+			if (info.mode == AddrMode::Abs && has_operand(in) && in.operand == 0x2002u) {
+				return true;
+			}
+			pc = static_cast<eng::u16>(pc + info.size);
+			if (info.mode == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
+			    sv_equal(info.mnemonic, "JSR") || sv_equal(info.mnemonic, "RTS") ||
+			    sv_equal(info.mnemonic, "RTI") || sv_equal(info.mnemonic, "BRK")) {
+				break;
+			}
+		}
+		return false;
+	}
+
+	/// \return `true` si el mnemónico escribe `Z`/`N` (carga/ALU/comparación/inc-dec/
+	/// desplazamiento/transferencia/PLA/BIT/PLP/RTI). Se usa para el **liveness** local
+	/// que suprime escrituras muertas de flags.
+	[[nodiscard]] static bool mnemonic_writes_nz(const char* m) noexcept {
+		return sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY") || sv_equal(m, "LAX") ||
+		       sv_equal(m, "TAX") || sv_equal(m, "TAY") || sv_equal(m, "TXA") || sv_equal(m, "TYA") ||
+		       sv_equal(m, "TSX") || sv_equal(m, "PLA") || sv_equal(m, "AND") || sv_equal(m, "ORA") ||
+		       sv_equal(m, "EOR") || sv_equal(m, "ADC") || sv_equal(m, "SBC") || sv_equal(m, "CMP") ||
+		       sv_equal(m, "CPX") || sv_equal(m, "CPY") || sv_equal(m, "BIT") || sv_equal(m, "INC") ||
+		       sv_equal(m, "DEC") || sv_equal(m, "INX") || sv_equal(m, "INY") || sv_equal(m, "DEX") ||
+		       sv_equal(m, "DEY") || sv_equal(m, "ASL") || sv_equal(m, "LSR") || sv_equal(m, "ROL") ||
+		       sv_equal(m, "ROR") || sv_equal(m, "DCP") || sv_equal(m, "ISB") || sv_equal(m, "SLO") ||
+		       sv_equal(m, "RLA") || sv_equal(m, "SRE") || sv_equal(m, "RRA") || sv_equal(m, "PLP") ||
+		       sv_equal(m, "RTI");
+	}
+
+	/// **Liveness local** de `Z`/`N`: recorre hacia delante desde `pc` (dentro del bloque
+	/// `start`) hasta la primera instrucción que **lee** `Z`/`N` (rama/`PHP` → viven) o que
+	/// las **escribe** (→ la escritura de `pc` es muerta). Atravesar el fin de bloque o un
+	/// terminador devuelve `false` (conservador: el sucesor puede leerlas).
+	/// \return `true` si las dos (`Z` y `N`) escritas por `pc` son **muertas**.
+	[[nodiscard]] bool nz_dead_after(eng::u16 start, eng::u16 pc) const {
+		eng::u16 p = static_cast<eng::u16>(pc + kOpcodeTable[instr_[pc].opcode].size);
+		for (;;) {
+			if (p >= kSpace || has_instr_[p] == 0u || (p != start && leaders_[p] != 0u)) {
+				return false;
+			}
+			const OpcodeInfo& info = kOpcodeTable[instr_[p].opcode];
+			const char* m = info.mnemonic;
+			if (sv_equal(m, "BEQ") || sv_equal(m, "BNE") || sv_equal(m, "BPL") ||
+			    sv_equal(m, "BMI") || sv_equal(m, "PHP")) {
+				return false; // lectura de Z/N
+			}
+			if (mnemonic_writes_nz(m)) {
+				return true; // escritura de Z/N antes de leerlas
+			}
+			p = static_cast<eng::u16>(p + info.size);
+			if (info.mode == AddrMode::Rel || sv_equal(m, "JMP") || sv_equal(m, "JSR") ||
+			    sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK")) {
+				return false;
+			}
+		}
+	}
+
 	/// Escribe la cabecera documentada del fichero generado: qué es, quién lo
 	/// compila/ejecuta, en qué contexto y qué recursos necesita. Termina con el
 	/// `#include` de `eng/core` que el resto del fichero presupone.
@@ -1177,31 +1273,188 @@ private:
 		else if (sv_equal(m, "CMP")) op = 11;
 		else if (sv_equal(m, "CPX")) op = 12;
 		else if (sv_equal(m, "CPY")) op = 13;
+		else if (sv_equal(m, "ASL")) op = 14;
+		else if (sv_equal(m, "LSR")) op = 15;
+		else if (sv_equal(m, "ROL")) op = 16;
+		else if (sv_equal(m, "ROR")) op = 17;
+		else if (sv_equal(m, "INC")) op = 18;
+		else if (sv_equal(m, "DEC")) op = 19;
 		if (op < 0) {
 			return false;
 		}
 		const eng::u8 a = static_cast<eng::u8>(in.operand);
+		// Acceso directo a la RAM emulada por el puntero cacheado `n2a_ram`
+		// (declarado al entrar en el bloque): evita recargar `cpu.mem` en cada acceso.
 		auto ram = [&]() {
-			out.append("cpu.mem->ram[0x");
+			out.append("n2a_ram[0x");
 			out.append_hex(a, 2u, true);
 			out.append(']');
 		};
 		out.append("    ");
 		switch (op) {
-		case 0: out.append("cpu.A = "); ram(); out.append("; cpu.set_nz(cpu.A);"); break;
-		case 1: out.append("cpu.X = "); ram(); out.append("; cpu.set_nz(cpu.X);"); break;
-		case 2: out.append("cpu.Y = "); ram(); out.append("; cpu.set_nz(cpu.Y);"); break;
+		case 0: out.append("cpu.A = "); ram(); if (cur_nz_live_) out.append("; cpu.set_nz(cpu.A)"); out.append(";"); break;
+		case 1: out.append("cpu.X = "); ram(); if (cur_nz_live_) out.append("; cpu.set_nz(cpu.X)"); out.append(";"); break;
+		case 2: out.append("cpu.Y = "); ram(); if (cur_nz_live_) out.append("; cpu.set_nz(cpu.Y)"); out.append(";"); break;
 		case 3: ram(); out.append(" = cpu.A;"); break;
 		case 4: ram(); out.append(" = cpu.X;"); break;
 		case 5: ram(); out.append(" = cpu.Y;"); break;
 		case 6: out.append("cpu.ADC_impl("); ram(); out.append(");"); break;
 		case 7: out.append("cpu.SBC_impl("); ram(); out.append(");"); break;
-		case 8: out.append("cpu.AND_impl("); ram(); out.append(");"); break;
-		case 9: out.append("cpu.ORA_impl("); ram(); out.append(");"); break;
-		case 10: out.append("cpu.EOR_impl("); ram(); out.append(");"); break;
+		case 8: if (cur_nz_live_) { out.append("cpu.AND_impl("); ram(); out.append(");"); }
+			else { out.append("cpu.A = static_cast<eng::u8>(cpu.A & "); ram(); out.append(");"); } break;
+		case 9: if (cur_nz_live_) { out.append("cpu.ORA_impl("); ram(); out.append(");"); }
+			else { out.append("cpu.A = static_cast<eng::u8>(cpu.A | "); ram(); out.append(");"); } break;
+		case 10: if (cur_nz_live_) { out.append("cpu.EOR_impl("); ram(); out.append(");"); }
+			else { out.append("cpu.A = static_cast<eng::u8>(cpu.A ^ "); ram(); out.append(");"); } break;
 		case 11: out.append("cpu.CMP_impl(cpu.A, "); ram(); out.append(");"); break;
 		case 12: out.append("cpu.CMP_impl(cpu.X, "); ram(); out.append(");"); break;
-		default: out.append("cpu.CMP_impl(cpu.Y, "); ram(); out.append(");"); break;
+		case 13: out.append("cpu.CMP_impl(cpu.Y, "); ram(); out.append(");"); break;
+		// RMW/desplazamientos en zero-page: lectura + operación + escritura directas,
+		// sin las dos llamadas a `read`/`write` (caliente en PRNG/bucles de la NES).
+		case 14: out.append("{ eng::u8 n2a_v = "); ram();
+			out.append("; cpu.C = (n2a_v & 0x80u) != 0u; n2a_v = static_cast<eng::u8>(n2a_v << 1u); ");
+			ram(); out.append(" = n2a_v; cpu.set_nz(n2a_v); }"); break;
+		case 15: out.append("{ eng::u8 n2a_v = "); ram();
+			out.append("; cpu.C = (n2a_v & 1u) != 0u; n2a_v = static_cast<eng::u8>(n2a_v >> 1u); ");
+			ram(); out.append(" = n2a_v; cpu.set_nz(n2a_v); }"); break;
+		case 16: out.append("{ eng::u8 n2a_v = "); ram();
+			out.append("; const eng::u8 n2a_c = cpu.C ? 1u : 0u; cpu.C = (n2a_v & 0x80u) != 0u; ");
+			out.append("n2a_v = static_cast<eng::u8>((n2a_v << 1u) | n2a_c); ");
+			ram(); out.append(" = n2a_v; cpu.set_nz(n2a_v); }"); break;
+		case 17: out.append("{ eng::u8 n2a_v = "); ram();
+			out.append("; const eng::u8 n2a_c = cpu.C ? 1u : 0u; cpu.C = (n2a_v & 1u) != 0u; ");
+			out.append("n2a_v = static_cast<eng::u8>((n2a_v >> 1u) | (n2a_c << 7u)); ");
+			ram(); out.append(" = n2a_v; cpu.set_nz(n2a_v); }"); break;
+		case 18: out.append("{ eng::u8 n2a_v = static_cast<eng::u8>("); ram();
+			out.append(" + 1u); "); ram(); out.append(" = n2a_v; cpu.set_nz(n2a_v); }"); break;
+		default: out.append("{ eng::u8 n2a_v = static_cast<eng::u8>("); ram();
+			out.append(" - 1u); "); ram(); out.append(" = n2a_v; cpu.set_nz(n2a_v); }"); break;
+		}
+		return true;
+	}
+
+	/// Con `--rom-direct`, emite una **lectura directa de `PRG_ROM`** para las
+	/// instrucciones de **carga/ALU/CMP** cuyo operando efectivo (modo `Abs`/`AbsX`/
+	/// `AbsY`) cae en la ventana fija de ROM y el mapper tiene la PRG **fija**
+	/// (NROM/CNROM). Sustituye `cpu.METODO(dir)` (que en el runtime hace el `switch`
+	/// de región y `idx % prg_size`) por `PRG_ROM[índice]` — datos `constexpr` que el
+	/// compilador puede plegar o indexar directamente.
+	///
+	/// El índice replica el mapeo del bus: `((operando - $8000) + X/Y) & (prg_size-1)`
+	/// (potencia de dos). Solo es válido para `prg_size` potencia de dos; en otro caso
+	/// cae al método normal.
+	///
+	/// \param out Salida.
+	/// \param in Instrucción (modo `Abs`/`AbsX`/`AbsY` con operando en `$8000-$FFFF`).
+	/// \return `true` si se emitió en línea; `false` para usar el método normal.
+	[[nodiscard]] bool emit_rom_inline(Dyn& out, const Instruction& in) const {
+		if (!rom_direct_ || prg_banked_ || prg_size_ == 0u) {
+			return false;
+		}
+		if ((prg_size_ & (prg_size_ - 1u)) != 0u) {
+			return false; // no es potencia de dos: el módulo no es máscara
+		}
+		const OpcodeInfo& info = kOpcodeTable[in.opcode];
+		if (info.mode != AddrMode::Abs && info.mode != AddrMode::AbsX && info.mode != AddrMode::AbsY) {
+			return false;
+		}
+		if (!has_operand(in) || in.operand < 0x8000u) {
+			return false;
+		}
+		const char* m = info.mnemonic;
+		int op = -1;
+		if (sv_equal(m, "LDA")) op = 0;
+		else if (sv_equal(m, "LDX")) op = 1;
+		else if (sv_equal(m, "LDY")) op = 2;
+		else if (sv_equal(m, "ADC")) op = 3;
+		else if (sv_equal(m, "SBC")) op = 4;
+		else if (sv_equal(m, "AND")) op = 5;
+		else if (sv_equal(m, "ORA")) op = 6;
+		else if (sv_equal(m, "EOR")) op = 7;
+		else if (sv_equal(m, "CMP")) op = 8;
+		else if (sv_equal(m, "CPX")) op = 9;
+		else if (sv_equal(m, "CPY")) op = 10;
+		if (op < 0) {
+			return false;
+		}
+		const eng::u32 mask = prg_size_ - 1u;
+		const eng::u32 base = (static_cast<eng::u32>(in.operand) - 0x8000u) & mask;
+		// **Dirección absoluta** (sin índice): el byte es una **constante de compilación**
+		// (PRG fija, no bancada). Se emite como **inmediato** para que g++ lo pliegue: la
+		// carga puede desaparecer y las operaciones con ella resolverse en compile-time.
+		if (info.mode == AddrMode::Abs) {
+			const eng::u8 val = prg_[base];
+			// Sin Z/N vivas: emisión directa (la carga/operación no actualiza flags).
+			if (!cur_nz_live_ && (op == 0 || op == 1 || op == 2 || op == 5 || op == 6 || op == 7)) {
+				out.append("    cpu.");
+				if (op == 0 || op == 5 || op == 6 || op == 7) {
+					out.append("A = ");
+					if (op >= 5) {
+						out.append("static_cast<eng::u8>(cpu.A ");
+						out.append(op == 5 ? "&" : op == 6 ? "|" : "^");
+						out.append(" 0x");
+					} else {
+						out.append("0x");
+					}
+					out.append_hex(val, 2u, true);
+					out.append(op >= 5 ? ");" : ";");
+				} else {
+					out.append(op == 1 ? "X = 0x" : "Y = 0x");
+					out.append_hex(val, 2u, true);
+					out.append(";");
+				}
+				return true;
+			}
+			out.append("    cpu.");
+			switch (op) {
+			case 0: out.append("LDA_imm"); break;
+			case 1: out.append("LDX_imm"); break;
+			case 2: out.append("LDY_imm"); break;
+			case 3: out.append("ADC_imm"); break;
+			case 4: out.append("SBC_imm"); break;
+			case 5: out.append("AND_imm"); break;
+			case 6: out.append("ORA_imm"); break;
+			case 7: out.append("EOR_imm"); break;
+			case 8: out.append("CMP_imm"); break;
+			case 9: out.append("CPX_imm"); break;
+			default: out.append("CPY_imm"); break;
+			}
+			out.append("(0x");
+			out.append_hex(val, 2u, true);
+			out.append(");");
+			return true;
+		}
+		// Expresión del índice dentro de PRG_ROM.
+		auto rom = [&]() {
+			out.append("n2a_prg[");
+			if (info.mode == AddrMode::Abs) {
+				out.append("0x");
+				out.append_hex(base, 4u, true);
+				out.append("u");
+			} else {
+				out.append("(0x");
+				out.append_hex(base, 4u, true);
+				out.append("u + cpu.");
+				out.append(info.mode == AddrMode::AbsX ? "X" : "Y");
+				out.append(") & 0x");
+				out.append_hex(mask, 4u, true);
+				out.append("u");
+			}
+			out.append(']');
+		};
+		out.append("    ");
+		switch (op) {
+		case 0: out.append("cpu.A = "); rom(); out.append("; cpu.set_nz(cpu.A);"); break;
+		case 1: out.append("cpu.X = "); rom(); out.append("; cpu.set_nz(cpu.X);"); break;
+		case 2: out.append("cpu.Y = "); rom(); out.append("; cpu.set_nz(cpu.Y);"); break;
+		case 3: out.append("cpu.ADC_impl("); rom(); out.append(");"); break;
+		case 4: out.append("cpu.SBC_impl("); rom(); out.append(");"); break;
+		case 5: out.append("cpu.AND_impl("); rom(); out.append(");"); break;
+		case 6: out.append("cpu.ORA_impl("); rom(); out.append(");"); break;
+		case 7: out.append("cpu.EOR_impl("); rom(); out.append(");"); break;
+		case 8: out.append("cpu.CMP_impl(cpu.A, "); rom(); out.append(");"); break;
+		case 9: out.append("cpu.CMP_impl(cpu.X, "); rom(); out.append(");"); break;
+		default: out.append("cpu.CMP_impl(cpu.Y, "); rom(); out.append(");"); break;
 		}
 		return true;
 	}
@@ -1267,9 +1520,24 @@ private:
 					out.append(" cpu.cycles += 1u; cpu.mem->tick(1);");
 				}
 			}
-			out.append(" cpu.PC = 0x");
-			out.append_hex(in.target, 4u, true);
-			out.append("; return; }\n");
+			if (chain_ && !prg_banked_ && in.target == block_start &&
+			    block_reads_ppu_status(block_start)) {
+				// Bucle de espera de VBlank/sprite-0: cede al runtime en vez de
+				// encadenarse consigo mismo (el runtime avanza el PPU/NMI y
+				// re-despacha en `PC`).
+				out.append(" cpu.yield = true; cpu.PC = 0x");
+				out.append_hex(block_start, 4u, true);
+				out.append("; return; }\n");
+			} else if (chain_ && !prg_banked_ && is_block(in.target)) {
+				// Encadenado: la rama tomada llama en cola al bloque destino.
+				out.append(" return ");
+				append_block_name(out, cur_bank_, in.target);
+				out.append("(cpu); }\n");
+			} else {
+				out.append(" cpu.PC = 0x");
+				out.append_hex(in.target, 4u, true);
+				out.append("; return; }\n");
+			}
 			emit_yield(out, in, info); // fall-through (rama no tomada)
 			return;
 		}
@@ -1278,9 +1546,20 @@ private:
 			append_comment(out, in, info);
 			out.append('\n');
 			emit_base();
-			out.append("    cpu.PC = 0x");
-			out.append_hex(in.target, 4u, true);
-			out.append("; return;\n");
+			if (chain_ && !prg_banked_ && in.target == block_start) {
+				// `JMP a sí mismo`: espera de NMI; cede al runtime.
+				out.append("    cpu.yield = true; cpu.PC = 0x");
+				out.append_hex(block_start, 4u, true);
+				out.append("; return;\n");
+			} else if (chain_ && !prg_banked_ && is_block(in.target)) {
+				out.append("    return ");
+				append_block_name(out, cur_bank_, in.target);
+				out.append("(cpu);\n");
+			} else {
+				out.append("    cpu.PC = 0x");
+				out.append_hex(in.target, 4u, true);
+				out.append("; return;\n");
+			}
 			return;
 		}
 		if (sv_equal(m, "JMP") && info.mode == AddrMode::Ind) {
@@ -1298,13 +1577,27 @@ private:
 			append_comment(out, in, info);
 			out.append('\n');
 			emit_base();
-			out.append("    cpu.JSR_abs(0x");
-			out.append_hex(in.target, 4u, true);
-			// Convención del intérprete: se apila `PC+2` (dirección del último byte
-			// del JSR) y `RTS` suma 1; así el retorno es consistente con el fallback.
-			out.append(", 0x");
-			out.append_hex(static_cast<eng::u16>(in.addr + 2u), 4u, true);
-			out.append("); return;\n");
+			const eng::u16 ret3 = static_cast<eng::u16>(in.addr + 3u); // primer byte tras el JSR
+			if (chain_ && !prg_banked_ && is_block(in.target) && is_block(ret3)) {
+				// Encadenado: llamada C al subbloque y continuación directa en el
+				// retorno. Se apila `PC+2` (fidelidad de pila); el `RTS` encadenado
+				// solo descarta el valor y devuelve por la pila C.
+				out.append("    cpu.push16(0x");
+				out.append_hex(static_cast<eng::u16>(in.addr + 2u), 4u, true);
+				out.append("u); ");
+				append_block_name(out, cur_bank_, in.target);
+				out.append("(cpu); if (cpu.yield) return; return ");
+				append_block_name(out, cur_bank_, ret3);
+				out.append("(cpu);\n");
+			} else {
+				out.append("    cpu.JSR_abs(0x");
+				out.append_hex(in.target, 4u, true);
+				// Convención del intérprete: se apila `PC+2` (dirección del último byte
+				// del JSR) y `RTS` suma 1; así el retorno es consistente con el fallback.
+				out.append(", 0x");
+				out.append_hex(static_cast<eng::u16>(in.addr + 2u), 4u, true);
+				out.append("); return;\n");
+			}
 			return;
 		}
 		if (sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK")) {
@@ -1312,6 +1605,12 @@ private:
 			append_comment(out, in, info);
 			out.append('\n');
 			emit_base();
+			if (sv_equal(m, "RTS") && chain_ && !prg_banked_) {
+				// Encadenado: `RTS` descarta el valor apilado y devuelve al sitio de
+				// la llamada C (el bloque `JSR` encadena al retorno).
+				out.append("    cpu.pull16(); return;\n");
+				return;
+			}
 			if (sv_equal(m, "BRK")) {
 				// `CPU::BRK` empuja `PC+2`; el bloque **no mantiene el PC por
 				// instrucción**, así que hay que fijar el PC real de esta `BRK`
@@ -1347,8 +1646,26 @@ private:
 			}
 		}
 		bool handled = false;
-		if (fast_ram_ && info.mode == AddrMode::Zp && has_operand(in)) {
+		if (rom_direct_) {
+			handled = emit_rom_inline(out, in); // lectura directa de PRG_ROM (datos fijos)
+		}
+		if (!handled && fast_ram_ && info.mode == AddrMode::Zp && has_operand(in)) {
 			handled = emit_zp_inline(out, in); // acceso directo a zero-page
+		}
+		// Inmediatas con Z/N muertas (liveness): carga/operación directa sin `set_nz`.
+		if (!handled && !cur_nz_live_ && info.mode == AddrMode::Imm && has_operand(in)) {
+			const eng::u8 v = static_cast<eng::u8>(in.operand);
+			if (sv_equal(m, "LDA")) {
+				out.append("    cpu.A = 0x"); out.append_hex(v, 2u, true); out.append(";"); handled = true;
+			} else if (sv_equal(m, "LDX")) {
+				out.append("    cpu.X = 0x"); out.append_hex(v, 2u, true); out.append(";"); handled = true;
+			} else if (sv_equal(m, "LDY")) {
+				out.append("    cpu.Y = 0x"); out.append_hex(v, 2u, true); out.append(";"); handled = true;
+			} else if (sv_equal(m, "AND") || sv_equal(m, "ORA") || sv_equal(m, "EOR")) {
+				out.append("    cpu.A = static_cast<eng::u8>(cpu.A ");
+				out.append(sv_equal(m, "AND") ? "&" : sv_equal(m, "ORA") ? "|" : "^");
+				out.append(" 0x"); out.append_hex(v, 2u, true); out.append(");"); handled = true;
+			}
 		}
 		if (!handled) {
 			out.append("    cpu.");
@@ -1618,6 +1935,7 @@ private:
 	}
 
 	void emit_blocks_for(Dyn& out, int bank) {
+		cur_bank_ = bank; // banco del bloque en emisión (encadenado de destinos)
 		out.append(bank < 0 ? "// ---- Basic blocks (ventana fija) ----\n\n"
 				    : "// ---- Basic blocks (banco conmutable) ----\n\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -1700,6 +2018,24 @@ private:
 			append_block_name(out, bank, start);
 			out.append("(CPU& cpu) {\n");
 			// (Sin etiquetas internas: las ramas vuelven al despacho por `cpu.PC`.)
+			if (chain_ && !prg_banked_) {
+				// Encadenado: el PC no se mantiene por instrucción, pero se fija al
+				// entrar en cada bloque para que el fallback a intérprete, el NMI y
+				// el diagnóstico vean la dirección real.
+				out.append("    cpu.PC = 0x");
+				out.append_hex(start, 4u, true);
+				out.append(";\n");
+			}
+			// Punteros cacheados por bloque: `n2a_ram` (RAM emulada, dirección fija
+			// dentro de `NESMemory`) y `n2a_prg` (`PRG_ROM`, `constexpr`) se quedan en
+			// registros de dirección durante todo el bloque, en vez de recargar
+			// `cpu.mem`/recomputar la base en cada acceso directo.
+			if (fast_ram_) {
+				out.append("    [[maybe_unused]] eng::u8* const n2a_ram = cpu.mem->ram;\n");
+			}
+			if (rom_direct_ && !prg_banked_) {
+				out.append("    [[maybe_unused]] const eng::u8* const n2a_prg = PRG_ROM;\n");
+			}
 			emit_assumptions(out, start);
 
 			// VSA intra-bloque: mapa de valores constantes vistos (`LDA #c; STA a`).
@@ -1722,6 +2058,42 @@ private:
 				const Instruction& in = instr_[pc];
 				const OpcodeInfo& info = kOpcodeTable[in.opcode];
 
+				// **Desplazamiento multibyte**: una tirada de `ROR/ROL zp` sobre
+				// direcciones consecutivas (idioma PRNG de la NES; en DK el 38 % de
+				// las instrucciones) se emite como **una** llamada a `n2a_ror_run`/
+				// `n2a_rol_run`, que hace el desplazamiento entero con el carry en un
+				// registro (en 68000, `roxr`/`roxl`) y materializa los flags una vez.
+				// Solo con acceso directo a RAM (`--fast-ram`) y sin contabilidad de
+				// ciclos (`--no-cycles`), donde el estado por instrucción no se observa.
+				if ((in.opcode == 0x66u || in.opcode == 0x26u) && fast_ram_ && no_cycles_) {
+					const eng::u8 base = static_cast<eng::u8>(in.operand);
+					eng::u16 p2 = pc;
+					int run = 0;
+					while (p2 < kSpace && has_instr_[p2] != 0u && instr_[p2].opcode == in.opcode &&
+					       static_cast<eng::u8>(instr_[p2].operand) ==
+						       static_cast<eng::u8>(base + run)) {
+						++run;
+						p2 = static_cast<eng::u16>(p2 + 2u);
+						if (p2 < kSpace && has_instr_[p2] != 0u && leaders_[p2] != 0u) {
+							break; // no cruzar la frontera del bloque
+						}
+					}
+					if (run >= 3) {
+						out.append("    n2a_");
+						out.append(in.opcode == 0x66u ? "ror" : "rol");
+						out.append("_run(cpu, n2a_ram + 0x");
+						out.append_hex(base, 2u, true);
+						out.append(", ");
+						out.append_u32(static_cast<eng::u32>(run));
+						out.append(");\n");
+						last_addr = static_cast<eng::u16>(p2 - 2u);
+						last = &kOpcodeTable[in.opcode];
+						a_known = false;
+						pc = p2;
+						continue;
+					}
+				}
+
 				// Si leemos una dirección con valor constante conocido en el bloque,
 				// se emite la suposición antes de la carga.
 				if ((in.opcode == 0xA5u || in.opcode == 0xADu) && has_operand(in)) {
@@ -1737,6 +2109,11 @@ private:
 					}
 				}
 
+				// Liveness de Z/N: si la instrucción las escribe y se reescriben antes
+				// de leerse, se suprimen las escrituras (menos accesos al estado).
+				// Solo con el perfil Amiga encadenado (`--chain`); sin él se mantiene
+				// el comportamiento exacto anterior (host/tests).
+				cur_nz_live_ = !(chain_ && nz_dead_after(start, pc));
 				emit_one_instruction(out, in, start);
 
 				// Actualiza el mapa: LDA #imm guarda el valor; STA zp/abs lo fija.
@@ -1781,7 +2158,12 @@ private:
 							    sv_equal(last->mnemonic, "BRK");
 				const eng::u16 next = static_cast<eng::u16>(last_addr + last->size);
 				if (!no_fallthrough && next < kSpace && has_instr_[next] != 0u) {
-					if (next == start) {
+					if (chain_ && !prg_banked_ && is_block(next)) {
+						// Encadenado: caída directa al bloque siguiente (llamada en cola).
+						out.append("    return ");
+						append_block_name(out, bank, next);
+						out.append("(cpu);\n");
+					} else if (next == start) {
 						out.append("    goto ");
 						append_label_ref(out, next);
 						out.append(";\n");
@@ -1960,6 +2342,10 @@ private:
 		out.append("    for (;;) {\n");
 		out.append("        BlockFn fn = n2a_fixed_block(cpu.PC);\n");
 		out.append("        if (fn == nullptr) { return; }\n");
+		// Encadenado: el bloque puede ceder (`yield`) para que el runtime resuelva
+		// eventos (NMI/PPU). Se limpia antes de cada despacho; `PC` ya apunta a donde
+		// continuar (el propio bloque de espera re-evaluado, o el retorno de subrutina).
+		out.append("        cpu.yield = false;\n");
 		out.append("        fn(cpu);\n");
 		out.append("        if (cpu.halted) { return; }\n");
 		out.append("    }\n}\n\n");

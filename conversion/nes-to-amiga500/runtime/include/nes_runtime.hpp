@@ -134,11 +134,14 @@ struct NESMemory {
 			return io[addr - 0x4000u];
 		}
 		if (addr >= 0x8000u && prg != nullptr && prg_size != 0u) {
-			eng::usize idx = static_cast<eng::usize>(addr - 0x8000u);
-			if (prg_size == 0x4000u) {
-				idx &= 0x3FFFu;
-			}
-			return prg[idx % prg_size];
+			// Los tamaños de PRG de los mappers NES son **potencias de dos**
+			// (8/16/32/64 KB), así que el espejo `idx % prg_size` es una máscara.
+			// Se evita el `%` porque en 68000 genera la libcall `__umodsi3`, que
+			// no existe con `-nostdlib` (ver `m68k-gcc.md` §2).
+			const eng::usize idx =
+				static_cast<eng::usize>(addr - 0x8000u) &
+				(static_cast<eng::usize>(prg_size) - 1u);
+			return prg[idx];
 		}
 		if (addr >= 0x6000u && addr < 0x8000u) {
 			return prg_ram[addr - 0x6000u];
@@ -242,6 +245,12 @@ struct CPU {
 	eng::u32 deadline = 0xFFFFFFFFu;
 	/// Memoria asociada (observador, no propietario). La enlaza `game_main()`.
 	NESMemory* mem = nullptr;
+	/// **Cesión al runtime** desde código **encadenado**: un bloque que no puede
+	/// progresar (espera de VBlank/NMI) lo pone a `true` antes de `return`. El bucle
+	/// de ejecución, tras volver de un bloque/subrutina, comprueba `yield`, resuelve
+	/// los eventos (NMI/PPU) y re-despacha en `PC`. Se coloca **al final** del struct
+	/// para no alterar los offsets que usa el asm de `n2a_*_run`/`read`/`mem`.
+	bool yield = false;
 
 	/// Actualiza `Z` (resultado nulo) y `N` (bit 7) a partir de `v`.
 	/// Lo usan todas las operaciones que cargan o transforman A, X o Y.
@@ -597,5 +606,114 @@ struct CPU {
 	N2A_RMW(RRA, RRA_impl)
 #undef N2A_RMW
 };
+
+// --- Desplazamiento multibyte (PRNG/rotaciones en cadena) --------------------
+//
+// La NES usa mucho `ROR $a; ROR $a+1; ...` como registro de desplazamiento/PRNG (en Donkey Kong
+// es el **38 % de las instrucciones**). Expresado instrucción a instrucción, cada `ROR` toca
+// memoria y materializa `C/Z/N`, y sale carísimo. Estas rutinas hacen el desplazamiento completo
+// de `n` bytes con el **carry vivo en un registro** y solo materializan los flags al final.
+//
+// En 68000, el carry del 6502 se mapea al flag **X** del 68000: `ROXR.B`/`ROXL.B` son exactamente
+// el `ROR`/`ROL` del 6502 (rotación con el bit entrante = carry). Así el bucle queda en
+// ~3 instrucciones por byte (`move.b (a0)+,d0; roxr.b #1,d0; move.b d0,-1(a0)`) sin tocar flags en
+// memoria. `p` apunta a `ram[a]`; `n` es el número de bytes (en orden creciente de dirección).
+
+/// `ROR` en cadena: rota a la derecha `n` bytes como un único registro a través del carry.
+/// Equivale a `ROR p[0]; ROR p[1]; ... ROR p[n-1]` (el carry entra por el byte 0 y sale por el
+/// último). Deja `C` = bit0 del último byte original y `Z`/`N` del último resultado.
+/// \param cpu CPU cuyo flag `C` es el carry entrante/saliente (y `Z`/`N` de salida).
+/// \param p   Primer byte (en RAM emulada). No puede ser `nullptr` si `n > 0`.
+/// \param n   Número de bytes a rotar (`n >= 1`).
+inline void n2a_ror_run(CPU& cpu, eng::u8* p, eng::u16 n) {
+#if defined(__m68k__)
+	__asm__ volatile(
+	    "move.b 6(%[cpu]),%%d0\n\t"
+	    "lsl.b #4,%%d0\n\t"
+	    "move.w %%d0,%%ccr\n\t"        // X = C
+	    "moveq #0,%%d0\n\t"
+	    "subq.w #1,%[n]\n\t"
+	    "jmi 2f\n\t"
+	    "1:\n\t"
+	    "move.b (%[p])+,%%d0\n\t"
+	    "roxr.b #1,%%d0\n\t"
+	    "move.b %%d0,-1(%[p])\n\t"
+	    "dbra %[n],1b\n\t"
+	    "2:\n\t"
+	    // Capturar Z/N/X **antes** de escribir (los `move.b` a memoria fijan N/Z y
+	    // `addx` los toca). `seq`/`smi` no modifican el CCR, así que tras el bucle
+	    // conservan los flags del último byte rotado.
+	    "seq %%d1\n\t"
+	    "smi %%d2\n\t"
+	    "moveq #0,%%d3\n\t"
+	    "addx.b %%d3,%%d3\n\t"          // d3 = X (carry saliente)
+	    "move.b %%d1,7(%[cpu])\n\t"     // Z
+	    "move.b %%d2,11(%[cpu])\n\t"    // N
+	    "move.b %%d3,6(%[cpu])\n\t"     // C
+	    : [p] "+a"(p), [n] "+d"(n)
+	    : [cpu] "a"(&cpu)
+	    : "d0", "d1", "d2", "d3", "cc", "memory");
+#else
+	eng::u8 c = cpu.C ? 1u : 0u;
+	eng::u8 v = 0;
+	for (eng::u16 i = 0; i < n; ++i) {
+		const eng::u8 old = p[i];
+		v = static_cast<eng::u8>((old >> 1u) | (c << 7u));
+		c = static_cast<eng::u8>(old & 1u);
+		p[i] = v;
+	}
+	cpu.C = (c != 0u);
+	cpu.Z = (v == 0u);
+	cpu.N = (v & 0x80u) != 0u;
+#endif
+}
+
+/// `ROL` en cadena: análogo a `n2a_ror_run` pero hacia la izquierda (carry entra por el último
+/// byte y sale por el 0). `C` = bit7 del primer byte original; `Z`/`N` del último resultado.
+inline void n2a_rol_run(CPU& cpu, eng::u8* p, eng::u16 n) {
+#if defined(__m68k__)
+	__asm__ volatile(
+	    "move.b 6(%[cpu]),%%d0\n\t"
+	    "lsl.b #4,%%d0\n\t"
+	    "move.w %%d0,%%ccr\n\t"        // X = C
+	    "moveq #0,%%d0\n\t"
+	    "subq.w #1,%[n]\n\t"
+	    "jmi 2f\n\t"
+	    "1:\n\t"
+	    "move.b (%[p])+,%%d0\n\t"
+	    "roxl.b #1,%%d0\n\t"
+	    "move.b %%d0,-1(%[p])\n\t"
+	    "dbra %[n],1b\n\t"
+	    "2:\n\t"
+	    "seq %%d1\n\t"
+	    "smi %%d2\n\t"
+	    "moveq #0,%%d3\n\t"
+	    "addx.b %%d3,%%d3\n\t"          // d3 = X (carry saliente)
+	    "move.b %%d1,7(%[cpu])\n\t"     // Z
+	    "move.b %%d2,11(%[cpu])\n\t"    // N
+	    "move.b %%d3,6(%[cpu])\n\t"     // C
+	    : [p] "+a"(p), [n] "+d"(n)
+	    : [cpu] "a"(&cpu)
+	    : "d0", "d1", "d2", "d3", "cc", "memory");
+#else
+	eng::u8 c = cpu.C ? 1u : 0u;
+	eng::u8 v = 0;
+	for (eng::u16 i = 0; i < n; ++i) {
+		const eng::u8 old = p[i];
+		v = static_cast<eng::u8>(static_cast<eng::u8>(old << 1u) | c);
+		c = static_cast<eng::u8>(old >> 7u);
+		p[i] = v;
+	}
+	cpu.C = (c != 0u);
+	cpu.Z = (v == 0u);
+	cpu.N = (v & 0x80u) != 0u;
+#endif
+}
+
+// Los offsets usados por el asm (C=6, Z=7, N=11) forman parte del contrato: si se reordena el
+// struct `CPU` o se cambia el tamaño de un campo, el asm dejaría de ser correcto en silencio.
+static_assert(__builtin_offsetof(CPU, C) == 6, "n2a_*_run: offset de C cambiado");
+static_assert(__builtin_offsetof(CPU, Z) == 7, "n2a_*_run: offset de Z cambiado");
+static_assert(__builtin_offsetof(CPU, N) == 11, "n2a_*_run: offset de N cambiado");
 
 } // namespace n2a
