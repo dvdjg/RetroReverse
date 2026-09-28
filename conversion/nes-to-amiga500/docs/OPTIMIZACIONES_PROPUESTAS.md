@@ -158,6 +158,46 @@ micro-optimizaciones (`--amiga` + helpers asm) queda como la alternativa de bajo
 
 ---
 
+## 7. ¿Hasta dónde optimiza g++? (evidencia)
+
+Prueba `probe_const.cpp` (`-m68000 -O3`):
+
+| Caso | g++ 15.1.0 genera | ¿Óptimo? |
+|---|---|---|
+| `constexpr ROM[índice constante]` en aritmética | `move.b ROM+17575,%d0` (carga de `.rodata`) | **No pliega** a inmediato |
+| `constexpr ROM[índice runtime]` | `move.b (%a0,%d0.l),%d0` (indexado directo) | Bien (1 acceso) |
+| `(u16)a + (u16)b` | `add.w` | **Limpio** |
+
+**Conclusión:** g++ **no deduce la intención** del 6502; hay que **decirle** qué es:
+
+- **Constantes de ROM:** el backend **nativo ya emite literales** para direcciones absolutas de PRG
+  fija, así que ahí sí hay plegado real (mejor que dejar el `.rodata`). Las lecturas **indexadas** no
+  pueden ser literales (índice de runtime): quedan como acceso directo al array `constexpr`.
+- **Registros grandes:** g++ **no** reconoce que `CLC; LDA lo; ADC #k; STA lo; LDA hi; ADC #0; STA hi`
+  es una suma de 16 bits; emite byte a byte. Para usar `add.w/add.l` hay que **reconocer el patrón en
+  el transpilador** y emitir la operación en 16/32 bits (ver §1, candidato 4). Regla: *si el
+  transpilador expresa la operación en ancho natural, g++ la optimiza; si la expresa byte a byte,
+  la respeta byte a byte*.
+- **Pila:** el nativo usa `m->ram[0x100+sp]`; g++ no puede mapearlo a la pila del 68000. Se puede
+  hacer **solo si el análisis demuestra LIFO puro** (el juego no inspecciona/muta la página `$0100`);
+  entonces `PHA/PLA/PHP/PLP` pueden usar registros/la pila C. Si no, mantener la RAM emulada.
+
+## 8. Estado de las validaciones (ronda 3)
+
+- **(1) Nativo vs intérprete:** `tests/native_diff.cpp` (en `gen_amiga_exp.sh [5/5]`) compara RAM a N
+  frames. DK 60 frames → **`ram_diff=114/2048`**. La divergencia es de **modelo**: el stub cede un
+  VBlank por cesión (no por PPU real), así que el *interleaving* NMI↔bucle no coincide. En las ROMs
+  de prueba del transpilador el nativo **sí** da el mismo estado final que el codegen por bloques
+  (validez del codegen); la equivalencia exacta de DK exige **conectar la PPU real** al nativo.
+- **(2) Ciclos 68000:** pendiente de un **simulador de ciclos** o de compilar con `-fno-inline` para
+  atribuir el calor dinámico a las funciones de región. De momento: `.text` e instrucciones estáticas
+  (76 KB / 16 393 vs 299 KB / 77 901) y tiempo de host (nativo determinista).
+- **(4) Mappers bancados:** verificado que `--best` **cae al codegen por bloques** en MMC1 (Metroid),
+  UxROM (Contra) y MMC3 (Mega Man 3) y compila a 68000. El nativo bancado exige ventana conmutable +
+  despacho dinámico (trabajo futuro).
+
+---
+
 ## Orden recomendado
 
 1. **Runtime/kernel en asm** del bucle caliente (PRNG) — máximo retorno inmediato, riesgo contenido.
