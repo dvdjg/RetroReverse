@@ -726,6 +726,10 @@ public:
 	/// transfiere directamente y el runtime debe ceder en los puntos de evento.
 	/// \param b `true` para encadenar bloques.
 	void set_chain(bool b) noexcept { chain_ = b; }
+	/// Con `false`, **desactiva** los idioms multibyte (copia/constante/suma/resta 16 bits).
+	/// Sirve para medir su efecto (tamaño/ciclos 68000) frente al byte a byte.
+	/// \param b `true` (por defecto) para aplicar idioms.
+	void set_idioms(bool b) noexcept { idioms_ = b; }
 
 	/// Con `true`, las lecturas de la ventana fija de ROM (NROM/CNROM, `Abs`/`AbsX`/
 	/// `AbsY`) se emiten como **acceso directo a `PRG_ROM[...]`** (constexpr) en vez
@@ -886,6 +890,7 @@ private:
 	bool fast_ram_ = false;      ///< Si `true`, zero-page con acceso directo (ver `set_fast_ram`).
 	bool trace_ = false;         ///< Si `true`, emitir `N2A_TRACE` por instrucción (ver `set_trace`).
 	bool chain_ = false;         ///< Si `true`, encadenar bloques (ver `set_chain`).
+	bool idioms_ = true;         ///< Si `true`, aplicar idioms multibyte (ver `set_idioms`).
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
 	mutable const char* native_reject_ = ""; ///< Motivo del último rechazo de `native_ok()` (diagnóstico).
@@ -2106,6 +2111,11 @@ private:
 			hxo(off);
 			out.append("]");
 		};
+		const auto ld16 = [&](eng::u16 off) {
+			out.append("n2a_ld16(&n2a_ram[");
+			hxo(off);
+			out.append("])");
+		};
 		const auto finish = [&](int i) {
 			next = static_cast<eng::u16>(ir[idx[i]].addr + ir[idx[i]].size);
 		};
@@ -2162,6 +2172,49 @@ private:
 				out.append(");\n");
 				finish(3);
 				return true;
+			}
+		}
+		// Suma/resta 16 bits: `[CLC|SEC]; LDA a; ADC|SBC b0; STA c; LDA a+1; ADC|SBC b1;
+		// STA c+1`. El flag (`CLC`/`SEC`) es **obligatorio** (fija el carry inicial).
+		if (n >= 7 && (st(0).kind == IrKind::ClrC || st(0).kind == IrKind::SetC)) {
+			const bool add = (st(0).kind == IrKind::ClrC);
+			const IrKind aop = add ? IrKind::AddA : IrKind::SubA;
+			const auto is_ldA_mem = [&](int i) {
+				return ir_is_load(st(i).kind) && ir_reg(st(i).kind) == 0 && st(i).is_mem;
+			};
+			if (is_ldA_mem(1) && st(2).kind == aop && st(3).kind == IrKind::StoreA &&
+			    st(3).is_mem && is_ldA_mem(4) && st(5).kind == aop &&
+			    st(6).kind == IrKind::StoreA && st(6).is_mem &&
+			    st(4).mem == static_cast<eng::u16>(st(1).mem + 1u) &&
+			    st(6).mem == static_cast<eng::u16>(st(3).mem + 1u)) {
+				const IrStep& o0 = st(2);
+				const IrStep& o1 = st(5);
+				const bool imm = o0.is_imm && o1.is_imm;
+				const bool rmem =
+					o0.is_mem && o1.is_mem && o1.mem == static_cast<eng::u16>(o0.mem + 1u);
+				if (imm || rmem) {
+					out.append("    { const eng::u16 n2a_x = ");
+					ld16(st(1).mem);
+					out.append("; const eng::u16 n2a_y = ");
+					if (imm) {
+						hxo(static_cast<eng::u16>(o0.imm) |
+						    (static_cast<eng::u16>(o1.imm) << 8u));
+					} else {
+						ld16(o0.mem);
+					}
+					out.append("; const eng::u8 n2a_ah = static_cast<eng::u8>(n2a_x >> 8u), n2a_bh = static_cast<eng::u8>(n2a_y >> 8u);");
+					if (add) {
+						out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) + n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&");
+						ram(st(3).mem);
+						out.append(", n2a_r); cpu.C = (n2a_s > 0xFFFFu); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_bh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
+					} else {
+						out.append(" const eng::u32 n2a_s = static_cast<eng::u32>(n2a_x) - n2a_y; const eng::u16 n2a_r = static_cast<eng::u16>(n2a_s); n2a_st16(&");
+						ram(st(3).mem);
+						out.append(", n2a_r); cpu.C = (n2a_x >= n2a_y); const eng::u8 n2a_h = static_cast<eng::u8>(n2a_r >> 8u), n2a_nbh = static_cast<eng::u8>(~n2a_bh); cpu.V = (((n2a_ah ^ n2a_h) & (n2a_nbh ^ n2a_h) & 0x80u) != 0u); cpu.A = n2a_h; cpu.Z = (n2a_h == 0u); cpu.N = ((n2a_h & 0x80u) != 0u); }\n");
+					}
+					finish(6);
+					return true;
+				}
 			}
 		}
 		return false;
@@ -2841,7 +2894,7 @@ private:
 				// el comportamiento exacto anterior (host/tests).
 				cur_nz_live_ = !(chain_ && nz_dead_after(start, pc));
 				// Idioms multibyte (copia/const/compare/ADD/SUB 16 bits).
-				if (chain_ && fast_ram_ && no_cycles_) {
+				if (chain_ && fast_ram_ && no_cycles_ && idioms_) {
 					eng::u16 nmp = pc;
 					if (try_chain_multibyte(out, pc, nmp)) {
 						pc = nmp;

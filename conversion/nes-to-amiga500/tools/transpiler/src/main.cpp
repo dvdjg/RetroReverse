@@ -434,7 +434,8 @@ bool extract_7z(const char* sevenzip, const std::string& archive, const std::str
 constexpr int kCodegenVersion = 2;
 
 /// Opciones de codegen fijadas por los flags (ver `main`).
-bool g_no_cycles = false;
+	bool g_no_cycles = false;
+bool g_no_idioms = false; ///< `--no-idioms` (medir el efecto de los idioms multibyte).
 bool g_fast_ram = false;
 bool g_trace = false;
 bool g_chain = false;
@@ -560,6 +561,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_fast_ram(g_fast_ram);
 	tp.set_trace(g_trace);
 	tp.set_chain(g_chain);
+	tp.set_idioms(!g_no_idioms);
 	tp.set_rom_direct(g_rom_direct);
 	tp.set_native(g_native);
 	tp.set_best(g_best);
@@ -962,6 +964,10 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--no-cycles") {
 			g_no_cycles = true;
+			continue;
+		}
+		if (arg == "--no-idioms") { // desactivar idioms multibyte (medición)
+			g_no_idioms = true;
 			continue;
 		}
 		if (arg == "--fast-ram") {
