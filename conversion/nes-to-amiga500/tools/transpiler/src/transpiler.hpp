@@ -3646,17 +3646,37 @@ private:
 		out.append("static u8 A = 0, X = 0, Y = 0, SP = 0xFD;\n");
 		out.append("static bool Cf=false, Zf=false, Nf=false, Vf=false, Df=false, If=false;\n");
 		out.append("static bool halted = false;\n");
-		out.append("// --- HAL (hardware). Host: hooks. Amiga: Blitter/Copper/Paula (ver HAL). ---\n");
+		// HAL: **modelo fiel del PPU del lado CPU** (registros y VRAM). El render
+		// (Blitter/Copper) es otra capa; para la *lógica* basta con estos registros y
+		// `$2002` (VBlank/sprite-0/overflow con *clear-on-read*), OAM y DMA de OAM.
+		out.append("// --- HAL: PPU ($2000-$2007, $2002, $4014) + hooks ---\n");
+		out.append("static u8 ppu_ctrl=0, ppu_mask=0, ppu_status=0, ppu_oam_addr=0, ppu_latch=0;\n");
+		out.append("static u16 ppu_scroll=0, ppu_addr=0;\n");
+		out.append("static u8 vram[0x1000]; static u8 palette[0x20]; static u8 oam[0x100];\n");
 		out.append("static u8 (*hal_ppu_read_hook)(u16) = 0;\n");
 		out.append("static void (*hal_vblank_hook)(void) = 0;\n");
-		out.append("static u8 hal_ppu_read(u16 a) { return hal_ppu_read_hook ? hal_ppu_read_hook(a) : 0; }\n");
-		out.append("static void hal_ppu_write(u16, u8) {}\n");
+		out.append("static u8 hal_ppu_read(u16 a) {\n");
+		out.append("    if (hal_ppu_read_hook != 0) { return hal_ppu_read_hook(a); }\n");
+		out.append("    if ((a & 7u) == 2u) { const u8 r = ppu_status; ppu_status = (u8)(ppu_status & 0x7Fu); ppu_latch = 0; return r; }\n");
+		out.append("    return 0;\n}\n");
+		out.append("static void hal_ppu_write(u16 a, u8 v) {\n");
+		out.append("    switch (a) {\n");
+		out.append("    case 0x2000u: ppu_ctrl = v; break;\n");
+		out.append("    case 0x2001u: ppu_mask = v; break;\n");
+		out.append("    case 0x2003u: ppu_oam_addr = v; break;\n");
+		out.append("    case 0x2004u: oam[ppu_oam_addr++] = v; break;\n");
+		out.append("    case 0x2005u: if (ppu_latch == 0) { ppu_scroll = v; } else { ppu_scroll = (u16)((v << 8) | (ppu_scroll & 0xFFu)); } ppu_latch ^= 1u; break;\n");
+		out.append("    case 0x2006u: if (ppu_latch == 0) { ppu_addr = (u16)(v << 8); } else { ppu_addr = (u16)((ppu_addr & 0xFF00u) | v); } ppu_latch ^= 1u; break;\n");
+		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x < 0x3F00u) { vram[x & 0xFFFu] = v; } else { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
+		out.append("    case 0x4014u: { const u8* s = ram + ((u16)v << 8); for (int i = 0; i < 256; ++i) { oam[i] = s[i]; } } break;\n");
+		out.append("    default: break;\n    }\n}\n");
+		out.append("static void hal_vblank(void) { ppu_status = (u8)(ppu_status | 0x80u); }\n");
 		out.append("static void f_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(void); /* handler NMI */\n");
-		// El **evento de VBlank** ejecuta el NMI (el bucle del juego espera a que el NMI
-		// cambie flags); luego el hook (host: contar frames / Amiga: Copper/IRQ).
-		out.append("static void hal_wait_vblank(void) { f_");
+		// El **evento de VBlank** levanta el flag y ejecuta el NMI (el bucle del juego
+		// espera a que el NMI cambie flags); luego el hook (host: contar frames).
+		out.append("static void hal_wait_vblank(void) { hal_vblank(); f_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(); if (hal_vblank_hook) { hal_vblank_hook(); } }\n");
 		// **Modelo de timing del port**: un contador de **ciclos emulados** dispara el
@@ -3665,7 +3685,7 @@ private:
 		// frame en el NMI, sin emular el despacho de la CPU.
 		out.append("static u32 g_cyc = 0, g_frame_deadline = 29780u;\n");
 		out.append("static void (*hal_frame_hook)(void) = 0;\n");
-		out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { g_frame_deadline += 29780u; if (hal_frame_hook) { hal_frame_hook(); } f_");
+		out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } f_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(); } }\n");
 		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
