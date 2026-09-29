@@ -168,6 +168,59 @@ public:
 		return parse_header() && extract_prg();
 	}
 
+	/// Escanea la PRG en busca del idioma de **tabla de salto** y añade sus destinos
+	/// como puntos de entrada al desensamblado: cobertura de CFG **determinista**, sin
+	/// depender de una traza. Patrón (13 bytes):
+	///
+	///   `LDA tbl,X` (`$BD lo hi`) ; `STA zp p` (`$85 p`) ; `LDA tbl+1,X` (`$BD lo+1 hi`) ;
+	///   `STA zp p+1` (`$85 p+1`) ; `JMP (zp p)` (`$6C p 00`)
+	///
+	/// Enumera los destinos `tbl[k] | (tbl[1+k] << 8)` mientras caigan en la PRG
+	/// (`$8000-$FFFF`), hasta 256. No basta para toda la PRG (el despacho por puntero en
+	/// RAM es más común), pero complementa a `--pc-trace` sin necesitar ejecución.
+	/// \return Nº de tablas encontradas.
+	eng::u32 scan_static_jump_tables() {
+		if (prg_.size() < 13u || prg_size_ < 13u) {
+			return 0u;
+		}
+		const eng::u32 n = prg_size_;
+		eng::u32 found = 0u;
+		for (eng::u32 i = 0u; i + 13u <= n; ++i) {
+			if (prg_[i] != 0xBDu || prg_[i + 3u] != 0x85u || prg_[i + 5u] != 0xBDu ||
+			    prg_[i + 8u] != 0x85u || prg_[i + 10u] != 0x6Cu) {
+				continue;
+			}
+			const eng::u8 lo = prg_[i + 1u];
+			const eng::u8 hi = prg_[i + 2u];
+			const eng::u8 zp = prg_[i + 4u];
+			if (prg_[i + 6u] != static_cast<eng::u8>(lo + 1u) || prg_[i + 7u] != hi ||
+			    prg_[i + 9u] != static_cast<eng::u8>(zp + 1u) || prg_[i + 11u] != zp ||
+			    prg_[i + 12u] != 0x00u) {
+				continue;
+			}
+			const eng::u16 tbl = static_cast<eng::u16>(lo | (static_cast<eng::u16>(hi) << 8u));
+			if (tbl < 0x8000u) {
+				continue;
+			}
+			// Sitio del `JMP ($zp)` → dirección CPU (`PRG` se mapea en `$8000`).
+			const eng::u16 site = static_cast<eng::u16>(0x8000u + i + 10u);
+			const eng::u32 base = static_cast<eng::u32>(tbl - 0x8000u);
+			for (eng::u32 k = 0u; k < 256u && base + 1u + k < n; ++k) {
+				const eng::u16 tgt = static_cast<eng::u16>(
+					prg_[base + k] | (static_cast<eng::u16>(prg_[base + 1u + k]) << 8u));
+				if (tgt < 0x8000u) {
+					break;
+				}
+				add_entry_point(tgt);
+				// Registra también el destino como observado para ese sitio, de modo que
+				// el backend **nativo** pueda despachar el `JMP (ind)` **sin traza**.
+				add_ind_target(site, tgt);
+			}
+			++found;
+		}
+		return found;
+	}
+
 	/// Desensambla de forma recursiva todas las instrucciones alcanzables.
 	///
 	/// Usa una pila de trabajo (`worklist_`) con los puntos de entrada: el vector
@@ -183,6 +236,10 @@ public:
 		}
 		if (irq_ >= 0x8000u) {
 			push_work(irq_);
+		}
+		// Cobertura **determinista** de saltos por tabla estática (sin traza).
+		if (!prg_banked_) {
+			(void)scan_static_jump_tables();
 		}
 		// Entradas extra de telemetría (PC ejecutados): completan el CFG en saltos
 		// indirectos. No aplican a PRG bancada (la ventana conmutable se analiza aparte).
@@ -721,6 +778,7 @@ public:
 			if (instr_[a].opcode == 0x6Cu) {
 				if (ind_targets_count(static_cast<eng::u16>(a)) == 0u) {
 					native_reject_ = "JMP (ind) sin destinos (--ind-targets)";
+					native_reject_addr_ = static_cast<eng::u16>(a);
 					return false; // sin objetivos conocidos: fallback al por bloques
 				}
 				continue;
