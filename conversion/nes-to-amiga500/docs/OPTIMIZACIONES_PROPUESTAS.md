@@ -371,6 +371,25 @@ la salida del transpilador.
 
 ---
 
+## Presupuesto de tamaño en A500 (paso 2 — medido)
+
+El A500 base tiene **512 KB de Chip RAM** (+512 KB *slow* opcionales). El ejecutable incluye
+runtime + `.text` generado + CHR + arte/HLE, así que el `.text` debe caber con holgura. Medido en
+**68000** (`-O3`, `m68k-amiga-elf`, ROMs reales):
+
+- SMB `--amiga` **sin** traza: `.text` **94 466 B** / 17 060 instr (pero la mayor parte cae al
+  intérprete → lento).
+- SMB `--amiga` **con** traza (`--pc-trace`, 300 frames + entrada): `.text` **497 874 B** / 126 351
+  instr (**5,3×**) → probablemente **no cabe** con runtime/CHR/arte.
+- Los **idioms 16 bits** apenas cambian el tamaño (**Δ 0,06 %**) → no merecen esfuerzo por tamaño.
+
+**Decisión:** la cobertura es un **intercambio tamaño ↔ velocidad** (menos *fallback* al intérprete).
+Para A500 hay que elegir **cobertura parcial** (traza corta / solo tablas estáticas) que quepa, no
+toda. Conviene un **gate de tamaño** en CI: compilar el generado a 68000 y **fallar** si `.text`
+supera un presupuesto (p. ej. **≤ 300 KB** por juego), reportando además el % de *fallback*.
+
+---
+
 ## Orden recomendado
 
 1. **Runtime/kernel en asm** del bucle caliente (PRNG) — máximo retorno inmediato, riesgo contenido.

@@ -12,6 +12,7 @@ AMIGA_CPP="${AMIGA_CPP:-$ROOT/../../../../../../Amiga-Cpp}"
 ENG_INC="$AMIGA_CPP/engine/include"
 CXX="${CXX:-g++}"
 MAX_BSS="${MAX_BSS:-16384}"                          # 16 KB: holgado para el estado normal
+MAX_TEXT="${MAX_TEXT:-8192}"                         # 8 KB: gate anti-explosión del ROM mini (host)
 
 cd "$ROOT" || exit 1
 make -s || exit 1
@@ -37,6 +38,15 @@ BSS="$(size -A "$TMP/mini.o" | awk '$1==".bss"{print $2}')"
 BSS="${BSS:-0}"
 if [ "$BSS" -gt "$MAX_BSS" ]; then
 	echo "FALLA: .bss=${BSS} > ${MAX_BSS} B" >&2
+	exit 1
+fi
+
+# 2b) `.text` del ROM mini por debajo del umbral (gate anti-explosión de codigo; el
+# presupuesto real de un juego se mide en 68000, ver OPTIMIZACIONES_PROPUESTAS.md).
+TEXT="$(size -A "$TMP/mini.o" | awk '$1==".text"{print $2}')"
+TEXT="${TEXT:-0}"
+if [ "$TEXT" -gt "$MAX_TEXT" ]; then
+	echo "FALLA: mini .text=${TEXT} > ${MAX_TEXT} B" >&2
 	exit 1
 fi
 
