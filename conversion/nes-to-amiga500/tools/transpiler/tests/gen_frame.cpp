@@ -26,6 +26,7 @@
 namespace {
 
 n2a::LoadedRom g_rom;
+unsigned long g_fallbacks = 0; ///< PCs ejecutados **sin** bloque estático (van al fallback).
 n2a::FastCpu g_fast; ///< Motor rápido para el fallback (RAM y saltos calculados).
 
 /// Hook de bloque generado: ejecuta el `bb_*` de `cpu.PC` y devuelve los ciclos
@@ -59,6 +60,7 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* 
 		fn = n2a_fixed_block(pc);
 	}
 	if (fn == nullptr) {
+		++g_fallbacks;
 		// Sin bloque estático: en bancadas el **intérprete** (mapper-aware) es la
 		// referencia correcta; en NROM/CNROM vale el ejecutor rápido.
 		if (kPrgBanked || force_fixed) {
@@ -142,6 +144,7 @@ int main(int argc, char** argv) {
 	const int fb_total = n2a::NesSystem::kScreenW * n2a::NesSystem::kScreenH;
 
 	std::printf("frames      : %d\n", frames);
+	std::printf("fallbacks   : %lu (PCs sin bloque estatico)\n", g_fallbacks);
 	std::printf("interprete  : %.1f fps\n", frames / (ms_ref / 1000.0));
 	std::printf("codegen     : %.1f fps  (%.2fx)\n", frames / (ms_gen / 1000.0), ms_ref / ms_gen);
 	std::printf("ciclos      : interprete=%u codegen=%u (dif=%d)\n", ref.interp.cycles, gen.cpu.cycles,
