@@ -3500,7 +3500,9 @@ private:
 			const eng::u16 b = stack[si];
 			out.append("L_");
 			out.append_hex(b, 4u, true);
-			out.append(":\n");
+			out.append(": g_label = 0x");
+			out.append_hex(b, 4u, true);
+			out.append("u;\n");
 			eng::u16 p = b;
 			const Instruction* term = nullptr;
 			for (;;) {
@@ -3529,11 +3531,17 @@ private:
 				const char* m = kOpcodeTable[term->opcode].mnemonic;
 				const AddrMode md = kOpcodeTable[term->opcode].mode;
 				if (md == AddrMode::Rel) {
-					out.append("    if (");
-					out.append(cond(m));
-					out.append(") goto L_");
-					out.append_hex(term->target, 4u, true);
-					out.append(";\n");
+					// Sondeo de VBlank (`LDA $2002; BPL`) → **evento** del HAL: el
+					// port no emula la PPU, espera al VBlank del Amiga.
+					if (native_vblank_wait(*term)) {
+						out.append("    hal_wait_vblank();\n");
+					} else {
+						out.append("    if (");
+						out.append(cond(m));
+						out.append(") goto L_");
+						out.append_hex(term->target, 4u, true);
+						out.append(";\n");
+					}
 					if (native_vis_[next] != 0u) {
 						out.append("    goto L_");
 						out.append_hex(next, 4u, true);
@@ -3586,10 +3594,24 @@ private:
 		out.append("static u8 A = 0, X = 0, Y = 0, SP = 0xFD;\n");
 		out.append("static bool Cf=false, Zf=false, Nf=false, Vf=false, Df=false, If=false;\n");
 		out.append("static bool halted = false;\n");
-		out.append("// --- HAL (hardware). Host: no-op. Amiga: Blitter/Copper/Paula (ver HAL). ---\n");
-		out.append("static u8 hal_ppu_read(u16) { return 0; }\n");
+		out.append("// --- HAL (hardware). Host: hooks. Amiga: Blitter/Copper/Paula (ver HAL). ---\n");
+		out.append("static u8 (*hal_ppu_read_hook)(u16) = 0;\n");
+		out.append("static void (*hal_vblank_hook)(void) = 0;\n");
+		out.append("static u8 hal_ppu_read(u16 a) { return hal_ppu_read_hook ? hal_ppu_read_hook(a) : 0; }\n");
 		out.append("static void hal_ppu_write(u16, u8) {}\n");
+		out.append("static void f_");
+		out.append_hex(nmi_, 4u, true);
+		out.append("(void); /* handler NMI */\n");
+		// El **evento de VBlank** ejecuta el NMI (el bucle del juego espera a que el NMI
+		// cambie flags); luego el hook (host: contar frames / Amiga: Copper/IRQ).
+		out.append("static void hal_wait_vblank(void) { f_");
+		out.append_hex(nmi_, 4u, true);
+		out.append("(); if (hal_vblank_hook) { hal_vblank_hook(); } }\n");
+		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
+		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
+		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");
 		out.append("static u8 rd(u16 a) {\n");
+		out.append("    if (g_step_limit != 0 && ++g_steps > g_step_limit) { if (hal_limit_hook) { hal_limit_hook(); } }\n");
 		out.append("    if (a < 0x2000u) { return ram[a & 0x7FFu]; }\n");
 		out.append("    if (a >= 0x8000u) { return PRG_ROM[(a - 0x8000u) & (kPrgSize - 1u)]; }\n");
 		out.append("    return hal_ppu_read(a);\n}\n");
