@@ -129,6 +129,9 @@ int main(int argc, char** argv) {
 	init_dispatch_table();
 	gen.fast_run = &gen_run;
 	gen.fast_ticks = true; // el codegen reloja la PPU por acceso
+	// HLE de VBlank: `gen.event_yield = true` (opt-in). En el host es neutro (la PPU
+	// emulada es barata y el VBlank ya se alcanza con los ciclos de bloque); en Amiga
+	// evita el trabajo de la PPU por dot. Desactivado por defecto para no desviar tests.
 	const double ms_gen = run_frames(gen, frames);
 
 	int ram_diff = 0;

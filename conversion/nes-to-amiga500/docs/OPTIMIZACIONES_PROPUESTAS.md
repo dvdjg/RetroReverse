@@ -403,6 +403,18 @@ de página/rama), que desaparece con **HLE de VBlank** (el VBlank lo marca el Am
 emulada). Es el cambio con más impacto de los probados: hace **usable** el codegen rápido con
 temporización correcta.
 
+## HLE de VBlank (`event_yield`) — implementado (opt-in), neutro en host
+
+Al ceder el codegen esperando VBlank, `Ppu::skip_to_vblank()` **salta** la PPU al inicio del VBlank
+(línea 241) en vez de emular el resto del frame dot a dot; el runtime resuelve el NMI. Se activa con
+`NesSystem::event_yield` (opt-in; en Amiga tiene sentido porque el VBlank lo marca el hardware).
+**Medido en host**: **neutro** — la RAM diverge igual (287/2048 a 60 frames) y los fps no mejoran
+(10,8 vs 13,0): el VBlank **ya se alcanzaba** con los ciclos de bloque, y la PPU emulada es barata
+en x86. **Conclusión**: en este modelo el HLE de VBlank no aporta; el coste real en Amiga está en
+el **render** (PPU software) → el HLE que rinde es el de **render (Blitter/Copper)**, no el de
+VBlank. La deriva de RAM es **precisión de ciclos** de `n2a_block_cycles` (sin penalización de
+página/rama), no el VBlank.
+
 ---
 
 ## Orden recomendado

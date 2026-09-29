@@ -333,6 +333,25 @@ struct Ppu {
 		}
 	}
 
+	/// Salta directamente al **inicio del VBlank** (línea 241, dot 0), levantando el
+	/// flag de VBlank (y `nmi_occurred` si `ctrl` lo habilita). Es la base del **HLE de
+	/// VBlank**: el código generado ya **cedió** esperando el VBlank (`cpu.yield`), así
+	/// que el runtime **no** necesita emular dot a dot el resto del frame hasta la 241;
+	/// basta con saltar al evento. No emula el render intermedio (HLE). Si ya se está en
+	/// VBlank/post-render (>= 241), se mantiene (el siguiente VBlank es el del frame
+	/// siguiente, que el bucle de espera volverá a pedir).
+	void skip_to_vblank() {
+		if (scanline >= 241u) {
+			return; // ya en VBlank / post-render de este frame
+		}
+		scanline = 241u;
+		dot = 0u;
+		if (!vblank_suppress) {
+			status = static_cast<eng::u8>(status | 0x80u);
+			nmi_occurred = (ctrl & 0x80u) != 0u;
+		}
+	}
+
 	/// Dots de una línea según la paridad NTSC (la pre-render 261 pierde 1 dot en
 	/// frames impares). Mismo criterio que `tick_dot`.
 	[[nodiscard]] eng::u16 wrap_dots(eng::u16 line) const {

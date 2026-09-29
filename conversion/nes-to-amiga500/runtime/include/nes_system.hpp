@@ -57,6 +57,12 @@ struct NesSystem {
 	/// El ejecutor rápido **ya reloja la PPU por acceso** (`cpu.mem->tick`, código
 	/// transpilado): el host no re-reloja el bloque. `FastCpu` lo deja a `false`.
 	bool fast_ticks = false;
+	/// Con `true`, **HLE de VBlank**: al ceder el codegen en un bucle de espera de
+	/// VBlank (`cpu.yield`), el runtime **salta** la PPU al inicio del VBlank
+	/// (`Ppu::skip_to_vblank`) en vez de emular el resto del frame dot a dot. El
+	/// VBlank lo marca el evento (en Amiga, el VBlank real), no la PPU emulada: así la
+	/// temporización del bucle de espera es exacta y **sin coste** por dot.
+	bool event_yield = false;
 	/// Hook opcional: se llama cuando el mapper **conmuta bancos de PRG** (escritura a
 	/// `$8000-$FFFF`) para que el ejecutor rápido **invalide su decodificación**
 	/// (`FastCpu::invalidate`) y la rehaga bajo demanda leyendo a través del mapper.
@@ -192,6 +198,15 @@ struct NesSystem {
 			// Es no-op para los motores que no emiten cesiones (intérprete/FastCpu).
 			if (cpu.yield) {
 				cpu.yield = false;
+				if (event_yield) {
+					// HLE de VBlank: saltar al evento (no emular el frame dot a dot) y
+					// resolver el NMI para que el bucle de espera continúe.
+					ppu.skip_to_vblank();
+					if (ppu.nmi_occurred) {
+						ppu.nmi_occurred = false;
+						trigger_nmi();
+					}
+				}
 			}
 			if (out_instrs != nullptr) {
 				*out_instrs = n;
