@@ -3602,9 +3602,18 @@ private:
 					out.append("    tick(");
 					out.append_u32(op_base_cycles(term->opcode));
 					out.append("u);\n");
+					// **Pila emulada**: se apila la dirección de retorno (addr+2, como el
+					// 6502) para que `SP`, `PHA/PLA/PHP/PLP` y la RAM de pila coincidan
+					// con el original. El control va por llamada C `f_target()`.
+					const eng::u16 ret = static_cast<eng::u16>(term->addr + 2u);
+					out.append("    wr(0x100u + SP, 0x");
+					out.append_hex(static_cast<eng::u16>((ret >> 8u) & 0xFFu), 2u, true);
+					out.append("u); --SP;\n    wr(0x100u + SP, 0x");
+					out.append_hex(static_cast<eng::u16>(ret & 0xFFu), 2u, true);
+					out.append("u); --SP;\n");
 					out.append("    f_");
 					out.append_hex(term->target, 4u, true);
-					out.append("();\n");
+					out.append("();\n    SP = (u8)(SP + 2u);\n");
 					if (native_vis_[next] != 0u) {
 						out.append("    goto L_");
 						out.append_hex(next, 4u, true);
@@ -3674,20 +3683,18 @@ private:
 		out.append("static void f_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(void); /* handler NMI */\n");
-		// El **evento de VBlank** levanta el flag y ejecuta el NMI (el bucle del juego
-		// espera a que el NMI cambie flags); luego el hook (host: contar frames).
-		out.append("static void hal_wait_vblank(void) { hal_vblank(); f_");
-		out.append_hex(nmi_, 4u, true);
-		out.append("(); if (hal_vblank_hook) { hal_vblank_hook(); } }\n");
 		// **Modelo de timing del port**: un contador de **ciclos emulados** dispara el
-		// NMI en cada frontera de frame (29780 ciclos NTSC). Es el reloj del port (no hay
-		// reloj de pared): los juegos dirigidos por NMI (p. ej. DK) corren su lógica de
-		// frame en el NMI, sin emular el despacho de la CPU.
+		// **evento de frame** (VBlank + NMI) en cada frontera (29780 ciclos NTSC). Es el
+		// reloj del port (no hay reloj de pared).
 		out.append("static u32 g_cyc = 0, g_frame_deadline = 29780u;\n");
 		out.append("static void (*hal_frame_hook)(void) = 0;\n");
-		out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } f_");
+		out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } f_");
 		out.append_hex(nmi_, 4u, true);
-		out.append("(); } }\n");
+		out.append("(); }\n");
+		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
+		// ejecuta), en vez de disparar el NMI de inmediato.
+		out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
+		out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { frame_event(); } }\n");
 		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
 		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
 		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");
