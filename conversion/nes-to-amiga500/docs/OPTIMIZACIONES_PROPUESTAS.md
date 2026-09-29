@@ -336,6 +336,24 @@ estáticamente / intérprete de respaldo enlazado).
 > por bloques (cadena/ROM/ZP directas) + HLE. Las mejoras del paso 1 (reanudación + espera partida)
 > se mantienen: corrigen fallos reales y no rompen los tests (`run.sh`: TEST OK).
 
+> **Paso 2 — la cobertura ampliada destapó un cuelgue REAL del backend por bloques (arreglado).**
+> Al decodificar más CFG (traza `--pc-trace`/tablas), SMB incluye **bucles de espera que NO leen
+> `$2002`** (esperan un **flag** que cambia el NMI, p. ej. `LDA flag; BNE self`). El codegen
+> **encadenado** solo cedía si el bucle leía `$2002`, así que esos bucles quedaban como
+> **auto-llamada infinita sin ceder** (`bb_82A9: if (cpu.N) { return bb_82A9(cpu); }` en los que no
+> escriben; y en los que copian/calculan, aunque acotados, conviene saberlo). Arreglado con
+> `chain_wait`: cede en **cualquier rama de bucle hacia atrás** cuya **cabecera lee memoria sin
+> escribirla** (`block_waits_on_flag`: modos `Zp`/`Abs`, excluye escrituras y `JSR`), además del
+> caso `$2002`. **Medido** con `gen_frame` (SMB + traza): antes **se colgaba**; ahora completa y a
+> **1 frame la RAM es idéntica** (0/2048 diff); a 10/60 frames deriva por el **desajuste de timing
+> del arnés** (`--amiga` es `--no-cycles`, y `gen_frame` avanza la PPU por ciclos → 1 dot/bloque),
+> no por el codegen. `run.sh`: TEST OK.
+
+> **Límite del arnés de medida (paso 1 pendiente).** Medir **fps** de `--amiga` con `gen_frame` no
+> es válido: sin ciclos, el runner avanza 1 dot por bloque. Hace falta un runner **dirigido por
+> eventos** (avanzar la PPU al próximo evento al ceder) — el modelo que ya usa el runtime del
+> plugin/host (`TranspiledGame` + `NesSystem`), no el harness simplificado.
+
 ---
 
 ## Orden recomendado

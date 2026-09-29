@@ -1314,6 +1314,64 @@ private:
 		return t < kSpace && t <= term.addr && block_reads_ppu_status(t);
 	}
 
+	/// \return `true` si el mnemónico **escribe memoria** (store o RMW), para distinguir
+	/// bucles de **espera** (leen un flag y no lo escriben) de bucles de **cálculo**.
+	[[nodiscard]] static bool mnemonic_writes_mem(const char* m) noexcept {
+		return sv_equal(m, "STA") || sv_equal(m, "STX") || sv_equal(m, "STY") ||
+		       sv_equal(m, "SAX") || sv_equal(m, "INC") || sv_equal(m, "DEC") ||
+		       sv_equal(m, "ASL") || sv_equal(m, "LSR") || sv_equal(m, "ROL") ||
+		       sv_equal(m, "ROR") || sv_equal(m, "ISB") || sv_equal(m, "DCP") ||
+		       sv_equal(m, "SLO") || sv_equal(m, "RLA") || sv_equal(m, "SRE") ||
+		       sv_equal(m, "RRA");
+	}
+
+	/// \return `true` si el bloque `start` **lee memoria de datos** (algún operando de
+	/// modo memoria) y **no escribe** ninguna: patrón de **espera por flag**
+	/// (`LDA flag; BNE ...`), que debe **ceder** al runtime aunque no lea `$2002`
+	/// (el flag lo cambia el NMI). Un bucle de cálculo (`DEC zp; BNE`) escribe memoria
+	/// → no es espera. `JSR` puede escribir → no se considera espera.
+	[[nodiscard]] bool block_waits_on_flag(eng::u16 start) const noexcept {
+		eng::u16 pc = start;
+		bool reads = false;
+		for (;;) {
+			if (has_instr_[pc] == 0u || (pc != start && leaders_[pc] != 0u)) {
+				break;
+			}
+			const Instruction& in = instr_[pc];
+			const OpcodeInfo& info = kOpcodeTable[in.opcode];
+			const AddrMode md = info.mode;
+			if (sv_equal(info.mnemonic, "JSR")) {
+				return false;
+			}
+			const bool mem = md != AddrMode::Imm && md != AddrMode::Imp &&
+					 md != AddrMode::Rel;
+			if (mem) {
+				if (mnemonic_writes_mem(info.mnemonic)) {
+					return false;
+				}
+				reads = true;
+			}
+			pc = static_cast<eng::u16>(pc + info.size);
+			if (md == AddrMode::Rel || sv_equal(info.mnemonic, "JMP") ||
+			    sv_equal(info.mnemonic, "JSR") || sv_equal(info.mnemonic, "RTS") ||
+			    sv_equal(info.mnemonic, "RTI") || sv_equal(info.mnemonic, "BRK")) {
+				break;
+			}
+		}
+		return reads;
+	}
+
+	/// \return `true` si `term` es la rama de un **bucle de espera** (lee `$2002` o un
+	/// flag en memoria) que hay que **ceder** al runtime para no encadenarse sin fin.
+	/// Cubre el bucle en un solo bloque y el partido en dos (la cabecera es `term.target`).
+	[[nodiscard]] bool chain_wait(const Instruction& term, eng::u16 block_start) const noexcept {
+		if (kOpcodeTable[term.opcode].mode != AddrMode::Rel || term.target > term.addr) {
+			return false; // no es rama de bucle
+		}
+		const eng::u16 hdr = (term.target == block_start) ? block_start : term.target;
+		return block_reads_ppu_status(hdr) || block_waits_on_flag(hdr);
+	}
+
 	/// \return `true` si el mnemónico escribe `Z`/`N` (carga/ALU/comparación/inc-dec/
 	/// desplazamiento/transferencia/PLA/BIT/PLP/RTI). Se usa para el **liveness** local
 	/// que suprime escrituras muertas de flags.
@@ -1937,13 +1995,13 @@ private:
 					out.append(" cpu.cycles += 1u; cpu.mem->tick(1);");
 				}
 			}
-			if (chain_ && !prg_banked_ && in.target == block_start &&
-			    block_reads_ppu_status(block_start)) {
-				// Bucle de espera de VBlank/sprite-0: cede al runtime en vez de
-				// encadenarse consigo mismo (el runtime avanza el PPU/NMI y
-				// re-despacha en `PC`).
+			if (chain_ && !prg_banked_ && chain_wait(in, block_start)) {
+				// Bucle de espera (`$2002` o un **flag** que cambia el NMI): cede al
+				// runtime en vez de encadenarse consigo mismo sin fin (el runtime
+				// avanza el PPU/NMI y re-despacha en `PC`). Reanuda en la **cabecera**
+				// del bucle (`in.target`), que es donde se relee el flag.
 				out.append(" cpu.yield = true; cpu.PC = 0x");
-				out.append_hex(block_start, 4u, true);
+				out.append_hex(in.target, 4u, true);
 				out.append("; return; }\n");
 			} else if (chain_ && !prg_banked_ && is_block(in.target)) {
 				// Encadenado: la rama tomada llama en cola al bloque destino.
