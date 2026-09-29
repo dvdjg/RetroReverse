@@ -442,6 +442,7 @@ bool g_chain = false;
 bool g_rom_direct = false;
 bool g_native = false;
 bool g_best = false;
+bool g_decompile = false; ///< `--decompile`: emitir el port decompilado (C plano + HAL).
 const char* g_pc_trace = nullptr; ///< Fichero de PC ejecutados (`--pc-trace`) para completar el CFG.
 const char* g_ind_targets = nullptr; ///< Fichero de destinos de `JMP (ind)` (`--ind-targets`) por sitio.
 
@@ -565,6 +566,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_rom_direct(g_rom_direct);
 	tp.set_native(g_native);
 	tp.set_best(g_best);
+	tp.set_decompile(g_decompile);
 	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
 		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
 	}
@@ -1010,6 +1012,10 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--native") { // backend estilo descompilador (regiones + literales)
 			g_native = true;
+			continue;
+		}
+		if (arg == "--decompile") { // decompilado a C plano + HAL (port nativo)
+			g_decompile = true;
 			continue;
 		}
 		if (arg == "--best") { // nativo si se puede; si no, perfil Amiga encadenado

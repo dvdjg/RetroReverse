@@ -601,6 +601,10 @@ public:
 	///
 	/// \param out Búfer de texto donde se acumula la salida (no se vacía).
 	void generate(Dyn& out) {
+		if (decompile_) {
+			emit_decompile(out);
+			return;
+		}
 		emit_header(out);
 		out.append("#include \"nes_runtime.hpp\"\n");
 		out.append("using n2a::CPU;\n");
@@ -751,6 +755,10 @@ public:
 	/// debe usar el codegen por bloques).
 	/// \param b `true` para activar el backend nativo.
 	void set_native(bool b) noexcept { native_ = b; }
+	/// Con `true`, emite el **decompilado** (port nativo en C plano + HAL) en vez del
+	/// codegen de emulación. Fase 1 del decompilador (ver `docs/DECOMPILADOR.md`).
+	/// \param b `true` para generar el decompilado.
+	void set_decompile(bool b) noexcept { decompile_ = b; }
 
 	/// Con `true`, elige automáticamente el mejor backend: el **nativo** si la ROM lo
 	/// soporta (`native_ok()`) y, si no, el codegen por bloques con el perfil Amiga
@@ -896,6 +904,7 @@ private:
 	bool idioms_ = true;         ///< Si `true`, aplicar idioms multibyte (ver `set_idioms`).
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
+	bool decompile_ = false;     ///< Si `true`, emitir el decompilado (ver `set_decompile`).
 	mutable const char* native_reject_ = ""; ///< Motivo del último rechazo de `native_ok()` (diagnóstico).
 	mutable eng::u16 native_reject_addr_ = 0; ///< Dirección asociada al rechazo (p. ej. el `JSR`).
 	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnóstico).
@@ -3191,6 +3200,439 @@ private:
 		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
 		out.append("int main() { game_main(); return 0; }\n");
 		out.append("#endif\n");
+	}
+
+	/// Emite la **dirección efectiva** de un operando de memoria como expresión C (`u16`).
+	/// \param out Salida. \param in Instrucción (modo de memoria).
+	void d_ea(Dyn& out, const Instruction& in) const {
+		const OpcodeInfo& info = kOpcodeTable[in.opcode];
+		const eng::u16 o = in.operand;
+		switch (info.mode) {
+		case AddrMode::Zp:
+			out.append("0x");
+			out.append_hex(o, 4u, true);
+			out.append("u");
+			break;
+		case AddrMode::ZpX:
+			out.append("(u16)(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u + X)");
+			break;
+		case AddrMode::ZpY:
+			out.append("(u16)(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u + Y)");
+			break;
+		case AddrMode::Abs:
+			out.append("0x");
+			out.append_hex(o, 4u, true);
+			out.append("u");
+			break;
+		case AddrMode::AbsX:
+			out.append("(u16)(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u + X)");
+			break;
+		case AddrMode::AbsY:
+			out.append("(u16)(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u + Y)");
+			break;
+		case AddrMode::IndX:
+			out.append("(u16)(rd((u8)(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u + X)) | ((u16)rd((u8)(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u + X + 1u)) << 8))");
+			break;
+		case AddrMode::IndY:
+			out.append("(u16)((rd(0x");
+			out.append_hex(o, 4u, true);
+			out.append("u) | ((u16)rd(0x");
+			out.append_hex(static_cast<eng::u16>(o + 1u), 4u, true);
+			out.append("u) << 8)) + Y)");
+			break;
+		default:
+			out.append("0u");
+			break;
+		}
+	}
+
+	/// Emite el **valor leído** de un operando (inmediato o `rd(<dirección efectiva>)`).
+	void d_val(Dyn& out, const Instruction& in) const {
+		if (kOpcodeTable[in.opcode].mode == AddrMode::Imm) {
+			out.append("0x");
+			out.append_hex(static_cast<eng::u16>(in.operand), 2u, true);
+			out.append("u");
+			return;
+		}
+		out.append("rd(");
+		d_ea(out, in);
+		out.append(")");
+	}
+
+	/// Emite el **cuerpo C** de una instrucción **no terminadora** del decompilado.
+	void emit_decompile_instruction(Dyn& out, const Instruction& in) const {
+		const OpcodeInfo& info = kOpcodeTable[in.opcode];
+		const char* m = info.mnemonic;
+		const auto wr = [&]() {
+			out.append("wr(");
+			d_ea(out, in);
+			out.append(", ");
+		};
+		const auto setnz = [&](const char* reg) {
+			out.append(" setnz(");
+			out.append(reg);
+			out.append(");");
+		};
+		out.append("    ");
+		if (sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY")) {
+			const char* reg = sv_equal(m, "LDA") ? "A" : (sv_equal(m, "LDX") ? "X" : "Y");
+			out.append(reg);
+			out.append(" = ");
+			d_val(out, in);
+			out.append(";");
+			setnz(reg);
+		} else if (sv_equal(m, "STA") || sv_equal(m, "STX") || sv_equal(m, "STY")) {
+			const char* reg = sv_equal(m, "STA") ? "A" : (sv_equal(m, "STX") ? "X" : "Y");
+			wr();
+			out.append(reg);
+			out.append(");");
+		} else if (sv_equal(m, "TAX") || sv_equal(m, "TAY") || sv_equal(m, "TXA") ||
+			   sv_equal(m, "TYA") || sv_equal(m, "TSX")) {
+			const char* dst = sv_equal(m, "TAX") ? "X"
+					 : sv_equal(m, "TAY") ? "Y"
+					 : sv_equal(m, "TXA") ? "A"
+					 : sv_equal(m, "TYA") ? "A" : "X";
+			const char* src = sv_equal(m, "TAX") ? "A"
+					 : sv_equal(m, "TAY") ? "A"
+					 : sv_equal(m, "TXA") ? "X"
+					 : sv_equal(m, "TYA") ? "Y" : "SP";
+			out.append(dst);
+			out.append(" = ");
+			out.append(src);
+			out.append(";");
+			setnz(dst);
+		} else if (sv_equal(m, "TXS")) {
+			out.append("SP = X;");
+		} else if (sv_equal(m, "PHA")) {
+			out.append("wr(0x100u + SP, A); --SP;");
+		} else if (sv_equal(m, "PLA")) {
+			out.append("++SP; A = rd(0x100u + SP);");
+			setnz("A");
+		} else if (sv_equal(m, "PHP")) {
+			out.append("wr(0x100u + SP, (u8)(0x30u | (Nf?0x80u:0u) | (Vf?0x40u:0u) | (Df?0x08u:0u) | (If?0x04u:0u) | (Zf?0x02u:0u) | (Cf?0x01u:0u))); --SP;");
+		} else if (sv_equal(m, "PLP")) {
+			out.append("{ ++SP; const u8 q = rd(0x100u + SP); Nf=(q&0x80u)!=0; Vf=(q&0x40u)!=0; Df=(q&0x08u)!=0; If=(q&0x04u)!=0; Zf=(q&0x02u)!=0; Cf=(q&0x01u)!=0; }");
+		} else if (sv_equal(m, "AND") || sv_equal(m, "ORA") || sv_equal(m, "EOR")) {
+			out.append("A = (u8)(A ");
+			out.append(sv_equal(m, "AND") ? "&" : (sv_equal(m, "ORA") ? "|" : "^"));
+			out.append(" ");
+			d_val(out, in);
+			out.append(");");
+			setnz("A");
+		} else if (sv_equal(m, "ADC")) {
+			out.append("{ const u8 v = ");
+			d_val(out, in);
+			out.append("; const u16 t = (u16)A + (u16)v + (Cf ? 1u : 0u); Cf = (t > 0xFFu); Vf = (((A ^ (u8)t) & (v ^ (u8)t) & 0x80u) != 0u); A = (u8)t;");
+			setnz("A");
+			out.append(" }");
+		} else if (sv_equal(m, "SBC")) {
+			out.append("{ const u8 v = ");
+			d_val(out, in);
+			out.append("; const u8 nv = (u8)(~v); const u16 t = (u16)A + (u16)nv + (Cf ? 1u : 0u); Cf = (t > 0xFFu); Vf = (((A ^ (u8)t) & (nv ^ (u8)t) & 0x80u) != 0u); A = (u8)t;");
+			setnz("A");
+			out.append(" }");
+		} else if (sv_equal(m, "CMP") || sv_equal(m, "CPX") || sv_equal(m, "CPY")) {
+			const char* reg = sv_equal(m, "CMP") ? "A" : (sv_equal(m, "CPX") ? "X" : "Y");
+			out.append("{ const u8 v = ");
+			d_val(out, in);
+			out.append("; const u16 t = (u16)");
+			out.append(reg);
+			out.append(" - (u16)v; Cf = (t < 0x100u); setnz((u8)t); }");
+		} else if (sv_equal(m, "BIT")) {
+			out.append("{ const u8 v = ");
+			d_val(out, in);
+			out.append("; Zf = ((A & v) == 0); Nf = ((v & 0x80u) != 0); Vf = ((v & 0x40u) != 0); }");
+		} else if (in.opcode == 0xE6u || in.opcode == 0xF6u || in.opcode == 0xEEu ||
+			   in.opcode == 0xFEu || in.opcode == 0xC6u || in.opcode == 0xD6u ||
+			   in.opcode == 0xCEu || in.opcode == 0xDEu) {
+			const bool inc = (in.opcode == 0xE6u || in.opcode == 0xF6u ||
+					  in.opcode == 0xEEu || in.opcode == 0xFEu);
+			out.append("{ u8 t = (u8)(rd(");
+			d_ea(out, in);
+			out.append(inc ? ") + 1u); wr(" : ") - 1u); wr(");
+			d_ea(out, in);
+			out.append(", t); setnz(t); }");
+		} else if (sv_equal(m, "INX") || sv_equal(m, "INY") || sv_equal(m, "DEX") ||
+			   sv_equal(m, "DEY")) {
+			const char* reg = (sv_equal(m, "INX") || sv_equal(m, "DEX")) ? "X" : "Y";
+			const bool inc = sv_equal(m, "INX") || sv_equal(m, "INY");
+			out.append(reg);
+			out.append(" = (u8)(");
+			out.append(reg);
+			out.append(inc ? " + 1u);" : " - 1u);");
+			setnz(reg);
+		} else if (sv_equal(m, "ASL") || sv_equal(m, "LSR") || sv_equal(m, "ROL") ||
+			   sv_equal(m, "ROR")) {
+			const bool acc = (in.opcode == 0x0Au || in.opcode == 0x2Au ||
+					  in.opcode == 0x4Au || in.opcode == 0x6Au);
+			out.append(acc ? "{ u8 t = A;" : "{ u8 t = rd(");
+			if (!acc) {
+				d_ea(out, in);
+				out.append(");");
+			}
+			if (sv_equal(m, "ASL")) {
+				out.append(" Cf = ((t & 0x80u) != 0); t = (u8)(t << 1);");
+			} else if (sv_equal(m, "LSR")) {
+				out.append(" Cf = ((t & 1u) != 0); t = (u8)(t >> 1);");
+			} else if (sv_equal(m, "ROL")) {
+				out.append(" { const u8 oc = Cf ? 1u : 0u; Cf = ((t & 0x80u) != 0); t = (u8)((t << 1) | oc); }");
+			} else {
+				out.append(" { const u8 oc = Cf ? 1u : 0u; Cf = ((t & 1u) != 0); t = (u8)((t >> 1) | (oc << 7)); }");
+			}
+			if (acc) {
+				out.append(" A = t;");
+			} else {
+				out.append(" wr(");
+				d_ea(out, in);
+				out.append(", t);");
+			}
+			out.append(" setnz(t); }");
+		} else if (sv_equal(m, "CLC")) {
+			out.append("Cf = false;");
+		} else if (sv_equal(m, "SEC")) {
+			out.append("Cf = true;");
+		} else if (sv_equal(m, "CLI")) {
+			out.append("If = false;");
+		} else if (sv_equal(m, "SEI")) {
+			out.append("If = true;");
+		} else if (sv_equal(m, "CLD")) {
+			out.append("Df = false;");
+		} else if (sv_equal(m, "SED")) {
+			out.append("Df = true;");
+		} else if (sv_equal(m, "CLV")) {
+			out.append("Vf = false;");
+		} else if (sv_equal(m, "NOP")) {
+			out.append("/* nop */");
+		} else {
+			out.append("/* TODO ");
+			out.append(m);
+			out.append(" */");
+		}
+		out.append('\n');
+	}
+
+	/// Emite una **región** (función C `f_XXXX`) del decompilado: BFS de bloques desde
+	/// `entry` y emisión en C plano con etiquetas/`goto` (fase 1: correcto; la
+	/// estructuración a bucles/`if` es una fase posterior, ver `docs/DECOMPILADOR.md`).
+	void emit_decompile_region(Dyn& out, eng::u16 entry) {
+		(void)native_vis_.resize(kSpace, 0u);
+		for (eng::u32 i = 0; i < kSpace; ++i) {
+			native_vis_[i] = 0u;
+		}
+		eng::util::Vector<eng::u16, eng::util::HeapAlloc> stack {};
+		const auto visit = [&](eng::u16 b) {
+			if (b < kSpace && has_instr_[b] != 0u && leaders_[b] != 0u &&
+			    native_vis_[b] == 0u) {
+				native_vis_[b] = 1u;
+				(void)stack.push_back(b);
+			}
+		};
+		const auto cond = [](const char* m) -> const char* {
+			if (sv_equal(m, "BEQ")) return "Zf";
+			if (sv_equal(m, "BNE")) return "!Zf";
+			if (sv_equal(m, "BCC")) return "!Cf";
+			if (sv_equal(m, "BCS")) return "Cf";
+			if (sv_equal(m, "BMI")) return "Nf";
+			if (sv_equal(m, "BPL")) return "!Nf";
+			if (sv_equal(m, "BVS")) return "Vf";
+			if (sv_equal(m, "BVC")) return "!Vf";
+			return "false";
+		};
+		visit(entry);
+		for (eng::usize i = 0; i < stack.size(); ++i) {
+			const eng::u16 b = stack[i];
+			eng::u16 p = b;
+			const Instruction* term = nullptr;
+			for (;;) {
+				if (has_instr_[p] == 0u || (p != b && leaders_[p] != 0u)) break;
+				term = &instr_[p];
+				const OpcodeInfo& inf = kOpcodeTable[instr_[p].opcode];
+				p = static_cast<eng::u16>(p + inf.size);
+				if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+				    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+				    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+					break;
+				}
+			}
+			const eng::u16 next = p;
+			if (term != nullptr) {
+				const char* m = kOpcodeTable[term->opcode].mnemonic;
+				if (kOpcodeTable[term->opcode].mode == AddrMode::Rel) {
+					visit(term->target);
+					visit(next);
+				} else if (sv_equal(m, "JMP")) {
+					visit(term->target);
+				} else if (sv_equal(m, "JSR")) {
+					visit(next);
+				} else if (!sv_equal(m, "RTS") && !sv_equal(m, "RTI") &&
+					   !sv_equal(m, "BRK")) {
+					visit(next);
+				}
+			} else {
+				visit(next);
+			}
+		}
+		for (eng::usize i = 1; i < stack.size(); ++i) {
+			const eng::u16 k = stack[i];
+			eng::usize j = i;
+			while (j > 0u && stack[j - 1u] > k) {
+				stack[j] = stack[j - 1u];
+				--j;
+			}
+			stack[j] = k;
+		}
+		out.append("static void f_");
+		out.append_hex(entry, 4u, true);
+		out.append("(void) {\n");
+		for (eng::usize si = 0; si < stack.size(); ++si) {
+			const eng::u16 b = stack[si];
+			out.append("L_");
+			out.append_hex(b, 4u, true);
+			out.append(":\n");
+			eng::u16 p = b;
+			const Instruction* term = nullptr;
+			for (;;) {
+				if (has_instr_[p] == 0u || (p != b && leaders_[p] != 0u)) break;
+				const Instruction& in = instr_[p];
+				const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+				term = &in;
+				p = static_cast<eng::u16>(p + inf.size);
+				if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+				    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+				    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+					break;
+				}
+			}
+			eng::u16 q = b;
+			while (q != p) {
+				const Instruction& in = instr_[q];
+				const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+				if (term == nullptr || q != term->addr) {
+					emit_decompile_instruction(out, in);
+				}
+				q = static_cast<eng::u16>(q + inf.size);
+			}
+			const eng::u16 next = p;
+			if (term != nullptr) {
+				const char* m = kOpcodeTable[term->opcode].mnemonic;
+				const AddrMode md = kOpcodeTable[term->opcode].mode;
+				if (md == AddrMode::Rel) {
+					out.append("    if (");
+					out.append(cond(m));
+					out.append(") goto L_");
+					out.append_hex(term->target, 4u, true);
+					out.append(";\n");
+					if (native_vis_[next] != 0u) {
+						out.append("    goto L_");
+						out.append_hex(next, 4u, true);
+						out.append(";\n");
+					}
+				} else if (sv_equal(m, "JMP")) {
+					if (native_vis_[term->target] != 0u) {
+						out.append("    goto L_");
+						out.append_hex(term->target, 4u, true);
+						out.append(";\n");
+					}
+				} else if (sv_equal(m, "JSR")) {
+					out.append("    f_");
+					out.append_hex(term->target, 4u, true);
+					out.append("();\n");
+					if (native_vis_[next] != 0u) {
+						out.append("    goto L_");
+						out.append_hex(next, 4u, true);
+						out.append(";\n");
+					}
+				} else if (sv_equal(m, "RTS") || sv_equal(m, "RTI")) {
+					out.append("    return;\n");
+				} else if (sv_equal(m, "BRK")) {
+					out.append("    halted = true; return;\n");
+				} else if (native_vis_[next] != 0u) {
+					out.append("    goto L_");
+					out.append_hex(next, 4u, true);
+					out.append(";\n");
+				}
+			} else if (native_vis_[next] != 0u) {
+				out.append("    goto L_");
+				out.append_hex(next, 4u, true);
+				out.append(";\n");
+			}
+		}
+		out.append("}\n\n");
+	}
+
+	/// Emite el **decompilado** completo a `out` (fase 1: C plano + HAL + regiones).
+	void emit_decompile(Dyn& out) {
+		out.append("// ============================================================\n");
+		out.append("// Decompilado (port nativo, NO emulacion). nes_transpiler --decompile\n");
+		out.append("// Fase 1: C plano (RAM+HAL, sin n2a::CPU) + regiones con etiquetas/goto.\n");
+		out.append("// Ver docs/DECOMPILADOR.md (estructuracion, tipos, renderer).\n");
+		out.append("// ============================================================\n");
+		out.append("#include <eng/core/types/types.hpp>\n");
+		out.append("using eng::u8; using eng::u16;\n\n");
+		emit_rom(out);
+		out.append("static u8 ram[0x800];\n");
+		out.append("static u8 A = 0, X = 0, Y = 0, SP = 0xFD;\n");
+		out.append("static bool Cf=false, Zf=false, Nf=false, Vf=false, Df=false, If=false;\n");
+		out.append("static bool halted = false;\n");
+		out.append("// --- HAL (hardware). Host: no-op. Amiga: Blitter/Copper/Paula (ver HAL). ---\n");
+		out.append("static u8 hal_ppu_read(u16) { return 0; }\n");
+		out.append("static void hal_ppu_write(u16, u8) {}\n");
+		out.append("static u8 rd(u16 a) {\n");
+		out.append("    if (a < 0x2000u) { return ram[a & 0x7FFu]; }\n");
+		out.append("    if (a >= 0x8000u) { return PRG_ROM[(a - 0x8000u) & (kPrgSize - 1u)]; }\n");
+		out.append("    return hal_ppu_read(a);\n}\n");
+		out.append("static void wr(u16 a, u8 v) {\n");
+		out.append("    if (a < 0x2000u) { ram[a & 0x7FFu] = v; return; }\n");
+		out.append("    hal_ppu_write(a, v);\n}\n");
+		out.append("static void setnz(u8 v) { Zf = (v == 0); Nf = ((v & 0x80u) != 0); }\n\n");
+		eng::util::Vector<eng::u16, eng::util::HeapAlloc> entries {};
+		const auto add_entry = [&](eng::u16 a) {
+			if (a < kSpace && has_instr_[a] != 0u) {
+				for (eng::usize i = 0; i < entries.size(); ++i) {
+					if (entries[i] == a) return;
+				}
+				(void)entries.push_back(a);
+			}
+		};
+		add_entry(reset_);
+		add_entry(nmi_);
+		add_entry(irq_);
+		for (eng::u32 a = 0; a < kSpace; ++a) {
+			if (has_instr_[a] != 0u &&
+			    sv_equal(kOpcodeTable[instr_[a].opcode].mnemonic, "JSR") &&
+			    has_operand(instr_[a])) {
+				add_entry(instr_[a].target);
+			}
+		}
+		for (eng::usize i = 0; i < extra_entries_.size(); ++i) {
+			add_entry(extra_entries_[i]);
+		}
+		for (eng::usize i = 0; i < entries.size(); ++i) {
+			out.append("static void f_");
+			out.append_hex(entries[i], 4u, true);
+			out.append("(void);\n");
+		}
+		out.append('\n');
+		for (eng::usize i = 0; i < entries.size(); ++i) {
+			emit_decompile_region(out, entries[i]);
+		}
+		out.append("[[gnu::used]] void game_main(void) {\n    f_");
+		out.append_hex(reset_, 4u, true);
+		out.append("();\n}\n");
+		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
+		out.append("int main() { game_main(); return 0; }\n#endif\n");
 	}
 
 	/// Emite el **despacho de un `JMP (ind)`** (`$6C`) con los destinos observados
