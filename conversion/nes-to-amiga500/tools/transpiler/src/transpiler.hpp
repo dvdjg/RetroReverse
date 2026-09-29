@@ -3285,9 +3285,30 @@ private:
 			out.append(reg);
 			out.append(");");
 		};
+		// Ciclos **exactos** (base + penalización de cruce de página en lecturas
+		// indexadas). El cruce es dinámico: `(base & 0xFF) + índice > 0xFF`.
 		out.append("    tick(");
 		out.append_u32(op_base_cycles(in.opcode));
-		out.append("u);\n    ");
+		out.append("u");
+		if (op_read_indexed_penalty(in.opcode)) {
+			const auto hx = [&](eng::u16 v) {
+				out.append_hex(v, 4u, true);
+			};
+			if (info.mode == AddrMode::AbsX || info.mode == AddrMode::AbsY) {
+				out.append(" + ((0x");
+				hx(static_cast<eng::u16>(in.operand & 0xFFu));
+				out.append("u + ");
+				out.append(info.mode == AddrMode::AbsX ? "X" : "Y");
+				out.append(") > 0xFFu ? 1u : 0u)");
+			} else if (info.mode == AddrMode::IndY) {
+				out.append(" + (((rd(0x");
+				hx(in.operand);
+				out.append("u) | (static_cast<eng::u16>(rd(0x");
+				hx(static_cast<eng::u16>(in.operand + 1u));
+				out.append("u)) << 8u)) & 0xFFu) + Y > 0xFFu ? 1u : 0u)");
+			}
+		}
+		out.append(");\n    ");
 		if (sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY")) {
 			const char* reg = sv_equal(m, "LDA") ? "A" : (sv_equal(m, "LDX") ? "X" : "Y");
 			out.append(reg);
@@ -3519,20 +3540,27 @@ private:
 					break;
 				}
 			}
+			// `term` solo se salta si es un **terminador** de control; si el bloque acaba en
+			// un líder (instrucción normal), esa última instrucción **sí** se emite.
+			const bool term_ctrl =
+				(term != nullptr) &&
+				(kOpcodeTable[term->opcode].mode == AddrMode::Rel ||
+				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "JMP") ||
+				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "JSR") ||
+				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "RTS") ||
+				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "RTI") ||
+				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "BRK"));
 			eng::u16 q = b;
 			while (q != p) {
 				const Instruction& in = instr_[q];
 				const OpcodeInfo& inf = kOpcodeTable[in.opcode];
-				if (term == nullptr || q != term->addr) {
+				if (term == nullptr || q != term->addr || !term_ctrl) {
 					emit_decompile_instruction(out, in);
 				}
 				q = static_cast<eng::u16>(q + inf.size);
 			}
 			const eng::u16 next = p;
 			if (term != nullptr) {
-				out.append("    tick(");
-				out.append_u32(op_base_cycles(term->opcode));
-				out.append("u);\n");
 				const char* m = kOpcodeTable[term->opcode].mnemonic;
 				const AddrMode md = kOpcodeTable[term->opcode].mode;
 				if (md == AddrMode::Rel) {
@@ -3541,11 +3569,20 @@ private:
 					if (native_vblank_wait(*term)) {
 						out.append("    hal_wait_vblank();\n");
 					} else {
+						// Ciclos exactos: base + 1 si tomada + 1 si cruza página (rama).
+						const bool pc = ((static_cast<eng::u16>(term->addr + 2u)) & 0xFF00u) !=
+								(term->target & 0xFF00u);
 						out.append("    if (");
 						out.append(cond(m));
-						out.append(") goto L_");
+						out.append(") { tick(");
+						out.append_u32(static_cast<eng::u32>(op_base_cycles(term->opcode)) +
+								1u + (pc ? 1u : 0u));
+						out.append("u); goto L_");
 						out.append_hex(term->target, 4u, true);
-						out.append(";\n");
+						out.append("; }\n");
+						out.append("    tick(");
+						out.append_u32(op_base_cycles(term->opcode));
+						out.append("u);\n");
 					}
 					if (native_vis_[next] != 0u) {
 						out.append("    goto L_");
@@ -3553,12 +3590,18 @@ private:
 						out.append(";\n");
 					}
 				} else if (sv_equal(m, "JMP")) {
+					out.append("    tick(");
+					out.append_u32(op_base_cycles(term->opcode));
+					out.append("u);\n");
 					if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
 						out.append_hex(term->target, 4u, true);
 						out.append(";\n");
 					}
 				} else if (sv_equal(m, "JSR")) {
+					out.append("    tick(");
+					out.append_u32(op_base_cycles(term->opcode));
+					out.append("u);\n");
 					out.append("    f_");
 					out.append_hex(term->target, 4u, true);
 					out.append("();\n");
@@ -3568,9 +3611,13 @@ private:
 						out.append(";\n");
 					}
 				} else if (sv_equal(m, "RTS") || sv_equal(m, "RTI")) {
-					out.append("    return;\n");
+					out.append("    tick(");
+					out.append_u32(op_base_cycles(term->opcode));
+					out.append("u);\n    return;\n");
 				} else if (sv_equal(m, "BRK")) {
-					out.append("    halted = true; return;\n");
+					out.append("    tick(");
+					out.append_u32(op_base_cycles(term->opcode));
+					out.append("u);\n    halted = true; return;\n");
 				} else if (native_vis_[next] != 0u) {
 					out.append("    goto L_");
 					out.append_hex(next, 4u, true);
