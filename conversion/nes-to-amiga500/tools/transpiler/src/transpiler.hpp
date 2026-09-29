@@ -238,9 +238,12 @@ public:
 			push_work(irq_);
 		}
 		// Cobertura **determinista** de saltos por tabla estática (sin traza).
+		// `-DN2A_NO_STATIC_TABLES`: desactivar (diagnóstico de regresiones de CFG).
+#if !defined(N2A_NO_STATIC_TABLES)
 		if (!prg_banked_) {
 			(void)scan_static_jump_tables();
 		}
+#endif
 		// Entradas extra de telemetría (PC ejecutados): completan el CFG en saltos
 		// indirectos. No aplican a PRG bancada (la ventana conmutable se analiza aparte).
 		if (!prg_banked_) {
