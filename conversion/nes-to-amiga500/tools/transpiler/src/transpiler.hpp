@@ -3285,7 +3285,9 @@ private:
 			out.append(reg);
 			out.append(");");
 		};
-		out.append("    ");
+		out.append("    tick(");
+		out.append_u32(op_base_cycles(in.opcode));
+		out.append("u);\n    ");
 		if (sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY")) {
 			const char* reg = sv_equal(m, "LDA") ? "A" : (sv_equal(m, "LDX") ? "X" : "Y");
 			out.append(reg);
@@ -3528,6 +3530,9 @@ private:
 			}
 			const eng::u16 next = p;
 			if (term != nullptr) {
+				out.append("    tick(");
+				out.append_u32(op_base_cycles(term->opcode));
+				out.append("u);\n");
 				const char* m = kOpcodeTable[term->opcode].mnemonic;
 				const AddrMode md = kOpcodeTable[term->opcode].mode;
 				if (md == AddrMode::Rel) {
@@ -3588,7 +3593,7 @@ private:
 		out.append("// Ver docs/DECOMPILADOR.md (estructuracion, tipos, renderer).\n");
 		out.append("// ============================================================\n");
 		out.append("#include <eng/core/types/types.hpp>\n");
-		out.append("using eng::u8; using eng::u16;\n\n");
+		out.append("using eng::u8; using eng::u16; using eng::u32;\n\n");
 		emit_rom(out);
 		out.append("static u8 ram[0x800];\n");
 		out.append("static u8 A = 0, X = 0, Y = 0, SP = 0xFD;\n");
@@ -3607,6 +3612,15 @@ private:
 		out.append("static void hal_wait_vblank(void) { f_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(); if (hal_vblank_hook) { hal_vblank_hook(); } }\n");
+		// **Modelo de timing del port**: un contador de **ciclos emulados** dispara el
+		// NMI en cada frontera de frame (29780 ciclos NTSC). Es el reloj del port (no hay
+		// reloj de pared): los juegos dirigidos por NMI (p. ej. DK) corren su lógica de
+		// frame en el NMI, sin emular el despacho de la CPU.
+		out.append("static u32 g_cyc = 0, g_frame_deadline = 29780u;\n");
+		out.append("static void (*hal_frame_hook)(void) = 0;\n");
+		out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { g_frame_deadline += 29780u; if (hal_frame_hook) { hal_frame_hook(); } f_");
+		out.append_hex(nmi_, 4u, true);
+		out.append("(); } }\n");
 		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
 		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
 		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");
