@@ -415,6 +415,27 @@ el **render** (PPU software) → el HLE que rinde es el de **render (Blitter/Cop
 VBlank. La deriva de RAM es **precisión de ciclos** de `n2a_block_cycles` (sin penalización de
 página/rama), no el VBlank.
 
+## Refinamiento de ciclos (paso 1) — intentado: 2 hallazgos que cambian el plan
+
+Se intentó refinar `n2a_block_cycles` (penalización de rama tomada y cruce de página) para reducir
+la deriva. **No reduce la deriva**, y el experimento reveló dos cosas:
+
+1. **La deriva NO es precisión de ciclos: es el modelo (NMI/PPU).** Transpilando SMB con **ciclos
+   ON** (`--chain --rom-direct --fast-ram`, sin `--no-cycles`), el contador de ciclos del codegen
+   coincide casi exacto con el intérprete (**diff 6-9 ciclos sobre 1,8 M**), y aun así la RAM
+   diverge **igual** (231/2048 a 60 frames; 287 con `--no-cycles`). Por tanto mejorar los ciclos
+   **no** arregla la deriva: hay que atacar el **timing de eventos (NMI/PPU)** — justo lo del HLE
+   de VBlank, no el refinamiento de ciclos.
+
+2. **`--no-cycles` + cadena infravalora los ciclos (bug real de rendimiento).** Con ciclos ON el
+   arnés da **148 fps**; con `--no-cycles`, **13 fps**. Causa: `n2a_block_cycles(pc)` cuenta **solo
+   el primer bloque** de una **cadena encadenada**, así que el runner avanza la PPU de menos →
+   muchísimos más despachos. Intentar sumar los ciclos base **una vez por bloque dentro del código**
+   (barato) infló los ciclos **12,6×** por el acoplamiento **cadena + cesión + deadline** →
+   **revertido**. El arreglo correcto es que el **runner** reciba el total real de la cadena (p. ej.
+   acumular en un contador separado del `deadline`, o devolver la base en los puntos de encadenado),
+   para recuperar los ~148 fps **sin** coste por instrucción en 68000.
+
 ---
 
 ## Orden recomendado
