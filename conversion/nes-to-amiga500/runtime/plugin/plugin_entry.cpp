@@ -36,6 +36,9 @@ const unsigned char* n2a_chr(void) { return CHR_ROM; }
 unsigned n2a_chr_size(void) { return static_cast<unsigned>(kChrSize); }
 int n2a_mapper(void) { return kMapper; }
 int n2a_mirroring(void) { return kMirroring; }
+// Opcional (ABI): 1 si el codegen reloja la PPU por acceso (`fast_ticks`); 0 si no
+// (`--no-cycles`), en cuyo caso el host debe avanzar la PPU por bloque.
+int n2a_ticks_ppu(void) { return kBlocksTickPpu ? 1 : 0; }
 
 int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
 	n2a::CPU& cpu = *static_cast<n2a::CPU*>(cpu_p);
@@ -68,17 +71,23 @@ int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
 		}
 		return 0; // sin bloque (RAM/salto calculado): lo resuelve el gestor
 	}
-	const eng::u32 before = cpu.cycles;
+	const eng::u32 c0 = cpu.cycles;
+	const eng::u32 b0 = cpu.block_cycles;
 	fn(cpu);
 	if (instrs != nullptr) {
 		*instrs = 1;
 	}
-	const eng::u32 d = cpu.cycles - before;
-	// Con `--no-cycles` el bloque **no** incrementa `cpu.cycles` (d==0): en ese caso se
-	// devuelven los **ciclos base estáticos** del bloque (`n2a_block_cycles`) para que el
-	// runtime avance la PPU con la temporalización correcta (a nivel de bloque, sin coste
-	// por instrucción). Sin esto, la PPU avanzaba 1 ciclo por bloque → timing roto.
-	return d != 0u ? static_cast<int>(d) : static_cast<int>(n2a_block_cycles(pc));
+	// Codegen **con ciclos**: el delta de `cpu.cycles` es el total de la cadena.
+	const eng::u32 dc = cpu.cycles - c0;
+	if (dc != 0u) {
+		return static_cast<int>(dc);
+	}
+	// Codegen `--no-cycles`: cada bloque sumó sus ciclos base a `cpu.block_cycles` al
+	// entrar (una vez por bloque, **no** por instrucción), así que su delta es el total
+	// acumulado de la **cadena** → la PPU avanza con timing correcto sin coste por
+	// instrucción. Nunca 0 (evita el fallback a intérprete).
+	const eng::u32 db = cpu.block_cycles - b0;
+	return db != 0u ? static_cast<int>(db) : 1;
 }
 
 } // extern "C"

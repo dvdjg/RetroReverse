@@ -1478,7 +1478,14 @@ private:
 	void emit_rom(Dyn& out) const {
 		out.append("static constexpr eng::usize kPrgSize = ");
 		out.append_u32(prg_size_);
-		out.append(";\nstatic constexpr eng::u8 PRG_ROM[kPrgSize] = {\n");
+		out.append(";\n");
+		// ¿El codegen reloja la PPU **por acceso** (`cpu.mem->tick`)? Con ciclos sí; con
+		// `--no-cycles` **no** (solo suma los ciclos base por bloque). El runtime debe
+		// fijar `fast_ticks = kBlocksTickPpu`; si no, con `--no-cycles` la PPU no avanza.
+		out.append("static constexpr bool kBlocksTickPpu = ");
+		out.append(no_cycles_ ? "false" : "true");
+		out.append(";\n");
+		out.append("static constexpr eng::u8 PRG_ROM[kPrgSize] = {\n");
 		for (eng::u32 i = 0; i < prg_size_; ++i) {
 			if ((i % 16u) == 0u) {
 				out.append("    ");
@@ -2830,6 +2837,17 @@ private:
 			}
 			if (rom_direct_ && !prg_banked_) {
 				out.append("    [[maybe_unused]] const eng::u8* const n2a_prg = PRG_ROM;\n");
+			}
+			// Ciclos del bloque para el runtime cuando el codegen **no cuenta ciclos**
+			// (`--no-cycles`): se suman **una vez por bloque** al contador separado
+			// `cpu.block_cycles` (constante estática), **no** por instrucción. Así el
+			// codegen **encadenado** reporta los ciclos acumulados de toda la cadena y la
+			// PPU avanza con timing correcto sin coste por instrucción. Se usa un contador
+			// distinto de `cpu.cycles` para **no** interactuar con el `deadline`.
+			if (no_cycles_) {
+				out.append("    cpu.block_cycles += ");
+				out.append_u32(block_base_cycles(start));
+				out.append("u;\n");
 			}
 
 			// VSA intra-bloque: mapa de valores constantes vistos (`LDA #c; STA a`).

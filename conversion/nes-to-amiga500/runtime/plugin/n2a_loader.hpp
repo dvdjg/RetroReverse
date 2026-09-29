@@ -52,6 +52,7 @@ struct TranspiledGame {
 	unsigned (*fn_chr_size)() = nullptr;           ///< `n2a_chr_size`.
 	int (*fn_mapper)() = nullptr;                  ///< `n2a_mapper`.
 	int (*fn_mirroring)() = nullptr;               ///< `n2a_mirroring` (opcional).
+	int (*fn_ticks_ppu)() = nullptr;               ///< `n2a_ticks_ppu` (opcional).
 	int (*fn_block)(void*, void*, int*) = nullptr; ///< `n2a_block`.
 
 	/// ¿Hay un plugin cargado y compatible?
@@ -87,6 +88,7 @@ struct TranspiledGame {
 		fn_chr_size = reinterpret_cast<unsigned (*)()>(sym("n2a_chr_size"));
 		fn_mapper = reinterpret_cast<int (*)()>(sym("n2a_mapper"));
 		fn_mirroring = reinterpret_cast<int (*)()>(sym("n2a_mirroring")); // opcional
+		fn_ticks_ppu = reinterpret_cast<int (*)()>(sym("n2a_ticks_ppu")); // opcional
 		fn_block = reinterpret_cast<int (*)(void*, void*, int*)>(sym("n2a_block"));
 		if (fn_version == nullptr || fn_arch == nullptr || fn_init == nullptr ||
 		    fn_prg == nullptr || fn_prg_size == nullptr || fn_chr == nullptr ||
@@ -119,7 +121,14 @@ struct TranspiledGame {
 		handle = nullptr;
 		fn_version = nullptr; fn_arch = nullptr; fn_init = nullptr;
 		fn_prg = nullptr; fn_prg_size = nullptr; fn_chr = nullptr; fn_chr_size = nullptr;
-		fn_mapper = nullptr; fn_mirroring = nullptr; fn_block = nullptr;
+		fn_mapper = nullptr; fn_mirroring = nullptr; fn_ticks_ppu = nullptr; fn_block = nullptr;
+	}
+
+	/// \return 1 si el codegen del plugin reloja la PPU por acceso (el host debe poner
+	/// `fast_ticks=1`); 0 si no (`--no-cycles`: el host avanza la PPU por bloque). Si el
+	/// plugin no exporta `n2a_ticks_ppu`, asume 1 (comportamiento antiguo).
+	[[nodiscard]] int ticks_ppu() const noexcept {
+		return (fn_ticks_ppu != nullptr) ? fn_ticks_ppu() : 1;
 	}
 
 	/// Rellena `m` con el cartucho del plugin (mapper, PRG y CHR).

@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
 	gen.reset();
 	gen.fast_ctx = &game;
 	gen.fast_run = &n2a::TranspiledGame::fast_run;
-	gen.fast_ticks = true; // el plugin reloja la PPU por acceso
+	gen.fast_ticks = (game.ticks_ppu() != 0); // el plugin dice si reloja la PPU
 	const double ms_gen = run_frames(gen, frames);
 
 	int ram_diff = 0;

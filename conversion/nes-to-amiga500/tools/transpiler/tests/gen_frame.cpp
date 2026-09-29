@@ -26,7 +26,8 @@
 namespace {
 
 n2a::LoadedRom g_rom;
-unsigned long g_fallbacks = 0; ///< PCs ejecutados **sin** bloque estático (van al fallback).
+	unsigned long g_fallbacks = 0; ///< PCs ejecutados **sin** bloque estático (van al fallback).
+	unsigned long g_calls = 0;     ///< Llamadas a `gen_run` (despachos de bloque).
 n2a::FastCpu g_fast; ///< Motor rápido para el fallback (RAM y saltos calculados).
 
 /// Hook de bloque generado: ejecuta el `bb_*` de `cpu.PC` y devuelve los ciclos
@@ -76,15 +77,21 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* 
 		return c;
 	}
 	(void)budget; // la cesión por instrucción está pendiente (ver FAST_EXECUTOR.md)
-	const eng::u32 before = cpu.cycles;
+	++g_calls;
+	const eng::u32 c0 = cpu.cycles;
+	const eng::u32 b0 = cpu.block_cycles;
 	fn(cpu);
 	if (n != nullptr) {
 		*n = 1;
 	}
-	const eng::u32 delta = cpu.cycles - before;
-	// `--no-cycles` (delta==0): usar los ciclos base estaticos del bloque para que la PPU
-	// avance con el timing correcto (a nivel de bloque). Sin esto, 1 ciclo por bloque.
-	return delta > 0u ? static_cast<int>(delta) : static_cast<int>(n2a_block_cycles(pc));
+	// Codegen con ciclos: delta de cpu.cycles. Codegen --no-cycles: delta de
+	// cpu.block_cycles (base sumada una vez por bloque; total de la cadena).
+	const eng::u32 dc = cpu.cycles - c0;
+	if (dc > 0u) {
+		return static_cast<int>(dc);
+	}
+	const eng::u32 db = cpu.block_cycles - b0;
+	return db > 0u ? static_cast<int>(db) : 1; // nunca 0 (evita el fallback)
 }
 
 double run_frames(n2a::NesSystem& sys, int frames) {
@@ -128,7 +135,9 @@ int main(int argc, char** argv) {
 	gen.reset();
 	init_dispatch_table();
 	gen.fast_run = &gen_run;
-	gen.fast_ticks = true; // el codegen reloja la PPU por acceso
+	// El codegen reloja la PPU por acceso **si cuenta ciclos**; con `--no-cycles` no, y
+	// entonces el runtime debe avanzar la PPU por bloque (`fast_ticks=false`).
+	gen.fast_ticks = kBlocksTickPpu;
 	// HLE de VBlank: `gen.event_yield = true` (opt-in). En el host es neutro (la PPU
 	// emulada es barata y el VBlank ya se alcanza con los ciclos de bloque); en Amiga
 	// evita el trabajo de la PPU por dot. Desactivado por defecto para no desviar tests.
@@ -154,6 +163,7 @@ int main(int argc, char** argv) {
 	std::printf("codegen     : %.1f fps  (%.2fx)\n", frames / (ms_gen / 1000.0), ms_ref / ms_gen);
 	std::printf("ciclos      : interprete=%u codegen=%u (dif=%d)\n", ref.interp.cycles, gen.cpu.cycles,
 			static_cast<int>(static_cast<long>(ref.interp.cycles) - static_cast<long>(gen.cpu.cycles)));
+	std::printf("block_cyc   : %u  despachos: %lu\n", gen.cpu.block_cycles, g_calls);
 	std::printf("RAM distinta: %d / %d bytes\n", ram_diff, 0x800);
 	std::printf("pixeles disp: %d / %d (%.1f%%)\n", fb_diff, fb_total, 100.0 * fb_diff / fb_total);
 	return 0;

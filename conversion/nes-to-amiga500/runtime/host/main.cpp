@@ -202,7 +202,7 @@ static int verify_n2x(const char* path, int frames) {
 	gen.reset();
 	gen.fast_ctx = &vg;
 	gen.fast_run = &n2a::TranspiledGame::fast_run;
-	gen.fast_ticks = true; // el plugin reloja la PPU por acceso
+	gen.fast_ticks = (vg.ticks_ppu() != 0); // el plugin dice si reloja la PPU
 	// NOTA: si el plugin se compila con `--event-yield` (reloja la PPU y cede por
 	// evento), habría que `gen.fast_ticks = true` (vía ABI). Por defecto, false.
 	for (int i = 0; i < frames; ++i) {
@@ -599,7 +599,7 @@ int main(int argc, char** argv) {
 				g_nes.reset();
 				g_nes.fast_ctx = &g_game;
 				g_nes.fast_run = &n2a::TranspiledGame::fast_run;
-		g_nes.fast_ticks = true; // el plugin reloja la PPU por acceso
+		g_nes.fast_ticks = (g_game.ticks_ppu() != 0); // el plugin dice si reloja la PPU
 				N2A_LOGI("jugando '%s' (motor=codegen)", list[sel].path.c_str());
 				std::printf("nes_sdl: '%s' motor=codegen\n", list[sel].path.c_str());
 				g_frames_limit = -1;
@@ -639,7 +639,7 @@ int main(int argc, char** argv) {
 		g_nes.reset();
 		g_nes.fast_ctx = &g_game;
 		g_nes.fast_run = &n2a::TranspiledGame::fast_run;
-		g_nes.fast_ticks = true; // el plugin reloja la PPU por acceso
+		g_nes.fast_ticks = (g_game.ticks_ppu() != 0); // el plugin dice si reloja la PPU
 		N2A_LOGI("plugin='%s' mapper=%d PRG=%u CHR=%u motor=codegen", argv[1], g_game.fn_mapper(),
 			 g_game.fn_prg_size(), g_game.fn_chr_size());
 		std::printf("nes_sdl: plugin='%s' mapper=%d PRG=%u CHR=%u motor=codegen\n", argv[1],
@@ -673,7 +673,7 @@ int main(int argc, char** argv) {
 		init_dispatch_table();
 		g_nes.fast_ctx = &g_gen_fast;
 		g_nes.fast_run = &gen_run;
-		g_nes.fast_ticks = true; // el codegen reloja la PPU por acceso
+		g_nes.fast_ticks = kBlocksTickPpu; // el codegen enlazado dice si reloja la PPU
 	}
 #endif
 #ifdef N2A_CODEGEN

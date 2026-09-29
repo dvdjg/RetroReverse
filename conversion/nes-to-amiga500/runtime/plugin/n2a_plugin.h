@@ -50,6 +50,10 @@ N2A_EXPORT const unsigned char* n2a_chr(void); ///< CHR-ROM embebida (puede ser 
 N2A_EXPORT unsigned n2a_chr_size(void);        ///< Tamaño de la CHR (0 = CHR RAM).
 N2A_EXPORT int n2a_mapper(void);               ///< Número de mapper iNES.
 N2A_EXPORT int n2a_mirroring(void);            ///< Mirroring: 0 = horizontal, 1 = vertical.
+/// **Opcional**: 1 si el codegen reloja la PPU por acceso (el host pone `fast_ticks=1`);
+/// 0 si no (`--no-cycles`), en cuyo caso el host debe avanzar la PPU por bloque. Si el
+/// símbolo no existe, el host asume `1` (comportamiento antiguo: codegen con ciclos).
+N2A_EXPORT int n2a_ticks_ppu(void);
 
 /// Ejecuta el *basic block* en `((n2a::CPU*)cpu)->PC`.
 /// \param cpu Puntero al `n2a::CPU` del host (mismo layout; ver `N2A_ABI_VERSION`).

@@ -240,6 +240,12 @@ struct CPU {
 	/// el intérprete. El intérprete/ejecutor rápido no lo usan (calculan sus ciclos
 	/// aparte), así que en esos caminos permanece a 0.
 	eng::u32 cycles = 0;
+	/// Contador **separado** para el codegen `--no-cycles` que no cuenta ciclos por
+	/// instrucción: cada bloque le suma sus **ciclos base** al entrar (una vez por
+	/// bloque). El runner usa su delta para avanzar la PPU; al ser un campo **distinto**
+	/// de `cycles`, **no** interactúa con el `deadline` (que solo mira `cycles`), así no
+	/// provoca cesiones espurias. Con ciclos, permanece a 0.
+	eng::u32 block_cycles = 0;
 	/// **Deadline del `yield` por evento** (docs/TIMING_CODEGEN.md): el código
 	/// generado cede (guarda `PC` y retorna) cuando `cycles >= deadline`. El host lo
 	/// fija a `cycles + next_event_dots()/3` antes de cada bloque. `0xFFFFFFFF` =

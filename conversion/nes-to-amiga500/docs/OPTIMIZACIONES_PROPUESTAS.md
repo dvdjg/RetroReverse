@@ -436,6 +436,27 @@ la deriva. **No reduce la deriva**, y el experimento reveló dos cosas:
    acumular en un contador separado del `deadline`, o devolver la base en los puntos de encadenado),
    para recuperar los ~148 fps **sin** coste por instrucción en 68000.
 
+### Arreglo (los dos bugs juntos): `--no-cycles` con ciclos por bloque + `fast_ticks`
+
+Se resolvió con **dos** correcciones que iban juntas:
+
+1. **Ciclos por bloque en un contador separado.** El codegen `--no-cycles` suma los **ciclos base**
+   del bloque a `CPU::block_cycles` **al entrar** (una vez por bloque, constante estática, **no** por
+   instrucción). Es un campo **distinto** de `CPU::cycles`, así el contador **no** interactúa con el
+   `deadline` (que solo mira `cycles`) y no provoca cesiones espurias. El runner devuelve su delta
+   (`n2a_block`/`gen_run`), que es el total real de la **cadena** encadenada.
+2. **`fast_ticks` debe coincidir con el codegen.** El bug dominante: el host ponía `fast_ticks=true`
+   (el bloque reloja la PPU), pero `--no-cycles` **no** reloja → la PPU **no avanzaba** → el juego
+   giraba en el bucle de espera (~120 000 despachos/frame). Ahora el codegen emite
+   `static constexpr bool kBlocksTickPpu = !no_cycles`, el plugin lo exporta
+   (`n2a_ticks_ppu`, opcional en la ABI) y el host fija `fast_ticks = ticks_ppu()`. Con `--no-cycles`
+   queda `false` → el runtime avanza la PPU por bloque.
+
+**Medido** (SMB `--amiga`, arnés): **13 → 273 fps (≈21×)**; `block_cycles` acumulado ≈ el intérprete
+(1,84 M vs 1,81 M en 60 frames); a 1 frame RAM idéntica (0/2048). Es el **mayor arreglo de
+rendimiento** del hilo: el perfil Amiga estaba **roto** (PPU estancada). La deriva a más frames sigue
+siendo del **modelo de eventos** (no de ciclos), que ataca el HLE de VBlank/render.
+
 ---
 
 ## Orden recomendado
