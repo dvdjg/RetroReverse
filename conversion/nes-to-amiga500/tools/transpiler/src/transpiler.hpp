@@ -1956,10 +1956,39 @@ private:
 		SetC,   ///< `SEC` (fija `C=1`).
 		LoadA,  ///< `LDA x`.
 		StoreA, ///< `STA x`.
+		LoadX,  ///< `LDX x`.
+		StoreX, ///< `STX x`.
+		LoadY,  ///< `LDY x`.
+		StoreY, ///< `STY x`.
 		AddA,   ///< `ADC x`.
 		SubA,   ///< `SBC x`.
 		CmpA,   ///< `CMP x`.
 	};
+
+	/// \return Índice de registro (0=A, 1=X, 2=Y) si `k` es carga/almacén de registro; -1 si no.
+	[[nodiscard]] static int ir_reg(IrKind k) noexcept {
+		switch (k) {
+		case IrKind::LoadA:
+		case IrKind::StoreA:
+			return 0;
+		case IrKind::LoadX:
+		case IrKind::StoreX:
+			return 1;
+		case IrKind::LoadY:
+		case IrKind::StoreY:
+			return 2;
+		default:
+			return -1;
+		}
+	}
+	/// \return `true` si `k` es una **carga** de registro (`LDA`/`LDX`/`LDY`).
+	[[nodiscard]] static bool ir_is_load(IrKind k) noexcept {
+		return k == IrKind::LoadA || k == IrKind::LoadX || k == IrKind::LoadY;
+	}
+	/// \return `true` si `k` es un **almacén** de registro (`STA`/`STX`/`STY`).
+	[[nodiscard]] static bool ir_is_store(IrKind k) noexcept {
+		return k == IrKind::StoreA || k == IrKind::StoreX || k == IrKind::StoreY;
+	}
 
 	/// \brief Un paso del IR: la instrucción normalizada a un efecto + su operando.
 	struct IrStep {
@@ -2007,9 +2036,11 @@ private:
 				s.kind = IrKind::ClrC;
 			} else if (sv_equal(m, "SEC")) {
 				s.kind = IrKind::SetC;
-			} else if (sv_equal(m, "LDA") || sv_equal(m, "ADC") || sv_equal(m, "SBC") ||
-				   sv_equal(m, "CMP")) {
+			} else if (sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY") ||
+				   sv_equal(m, "ADC") || sv_equal(m, "SBC") || sv_equal(m, "CMP")) {
 				s.kind = sv_equal(m, "LDA") ? IrKind::LoadA
+					 : sv_equal(m, "LDX") ? IrKind::LoadX
+					 : sv_equal(m, "LDY") ? IrKind::LoadY
 					 : sv_equal(m, "ADC") ? IrKind::AddA
 					 : sv_equal(m, "SBC") ? IrKind::SubA : IrKind::CmpA;
 				if (info.mode == AddrMode::Imm) {
@@ -2020,8 +2051,9 @@ private:
 				} else {
 					s.kind = IrKind::Other;
 				}
-			} else if (sv_equal(m, "STA")) {
-				s.kind = IrKind::StoreA;
+			} else if (sv_equal(m, "STA") || sv_equal(m, "STX") || sv_equal(m, "STY")) {
+				s.kind = sv_equal(m, "STA") ? IrKind::StoreA
+					 : sv_equal(m, "STX") ? IrKind::StoreX : IrKind::StoreY;
 				if (set_mem()) {
 					s.is_mem = true;
 				} else {
@@ -2077,39 +2109,60 @@ private:
 		const auto finish = [&](int i) {
 			next = static_cast<eng::u16>(ir[idx[i]].addr + ir[idx[i]].size);
 		};
-		// Copia 16 bits: LoadA(mem a); StoreA(mem c); LoadA(mem a+1); StoreA(mem c+1).
-		if (n >= 4 && st(0).kind == IrKind::LoadA && st(0).is_mem &&
-		    st(1).kind == IrKind::StoreA && st(1).is_mem && st(2).kind == IrKind::LoadA &&
-		    st(2).is_mem && st(3).kind == IrKind::StoreA && st(3).is_mem &&
-		    st(2).mem == static_cast<eng::u16>(st(0).mem + 1u) &&
-		    st(3).mem == static_cast<eng::u16>(st(1).mem + 1u)) {
-			out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &");
-			ram(st(0).mem);
-			out.append(", 2u); __builtin_memcpy(&");
-			ram(st(1).mem);
-			out.append(", &n2a_w, 2u); cpu.A = ");
-			ram(st(2).mem);
-			out.append("; cpu.set_nz(cpu.A); }\n");
-			finish(3);
-			return true;
-		}
-		// Constante 16 bits: LoadA(imm k0); StoreA(mem c); LoadA(imm k1); StoreA(mem c+1).
-		if (n >= 4 && st(0).kind == IrKind::LoadA && st(0).is_imm &&
-		    st(1).kind == IrKind::StoreA && st(1).is_mem && st(2).kind == IrKind::LoadA &&
-		    st(2).is_imm && st(3).kind == IrKind::StoreA && st(3).is_mem &&
-		    st(3).mem == static_cast<eng::u16>(st(1).mem + 1u)) {
-			ram(st(1).mem);
-			out.append(" = ");
-			hx(st(0).imm);
-			out.append("; ");
-			ram(st(3).mem);
-			out.append(" = ");
-			hx(st(2).imm);
-			out.append("; cpu.A = ");
-			hx(st(2).imm);
-			out.append("; cpu.set_nz(cpu.A);\n");
-			finish(3);
-			return true;
+		// Copia 16 bits con **registro consistente** (A/X/Y): `LoadR(a); StoreR(c);
+		// LoadR(a+1); StoreR(c+1)`. Cubre `LDX/STX` y `LDY/STY`, no solo `LDA/STA`.
+		if (n >= 4) {
+			const IrStep& s0 = st(0);
+			const IrStep& s1 = st(1);
+			const IrStep& s2 = st(2);
+			const IrStep& s3 = st(3);
+			const int r = ir_reg(s0.kind);
+			if (r >= 0 && ir_is_load(s0.kind) && s0.is_mem && ir_is_store(s1.kind) &&
+			    ir_reg(s1.kind) == r && s1.is_mem && ir_is_load(s2.kind) &&
+			    ir_reg(s2.kind) == r && s2.is_mem && ir_is_store(s3.kind) &&
+			    ir_reg(s3.kind) == r && s3.is_mem &&
+			    s2.mem == static_cast<eng::u16>(s0.mem + 1u) &&
+			    s3.mem == static_cast<eng::u16>(s1.mem + 1u)) {
+				const char* reg = (r == 0) ? "cpu.A" : (r == 1) ? "cpu.X" : "cpu.Y";
+				out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &");
+				ram(s0.mem);
+				out.append(", 2u); __builtin_memcpy(&");
+				ram(s1.mem);
+				out.append(", &n2a_w, 2u); ");
+				out.append(reg);
+				out.append(" = ");
+				ram(s2.mem);
+				out.append("; cpu.set_nz(");
+				out.append(reg);
+				out.append("); }\n");
+				finish(3);
+				return true;
+			}
+			// Constante 16 bits con registro consistente: `LoadR(#k0); StoreR(c);
+			// LoadR(#k1); StoreR(c+1)`.
+			if (r >= 0 && ir_is_load(s0.kind) && s0.is_imm && ir_is_store(s1.kind) &&
+			    ir_reg(s1.kind) == r && s1.is_mem && ir_is_load(s2.kind) &&
+			    ir_reg(s2.kind) == r && s2.is_imm && ir_is_store(s3.kind) &&
+			    ir_reg(s3.kind) == r && s3.is_mem &&
+			    s3.mem == static_cast<eng::u16>(s1.mem + 1u)) {
+				const char* reg = (r == 0) ? "cpu.A" : (r == 1) ? "cpu.X" : "cpu.Y";
+				ram(s1.mem);
+				out.append(" = ");
+				hx(s0.imm);
+				out.append("; ");
+				ram(s3.mem);
+				out.append(" = ");
+				hx(s2.imm);
+				out.append("; ");
+				out.append(reg);
+				out.append(" = ");
+				hx(s2.imm);
+				out.append("; cpu.set_nz(");
+				out.append(reg);
+				out.append(");\n");
+				finish(3);
+				return true;
+			}
 		}
 		return false;
 	}

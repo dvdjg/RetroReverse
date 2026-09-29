@@ -165,7 +165,9 @@ compile_native multibyte 'int main() {
 			(g_bus.ram[0x68] == 0x04u) &&
 			(g_bus.ram[0x70] == 0x85u) &&
 			// Variacion con NOP intercalado (matcher flexible por IR): copia16 $10->$80.
-			(g_bus.ram[0x80] == 0x34u) && (g_bus.ram[0x81] == 0x12u) && (g_st.a == 0x12u);
+			(g_bus.ram[0x80] == 0x34u) && (g_bus.ram[0x81] == 0x12u) && (g_st.a == 0x12u) &&
+			// Variante de registro (copia16 via X): $90/$91 = $34/$12; X = $12.
+			(g_bus.ram[0x90] == 0x34u) && (g_bus.ram[0x91] == 0x12u) && (g_st.x == 0x12u);
 	return ok ? 0 : 1;
 }'
 # El **perfil Amiga encadenado** (que usa el matcher flexible por IR) debe dar el mismo
@@ -184,7 +186,8 @@ compile_amiga multibyte 'int main() {
 			(g_state.mem.ram[0x68] == 0x04u) &&
 			(g_state.mem.ram[0x70] == 0x85u) &&
 			(g_state.mem.ram[0x80] == 0x34u) && (g_state.mem.ram[0x81] == 0x12u) &&
-			(g_state.cpu.A == 0x12u);
+			(g_state.mem.ram[0x90] == 0x34u) && (g_state.mem.ram[0x91] == 0x12u) &&
+			(g_state.cpu.A == 0x12u) && (g_state.cpu.X == 0x12u);
 	return ok ? 0 : 1;
 }'
 # `JMP (ind)` en el **nativo**: despacho por los destinos observados

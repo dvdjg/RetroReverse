@@ -359,12 +359,15 @@ exactos en offsets fijos**, así que no veían variaciones. Se añadió un **IR 
 `IrStep`: efecto normalizado —`LoadA`/`StoreA`/`AddA`/`SubA`/`CmpA`/`ClrC`/`SetC`/`Nop`— con su
 operando) y un matcher por **predicados** (`try_ir_multibyte`) para copia/constante de 16 bits que
 **salta `NOP`** intercalados (el único op realmente neutro; `CLC`/`SEC` **no** se saltan porque
-cambian `C`, observable). Subyace a `try_chain_multibyte` (IR flexible → exacto). **Medido**
-(`--amiga`): DK 32 → **33** idioms (el IR sube +1 y subsume los 32 exactos); Ms. Pac-Man 9 → 9.
+cambian `C`, observable) y casa la copia/constante 16 bits con **registro consistente** (A/X/Y,
+es decir `LDX/STX` y `LDY/STY`, no solo `LDA/STA`). Subyace a `try_chain_multibyte` (IR flexible →
+exacto). **Medido** (`--amiga`): DK 32 → **33** idioms (el IR sube +1 y subsume los 32 exactos);
+Ms. Pac-Man 9 → **10** (variante de registro).
 La ganancia inmediata es pequeña (las variaciones con `NOP` son raras), pero el IR es la **base**
-del reconocedor **estructural** (comodines, otro registro, reordenaciones) que pediste. Test: ROM
-`--emit-multibyte-rom` incluye una **variación con `NOP`** que solo el IR casa (`run.sh`, `--amiga`).
-Diagnóstico: `idioms16=N (ir=… exact=…)` en la salida del transpilador.
+del reconocedor **estructural** (comodines, otros registros, reordenaciones) que pediste. Test: ROM
+`--emit-multibyte-rom` incluye **una variación con `NOP`** y **una copia via `LDX/STX`**, que el
+matcher exacto no casa (`run.sh`, `--amiga` + nativo). Diagnóstico: `idioms16=N (ir=… exact=…)` en
+la salida del transpilador.
 
 ---
 

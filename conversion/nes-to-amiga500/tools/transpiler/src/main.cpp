@@ -268,6 +268,9 @@ constexpr eng::u8 kMultibyteProg[] = {
 	// (salta neutros) SI. Copia16 $10/$11 -> $80/$81 = $34,$12.
 	//   LDA $10; NOP; STA $80; LDA $11; STA $81   (A5 10 EA 85 80 A5 11 85 81)
 	0xA5u, 0x10u, 0xEAu, 0x85u, 0x80u, 0xA5u, 0x11u, 0x85u, 0x81u,
+	// **Variante de registro** (no la casa el exacto, que exige LDA/STA): copia16 via X.
+	//   LDX $10; STX $90; LDX $11; STX $91   (A6 10 86 90 A6 11 86 91)
+	0xA6u, 0x10u, 0x86u, 0x90u, 0xA6u, 0x11u, 0x86u, 0x91u,
 	0x00u,
 };
 
