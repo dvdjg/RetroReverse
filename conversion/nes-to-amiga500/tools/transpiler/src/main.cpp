@@ -776,35 +776,57 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 			cmd[o++] = *s++;
 		}
 	};
-	app(cxx);
+	// Rutas **entre comillas** (`"..."`): los nombres de ROM llevan espacios/paréntesis
+	// (p. ej. `Super Mario Bros (World).nes`), y sin comillas el shell parte el comando.
+	auto appq = [&](const char* s) {
+		app("\"");
+		app(s);
+		app("\"");
+	};
+	appq(cxx);
 	app(" -std=gnu++23 -O2 -shared -static-libgcc -static-libstdc++");
 #ifndef _WIN32
 	app(" -fPIC");
 #endif
 	app(" -I");
-	app(outdir);
+	appq(outdir);
 	// Autodetección: `<entry_dir>/..` = runtime -> include y plugin.
 	char edir[1024];
 	dir_name(entry, edir, sizeof edir);
 	char rdir[1024];
 	dir_name(edir, rdir, sizeof rdir);
+	char inc1[1200];
+	std::snprintf(inc1, sizeof inc1, "%s/include", rdir);
+	char inc2[1200];
+	std::snprintf(inc2, sizeof inc2, "%s/plugin", rdir);
 	app(" -I");
-	app(rdir);
-	app("/include");
+	appq(inc1);
 	app(" -I");
-	app(rdir);
-	app("/plugin");
+	appq(inc2);
 	for (eng::usize k = 0; k < incs.size(); ++k) {
 		app(" -I");
-		app(incs[k].data());
+		char incb[1200];
+		std::snprintf(incb, sizeof incb, "%.*s", static_cast<int>(incs[k].size()),
+			      incs[k].data());
+		appq(incb);
 	}
 	app(" ");
-	app(entry);
+	appq(entry);
 	app(" -o ");
-	app(n2x);
+	appq(n2x);
 	cmd[o] = '\0';
 	n2a::out_line(eng::util::StringView(cmd));
-	return std::system(cmd) == 0;
+	// En Windows `std::system` ejecuta `cmd /c <cmd>` y `cmd.exe` **quita la primera y
+	// la última comilla** si el comando empieza por `"`. Como hemos citado las rutas, el
+	// comando empieza por `"`: se envuelve **todo** en una comilla adicional
+	// (`cmd /c ""prog" args"`), que es el idioma estándar para este caso.
+	std::string full = cmd;
+#if defined(_WIN32)
+	if (!full.empty() && full[0] == '"') {
+		full = "\"" + full + "\"";
+	}
+#endif
+	return std::system(full.c_str()) == 0;
 }
 
 } // namespace
