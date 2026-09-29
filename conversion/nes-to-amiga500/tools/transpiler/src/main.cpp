@@ -264,6 +264,10 @@ constexpr eng::u8 kMultibyteProg[] = {
 	0xA7u, 0x10u, 0x85u, 0x64u, 0x87u, 0x66u, 0xA9u, 0x05u, 0x85u, 0x68u, 0xA9u, 0x05u, 0xC7u, 0x68u,
 	// VSA con DEX: LDX #$03; DEX; LDA $8000,X (X=2) -> 0x85; STA $70
 	0xA2u, 0x03u, 0xCAu, 0xBDu, 0x00u, 0x80u, 0x85u, 0x70u,
+	// **Variacion** con NOP intercalado: el matcher exacto NO la casa; el flexible por IR
+	// (salta neutros) SI. Copia16 $10/$11 -> $80/$81 = $34,$12.
+	//   LDA $10; NOP; STA $80; LDA $11; STA $81   (A5 10 EA 85 80 A5 11 85 81)
+	0xA5u, 0x10u, 0xEAu, 0x85u, 0x80u, 0xA5u, 0x11u, 0x85u, 0x81u,
 	0x00u,
 };
 
@@ -588,7 +592,13 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	s.append_u32(static_cast<eng::u32>(tp.instruction_count()));
 	s.append("  bloques=");
 	s.append_u32(static_cast<eng::u32>(tp.block_count()));
-	s.append("  -> ");
+	s.append("  idioms16=");
+	s.append_u32(tp.idiom_hits());
+	s.append(" (ir=");
+	s.append_u32(tp.idiom_ir_hits());
+	s.append(" exact=");
+	s.append_u32(tp.idiom_exact_hits());
+	s.append(")  -> ");
 	s.append(out_cpp);
 	n2a::out_line(s.view());
 	if (tp.prg_banked()) {

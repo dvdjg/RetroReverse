@@ -163,7 +163,28 @@ compile_native multibyte 'int main() {
 			(g_bus.ram[0x52] == 0x01u) &&
 			(g_bus.ram[0x64] == 0x34u) && (g_bus.ram[0x66] == 0x34u) &&
 			(g_bus.ram[0x68] == 0x04u) &&
-			(g_bus.ram[0x70] == 0x85u) && (g_st.a == 0x85u);
+			(g_bus.ram[0x70] == 0x85u) &&
+			// Variacion con NOP intercalado (matcher flexible por IR): copia16 $10->$80.
+			(g_bus.ram[0x80] == 0x34u) && (g_bus.ram[0x81] == 0x12u) && (g_st.a == 0x12u);
+	return ok ? 0 : 1;
+}'
+# El **perfil Amiga encadenado** (que usa el matcher flexible por IR) debe dar el mismo
+# estado, incluida la variacion con `NOP` intercalado que el matcher exacto no casaria.
+compile_amiga multibyte 'int main() {
+	game_main();
+	const bool ok = (g_state.mem.ram[0x10] == 0x34u) && (g_state.mem.ram[0x11] == 0x12u) &&
+			(g_state.mem.ram[0x20] == 0x34u) && (g_state.mem.ram[0x21] == 0x12u) &&
+			(g_state.mem.ram[0x30] == 0x00u) && (g_state.mem.ram[0x31] == 0x01u) &&
+			(g_state.mem.ram[0x40] == 0x85u) &&
+			(g_state.mem.ram[0x60] == 0x35u) && (g_state.mem.ram[0x61] == 0x12u) &&
+			(g_state.mem.ram[0x62] == 0x33u) && (g_state.mem.ram[0x63] == 0x12u) &&
+			(g_state.mem.ram[0x50] == 0xFFu) && (g_state.mem.ram[0x51] == 0x00u) &&
+			(g_state.mem.ram[0x52] == 0x01u) &&
+			(g_state.mem.ram[0x64] == 0x34u) && (g_state.mem.ram[0x66] == 0x34u) &&
+			(g_state.mem.ram[0x68] == 0x04u) &&
+			(g_state.mem.ram[0x70] == 0x85u) &&
+			(g_state.mem.ram[0x80] == 0x34u) && (g_state.mem.ram[0x81] == 0x12u) &&
+			(g_state.cpu.A == 0x12u);
 	return ok ? 0 : 1;
 }'
 # `JMP (ind)` en el **nativo**: despacho por los destinos observados

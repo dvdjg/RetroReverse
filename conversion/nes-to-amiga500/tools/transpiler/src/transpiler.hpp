@@ -815,6 +815,12 @@ public:
 	[[nodiscard]] eng::usize instruction_count() const noexcept { return count_; }
 	/// Número de *basic blocks* detectados.
 	[[nodiscard]] eng::usize block_count() const noexcept { return block_count_; }
+	/// \return Nº de idioms multibyte aplicados (diagnóstico de medición).
+	[[nodiscard]] eng::u32 idiom_hits() const noexcept { return idiom_hits_; }
+	/// \return De los idioms, los casados por el **IR flexible** (`try_ir_multibyte`).
+	[[nodiscard]] eng::u32 idiom_ir_hits() const noexcept { return ir_hits_; }
+	/// \return De los idioms, los casados por el matcher **exacto**.
+	[[nodiscard]] eng::u32 idiom_exact_hits() const noexcept { return exact_hits_; }
 	/// Vector de reset (`$FFFC`).
 	[[nodiscard]] eng::u16 reset_vector() const noexcept { return reset_; }
 	/// Vector de NMI (`$FFFA`).
@@ -884,6 +890,9 @@ private:
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
 	mutable const char* native_reject_ = ""; ///< Motivo del último rechazo de `native_ok()` (diagnóstico).
 	mutable eng::u16 native_reject_addr_ = 0; ///< Dirección asociada al rechazo (p. ej. el `JSR`).
+	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnóstico).
+	mutable eng::u32 ir_hits_ = 0;            ///< De ellos, casados por el IR flexible.
+	mutable eng::u32 exact_hits_ = 0;         ///< De ellos, casados por el matcher exacto.
 	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
 	/// VSA de índices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
@@ -1748,7 +1757,7 @@ private:
 	/// `--no-cycles`): mismos patrones que el nativo pero emitiendo sobre `cpu` y el
 	/// puntero `n2a_ram`. Mantiene la semántica de flags del 6502.
 	/// \return `true` si se emitió (y actualizó `next`).
-	[[nodiscard]] bool try_chain_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
+	[[nodiscard]] bool try_chain_multibyte_impl(Dyn& out, eng::u16 p, eng::u16& next) const {
 		const auto at = [&](eng::u16 a) -> const Instruction* {
 			return (a < kSpace && has_instr_[a] != 0u) ? &instr_[a] : nullptr;
 		};
@@ -1930,6 +1939,197 @@ private:
 					}
 				}
 			}
+		}
+		return false;
+	}
+
+	/// \brief Efecto normalizado de una instrucción 6502 (**IR mínimo** del matcher flexible).
+	///
+	/// POR QUÉ: los reconocedores de idioms comparan **opcodes exactos en offsets fijos**,
+	/// así que no ven **variaciones** (una instrucción neutra en medio, la misma operación
+	/// escrita de otra forma). El IR abstrae el **efecto** (def/uso) y permite casar por
+	/// **predicados**, saltando lo neutro. Es la base para un reconocedor estructural.
+	enum class IrKind : eng::u8 {
+		Other,  ///< Cualquier otra cosa (corta el casado).
+		Nop,    ///< `NOP`.
+		ClrC,   ///< `CLC` (fija `C=0`).
+		SetC,   ///< `SEC` (fija `C=1`).
+		LoadA,  ///< `LDA x`.
+		StoreA, ///< `STA x`.
+		AddA,   ///< `ADC x`.
+		SubA,   ///< `SBC x`.
+		CmpA,   ///< `CMP x`.
+	};
+
+	/// \brief Un paso del IR: la instrucción normalizada a un efecto + su operando.
+	struct IrStep {
+		IrKind kind = IrKind::Other; ///< Efecto normalizado.
+		eng::u16 addr = 0;           ///< Dirección 6502 original.
+		eng::u16 mem = 0;            ///< Dirección RAM (si `is_mem`).
+		eng::u8 imm = 0;             ///< Inmediato (si `is_imm`).
+		eng::u8 size = 1;            ///< Bytes de la instrucción.
+		bool is_mem = false;         ///< El operando es RAM (zp o abs < `$2000`).
+		bool is_imm = false;         ///< El operando es inmediato.
+	};
+
+	/// Traduce las instrucciones del bloque desde `start` (hasta `maxn`) a pasos del IR.
+	/// \param start Dirección de inicio.
+	/// \param maxn  Máximo de instrucciones a traducir.
+	/// \return La lista de pasos (hasta fin de bloque o `maxn`).
+	[[nodiscard]] eng::util::Vector<IrStep, eng::util::HeapAlloc>
+	build_ir(eng::u16 start, eng::usize maxn) const {
+		eng::util::Vector<IrStep, eng::util::HeapAlloc> v {};
+		eng::u16 pc = start;
+		for (eng::usize k = 0; k < maxn; ++k) {
+			if (has_instr_[pc] == 0u || (pc != start && leaders_[pc] != 0u)) {
+				break;
+			}
+			const Instruction& in = instr_[pc];
+			const OpcodeInfo& info = kOpcodeTable[in.opcode];
+			const char* m = info.mnemonic;
+			IrStep s;
+			s.addr = pc;
+			s.size = info.size;
+			const auto set_mem = [&]() -> bool {
+				if (info.mode == AddrMode::Zp) {
+					s.mem = static_cast<eng::u8>(in.operand);
+					return true;
+				}
+				if (info.mode == AddrMode::Abs && in.operand < 0x2000u) {
+					s.mem = static_cast<eng::u16>(in.operand & 0x7FFu);
+					return true;
+				}
+				return false;
+			};
+			if (sv_equal(m, "NOP")) {
+				s.kind = IrKind::Nop;
+			} else if (sv_equal(m, "CLC")) {
+				s.kind = IrKind::ClrC;
+			} else if (sv_equal(m, "SEC")) {
+				s.kind = IrKind::SetC;
+			} else if (sv_equal(m, "LDA") || sv_equal(m, "ADC") || sv_equal(m, "SBC") ||
+				   sv_equal(m, "CMP")) {
+				s.kind = sv_equal(m, "LDA") ? IrKind::LoadA
+					 : sv_equal(m, "ADC") ? IrKind::AddA
+					 : sv_equal(m, "SBC") ? IrKind::SubA : IrKind::CmpA;
+				if (info.mode == AddrMode::Imm) {
+					s.is_imm = true;
+					s.imm = static_cast<eng::u8>(in.operand);
+				} else if (set_mem()) {
+					s.is_mem = true;
+				} else {
+					s.kind = IrKind::Other;
+				}
+			} else if (sv_equal(m, "STA")) {
+				s.kind = IrKind::StoreA;
+				if (set_mem()) {
+					s.is_mem = true;
+				} else {
+					s.kind = IrKind::Other;
+				}
+			} else {
+				s.kind = IrKind::Other;
+			}
+			(void)v.push_back(s);
+			pc = static_cast<eng::u16>(pc + info.size);
+			if (info.mode == AddrMode::Rel || sv_equal(m, "JMP") || sv_equal(m, "JSR") ||
+			    sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK")) {
+				break;
+			}
+		}
+		return v;
+	}
+
+	/// Casado **flexible por IR** de los idioms de 16 bits (copia y constante), tolerando
+	/// **`NOP` intercalados** (la única instrucción realmente neutra: no toca registros ni
+	/// flags). Variante más general que el casado exacto (que exige offsets fijos): el mismo
+	/// idiom con un `NOP` en medio. \return `true` y `next` tras el idiom (los `NOP`
+	/// intercalados quedan consumidos).
+	[[nodiscard]] bool try_ir_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
+		const auto ir = build_ir(p, 24u);
+		eng::u16 idx[12];
+		int n = 0;
+		for (eng::usize i = 0; i < ir.size() && n < 12; ++i) {
+			// Solo `NOP` es realmente neutro (no cambia registros ni flags). `CLC`/`SEC`
+			// cambian `C` (observable) → **no** se saltan: si aparecen, el patrón no casa
+			// y se cae al matcher exacto / byte a byte (correcto, sin perder el flag).
+			if (ir[i].kind == IrKind::Nop) {
+				continue;
+			}
+			idx[n++] = static_cast<eng::u16>(i);
+		}
+		const auto st = [&](int i) -> const IrStep& { return ir[idx[i]]; };
+		const auto hx = [&](eng::u8 v) {
+			out.append("0x");
+			out.append_hex(v, 2u, true);
+			out.append("u");
+		};
+		const auto hxo = [&](eng::u16 v) {
+			out.append("0x");
+			out.append_hex(v, 4u, true);
+			out.append("u");
+		};
+		const auto ram = [&](eng::u16 off) {
+			out.append("n2a_ram[");
+			hxo(off);
+			out.append("]");
+		};
+		const auto finish = [&](int i) {
+			next = static_cast<eng::u16>(ir[idx[i]].addr + ir[idx[i]].size);
+		};
+		// Copia 16 bits: LoadA(mem a); StoreA(mem c); LoadA(mem a+1); StoreA(mem c+1).
+		if (n >= 4 && st(0).kind == IrKind::LoadA && st(0).is_mem &&
+		    st(1).kind == IrKind::StoreA && st(1).is_mem && st(2).kind == IrKind::LoadA &&
+		    st(2).is_mem && st(3).kind == IrKind::StoreA && st(3).is_mem &&
+		    st(2).mem == static_cast<eng::u16>(st(0).mem + 1u) &&
+		    st(3).mem == static_cast<eng::u16>(st(1).mem + 1u)) {
+			out.append("    { eng::u16 n2a_w; __builtin_memcpy(&n2a_w, &");
+			ram(st(0).mem);
+			out.append(", 2u); __builtin_memcpy(&");
+			ram(st(1).mem);
+			out.append(", &n2a_w, 2u); cpu.A = ");
+			ram(st(2).mem);
+			out.append("; cpu.set_nz(cpu.A); }\n");
+			finish(3);
+			return true;
+		}
+		// Constante 16 bits: LoadA(imm k0); StoreA(mem c); LoadA(imm k1); StoreA(mem c+1).
+		if (n >= 4 && st(0).kind == IrKind::LoadA && st(0).is_imm &&
+		    st(1).kind == IrKind::StoreA && st(1).is_mem && st(2).kind == IrKind::LoadA &&
+		    st(2).is_imm && st(3).kind == IrKind::StoreA && st(3).is_mem &&
+		    st(3).mem == static_cast<eng::u16>(st(1).mem + 1u)) {
+			ram(st(1).mem);
+			out.append(" = ");
+			hx(st(0).imm);
+			out.append("; ");
+			ram(st(3).mem);
+			out.append(" = ");
+			hx(st(2).imm);
+			out.append("; cpu.A = ");
+			hx(st(2).imm);
+			out.append("; cpu.set_nz(cpu.A);\n");
+			finish(3);
+			return true;
+		}
+		return false;
+	}
+
+	/// Reconocedor de idioms multibyte del backend encadenado: primero el **IR flexible**
+	/// (`try_ir_multibyte`, tolera neutros) y, si no, el **exacto** (`try_chain_multibyte_impl`).
+	/// Cuenta los aciertos en `idiom_hits_` (diagnóstico).
+	/// \return `true` si casó algún idiom (y `next` queda tras él).
+	[[nodiscard]] bool try_chain_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
+#if !defined(N2A_NO_IR)
+		if (try_ir_multibyte(out, p, next)) {
+			++idiom_hits_;
+			++ir_hits_;
+			return true;
+		}
+#endif
+		if (try_chain_multibyte_impl(out, p, next)) {
+			++idiom_hits_;
+			++exact_hits_;
+			return true;
 		}
 		return false;
 	}
