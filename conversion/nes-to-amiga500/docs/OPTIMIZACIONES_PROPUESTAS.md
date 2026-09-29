@@ -390,6 +390,21 @@ supera un presupuesto (p. ej. **≤ 300 KB** por juego), reportando además el %
 
 ---
 
+## Timing del codegen `--no-cycles` (fix de alto impacto)
+
+El plugin (`plugin_entry.cpp`, `n2a_block`) y los arneses devolvían **1 ciclo por bloque** cuando el
+codegen **no cuenta ciclos** (`--no-cycles`, perfil `--amiga`): la PPU avanzaba **3 dots por bloque**
+→ **temporización rota** y ~10× más despachos de los necesarios. Ahora, si `cpu.cycles` no cambió,
+devuelven los **ciclos base estáticos del bloque** (`n2a_block_cycles`, ya emitido por el
+transpilador): la PPU avanza con la **temporización correcta a nivel de bloque, sin coste por
+instrucción**. **Medido** (SMB, host): **13,0 fps vs 4,3** (≈**3×**), y a **1 frame la RAM es
+idéntica** (0/2048). La deriva a más frames es la imprecisión de los ciclos base (sin penalización
+de página/rama), que desaparece con **HLE de VBlank** (el VBlank lo marca el Amiga, no la PPU
+emulada). Es el cambio con más impacto de los probados: hace **usable** el codegen rápido con
+temporización correcta.
+
+---
+
 ## Orden recomendado
 
 1. **Runtime/kernel en asm** del bucle caliente (PRNG) — máximo retorno inmediato, riesgo contenido.

@@ -82,7 +82,9 @@ int gen_run(void* /*ctx*/, n2a::CPU& cpu, n2a::NESMemory& mem, int budget, int* 
 		*n = 1;
 	}
 	const eng::u32 delta = cpu.cycles - before;
-	return delta > 0u ? static_cast<int>(delta) : 1; // nunca 0 (evita el fallback)
+	// `--no-cycles` (delta==0): usar los ciclos base estaticos del bloque para que la PPU
+	// avance con el timing correcto (a nivel de bloque). Sin esto, 1 ciclo por bloque.
+	return delta > 0u ? static_cast<int>(delta) : static_cast<int>(n2a_block_cycles(pc));
 }
 
 double run_frames(n2a::NesSystem& sys, int frames) {

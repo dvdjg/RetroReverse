@@ -74,7 +74,11 @@ int n2a_block(void* cpu_p, void* mem_p, int* instrs) {
 		*instrs = 1;
 	}
 	const eng::u32 d = cpu.cycles - before;
-	return d != 0u ? static_cast<int>(d) : 1;
+	// Con `--no-cycles` el bloque **no** incrementa `cpu.cycles` (d==0): en ese caso se
+	// devuelven los **ciclos base estáticos** del bloque (`n2a_block_cycles`) para que el
+	// runtime avance la PPU con la temporalización correcta (a nivel de bloque, sin coste
+	// por instrucción). Sin esto, la PPU avanzaba 1 ciclo por bloque → timing roto.
+	return d != 0u ? static_cast<int>(d) : static_cast<int>(n2a_block_cycles(pc));
 }
 
 } // extern "C"
