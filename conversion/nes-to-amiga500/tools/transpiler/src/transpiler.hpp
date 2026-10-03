@@ -3662,6 +3662,10 @@ private:
 		out.append("static u8 ppu_ctrl=0, ppu_mask=0, ppu_status=0, ppu_oam_addr=0, ppu_latch=0;\n");
 		out.append("static u16 ppu_scroll=0, ppu_addr=0;\n");
 		out.append("static u8 vram[0x1000]; static u8 palette[0x20]; static u8 oam[0x100];\n");
+		// **Inferencia de intenciones**: celdas del nametable/atributo **sucias** (escritas por
+		// el juego desde el ultimo frame). El app las traduce a `Layer.set_tile`/`set_attr`.
+		out.append("static u8 nt_dirty[0x1000];\n");
+		out.append("static u8 hanam = 0; // hook del app: 0 = no inferir intenciones\n");
 		out.append("static u8 (*hal_ppu_read_hook)(u16) = 0;\n");
 		out.append("static void (*hal_vblank_hook)(void) = 0;\n");
 		out.append("static u8 hal_ppu_read(u16 a) {\n");
@@ -3676,9 +3680,21 @@ private:
 		out.append("    case 0x2004u: oam[ppu_oam_addr++] = v; break;\n");
 		out.append("    case 0x2005u: if (ppu_latch == 0) { ppu_scroll = v; } else { ppu_scroll = (u16)((v << 8) | (ppu_scroll & 0xFFu)); } ppu_latch ^= 1u; break;\n");
 		out.append("    case 0x2006u: if (ppu_latch == 0) { ppu_addr = (u16)(v << 8); } else { ppu_addr = (u16)((ppu_addr & 0xFF00u) | v); } ppu_latch ^= 1u; break;\n");
-		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x < 0x3F00u) { vram[x & 0xFFFu] = v; } else { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
+		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x < 0x3F00u) { vram[x & 0xFFFu] = v; nt_dirty[x & 0xFFFu] = 1u; } else { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
 		out.append("    case 0x4014u: { const u8* s = ram + ((u16)v << 8); for (int i = 0; i < 256; ++i) { oam[i] = s[i]; } } break;\n");
 		out.append("    default: break;\n    }\n}\n");
+		// --- Intenciones para el app (traducir a motores del engine) ---
+		out.append("// Scroll del BG (intencion: Layer.scroll_to).\n");
+		out.append("static u16 n2a_ppu_scroll_x(void) { return (u16)(ppu_scroll & 0xFFu); }\n");
+		out.append("static u16 n2a_ppu_scroll_y(void) { return (u16)(ppu_scroll >> 8); }\n");
+		out.append("static u8 n2a_ppu_ctrl(void) { return ppu_ctrl; }\n");
+		out.append("static u8 n2a_ppu_mask(void) { return ppu_mask; }\n");
+		out.append("// Celdas de nametable/atributo sucias (intencion: Layer.set_tile/set_attr).\n");
+		out.append("static int n2a_ppu_dirty_pop(u16* addr, u8* val) { for (u16 i = 0; i < 0x1000u; ++i) { if (nt_dirty[i]) { *addr = i; *val = vram[i]; nt_dirty[i] = 0u; return 1; } } return 0; }\n");
+		out.append("static u8 n2a_ppu_vram(u16 a) { return vram[a & 0xFFFu]; }\n");
+		out.append("// Sprites (intencion: SpriteScene) y paleta (intencion: palette.set).\n");
+		out.append("static u8 n2a_ppu_oam(u8 i) { return oam[i]; }\n");
+		out.append("static u8 n2a_ppu_pal(u8 i) { return palette[i & 0x1Fu]; }\n");
 		out.append("static void hal_vblank(void) { ppu_status = (u8)(ppu_status | 0x80u); }\n");
 		out.append("static void f_");
 		out.append_hex(nmi_, 4u, true);
