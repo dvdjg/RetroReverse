@@ -912,6 +912,7 @@ private:
 	mutable eng::u32 exact_hits_ = 0;         ///< De ellos, casados por el matcher exacto.
 	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> decomp_region_of_ {}; ///< bloque -> region (decompilado).
 	/// VSA de índices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
 	/// Permite plegar `LDA tabla,X` a literal cuando `X` es constante en el bloque.
 	bool native_x_known_ = false;
@@ -3519,11 +3520,26 @@ private:
 		out.append("static void f_");
 		out.append_hex(entry, 4u, true);
 		out.append("(void) {\n");
+		// **Reanudacion**: si `g_resume` apunta a un bloque de esta region, salta a su etiqueta.
+		out.append("    if (g_resume != 0u) { const u16 n2a_r = g_resume; g_resume = 0u; switch (n2a_r) { ");
+		for (eng::usize si = 0; si < stack.size(); ++si) {
+			out.append("case 0x");
+			out.append_hex(stack[si], 4u, true);
+			out.append("u: goto L_");
+			out.append_hex(stack[si], 4u, true);
+			out.append("; ");
+		}
+		out.append("} }\n");
 		for (eng::usize si = 0; si < stack.size(); ++si) {
 			const eng::u16 b = stack[si];
+			if (b < decomp_region_of_.size() && decomp_region_of_[b] == 0u) {
+				decomp_region_of_[b] = entry; // mapa bloque -> region (para el despachador)
+			}
 			out.append("L_");
 			out.append_hex(b, 4u, true);
-			out.append(": g_label = 0x");
+			out.append(": if (g_yield_req) { g_resume = 0x");
+			out.append_hex(b, 4u, true);
+			out.append("u; g_yield_req = 0u; return; } g_label = 0x");
 			out.append_hex(b, 4u, true);
 			out.append("u;\n");
 			eng::u16 p = b;
@@ -3703,10 +3719,16 @@ private:
 		// **evento de frame** (VBlank + NMI) en cada frontera (29780 ciclos NTSC). Es el
 		// reloj del port (no hay reloj de pared).
 		out.append("static u32 g_cyc = 0, g_frame_deadline = 29780u;\n");
+		// **Modo engine (reanudable)**: el app llama `n2a_frame()` una vez por frame; el port
+		// corre ~1 frame de ciclos, ejecuta el NMI y **cede** (cooperativo) en la siguiente
+		// frontera de bloque, guardando `g_resume` para reanudar. Con `g_engine_mode=0` el port
+		// se autogestiona (standalone, tests host).
+		out.append("static u8 g_engine_mode = 0, g_yield_req = 0;\n");
+		out.append("static u16 g_resume = 0;\n");
 		out.append("static void (*hal_frame_hook)(void) = 0;\n");
 		out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } f_");
 		out.append_hex(nmi_, 4u, true);
-		out.append("(); }\n");
+		out.append("(); if (g_engine_mode) { g_yield_req = 1u; } }\n");
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
 		// ejecuta), en vez de disparar el NMI de inmediato.
 		out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
@@ -3751,12 +3773,30 @@ private:
 			out.append("(void);\n");
 		}
 		out.append('\n');
+		(void)decomp_region_of_.resize(kSpace, 0u);
+		for (eng::u32 i = 0; i < kSpace; ++i) {
+			decomp_region_of_[i] = 0u;
+		}
 		for (eng::usize i = 0; i < entries.size(); ++i) {
 			emit_decompile_region(out, entries[i]);
 		}
-		out.append("[[gnu::used]] void game_main(void) {\n    f_");
+		// **`n2a_frame()`**: el app lo llama una vez por frame. La primera vez arranca por
+		// `reset`; despues reanuda en el bloque guardado en `g_resume` (corre ~1 frame de
+		// ciclos, ejecuta el NMI y cede). `g_engine_mode=1` activa el modo reanudable.
+		out.append("[[gnu::used]] void n2a_frame(void) {\n    g_engine_mode = 1u;\n    if (g_resume == 0u) { f_");
 		out.append_hex(reset_, 4u, true);
-		out.append("();\n}\n");
+		out.append("(); return; }\n    switch (g_resume) {\n");
+		for (eng::u32 a = 0; a < kSpace; ++a) {
+			if (decomp_region_of_[a] != 0u) {
+				out.append("    case 0x");
+				out.append_hex(static_cast<eng::u16>(a), 4u, true);
+				out.append("u: f_");
+				out.append_hex(decomp_region_of_[a], 4u, true);
+				out.append("(); return;\n");
+			}
+		}
+		out.append("    default: g_resume = 0u; return;\n    }\n}\n");
+		out.append("[[gnu::used]] void game_main(void) {\n    for (;;) { n2a_frame(); if (halted) { return; } }\n}\n");
 		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
 		out.append("int main() { game_main(); return 0; }\n#endif\n");
 	}
