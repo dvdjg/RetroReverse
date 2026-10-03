@@ -3783,19 +3783,23 @@ private:
 		// **`n2a_frame()`**: el app lo llama una vez por frame. La primera vez arranca por
 		// `reset`; despues reanuda en el bloque guardado en `g_resume` (corre ~1 frame de
 		// ciclos, ejecuta el NMI y cede). `g_engine_mode=1` activa el modo reanudable.
-		out.append("[[gnu::used]] void n2a_frame(void) {\n    g_engine_mode = 1u;\n    if (g_resume == 0u) { f_");
-		out.append_hex(reset_, 4u, true);
-		out.append("(); return; }\n    switch (g_resume) {\n");
+		// Tabla bloque->region (ordenada) + busqueda binaria. Un `switch` con miles de
+		// casos DESBORDA la tabla de salto del ensamblador m68k ("switch too large").
+		out.append("struct N2A_Res { u16 a; void (*fn)(void); };\n");
+		out.append("static const N2A_Res kRes[] = {\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (decomp_region_of_[a] != 0u) {
-				out.append("    case 0x");
+				out.append("    {0x");
 				out.append_hex(static_cast<eng::u16>(a), 4u, true);
-				out.append("u: f_");
+				out.append("u, &f_");
 				out.append_hex(decomp_region_of_[a], 4u, true);
-				out.append("(); return;\n");
+				out.append("},\n");
 			}
 		}
-		out.append("    default: g_resume = 0u; return;\n    }\n}\n");
+		out.append("};\nstatic const u16 kResN = (u16)(sizeof(kRes) / sizeof(kRes[0]));\n");
+		out.append("[[gnu::used]] void n2a_frame(void) {\n    g_engine_mode = 1u;\n    if (g_resume == 0u) { f_");
+		out.append_hex(reset_, 4u, true);
+		out.append("(); return; }\n    u16 lo = 0u, hi = kResN;\n    while (lo < hi) { const u16 mid = (u16)((lo + hi) / 2u); if (kRes[mid].a < g_resume) { lo = (u16)(mid + 1u); } else { hi = mid; } }\n    if (lo < kResN && kRes[lo].a == g_resume) { kRes[lo].fn(); return; }\n    g_resume = 0u;\n}\n");
 		out.append("[[gnu::used]] void game_main(void) {\n    for (;;) { n2a_frame(); if (halted) { return; } }\n}\n");
 		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
 		out.append("int main() { game_main(); return 0; }\n#endif\n");
