@@ -143,3 +143,41 @@ lectura desde ADF. Puntos clave:
   cambio de efecto, buffers reutilizados). Los valores de custom registers cambian por frame.
 - No intentar reconstruir una imagen completa de un frame en vivo. Usar screenshot como
   referencia visual (la captura del emulador es fiel) y el **código** como fuente de verdad.
+## Scratch de pruebas y diagnóstico (obligatorio)
+
+Todo artefacto efímero de prueba/diagnóstico vive en **`repo/_scratch/`** (gitignored con
+`/_scratch/`). **Nunca** en `%TEMP%`, en el workspace, ni junto al código fuente. Subdirs:
+
+| Subdir | Contenido |
+|--------|-----------|
+| `_scratch/host/` | probes C++ que corren en el host (x64). |
+| `_scratch/out/`  | salidas regenerables (`.bmp/.png`, volcados, trazas). |
+| `_scratch/ref/`  | referencias regenerables (frames del oráculo). |
+| `_scratch/bin/`  | ejecutables compilados de los probes. |
+
+Herramientas locales: `_scratch/build-probe.sh <name>.cpp [includes…]` (compila
+`host/<name>.cpp` → `bin/<name>.exe`) y `_scratch/README.md` (convenciones).
+
+## Lecciones aprendidas (reglas)
+
+### 1. Validar SIEMPRE contra el oráculo, nunca contra uno mismo
+Un render del **port decompilado** no valida nada contra el **port decompilado**: si el port
+está mal, ambos renders coinciden trivialmente. La referencia correcta es el **oráculo**
+(intérprete `n2a::NesSystem`, camino lento y correcto) del propio transpiler. Para lo visual:
+`_scratch/host/oracle_frame.cpp` vuelca un frame del intérprete; comparar ese frame (recorte del
+playfield) contra la captura del Amiga **a ojo y con métrica** (histograma / diff). Si no hay
+oráculo disponible para una ROM, decirlo: no dar por buena una comparación auto-referente.
+
+### 2. El HAL del PPU del port no debe enrutar escrituras CHR a la nametable
+En el modelo del port, `vram[0x1000]` es SOLO el espacio de nametables (`$2000-$2FFF`); el CHR
+es ROM de solo lectura. `$2007` debe escribir: `$2000-$3EFF → vram`, `$3F00+ → paleta`,
+`$0000-$1FFF (CHR) → ignorar`. Enrutar `x < 0x3F00` a `vram[x & 0xFFF]` hace que, p. ej., una
+escritura a `$03C0` caiga en `vram[0x3C0]` y **machaque la tabla de atributos** (el nametable
+queda bien; las subpaletas se van a 0 → colores equivocados). Ver
+`transpiler.hpp` (`emit_decompile`, caso `$2007`). Bug real detectado en DK (Rev A).
+
+### 3. El diagnóstico visual requiere aislar capas
+Un pixel equivocado puede venir del BG, de los atributos/subpaletas, de los sprites HW, o del
+path de composición (Blitter/X-limited/Copper). Antes de tocar el render, volcar el **estado
+observable** del PPU (nametable, atributos, paleta, OAM) del port y compararlo con el oráculo
+celda a celda. Sólo cuando el estado coincide, el problema es de render.

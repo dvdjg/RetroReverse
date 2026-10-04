@@ -105,3 +105,13 @@ RE_projects/
 conversion/**/transpiled/
 *.n2x
 *.n2x.json
+
+# --- Scratch de pruebas/diagnóstico (local, NUNCA versionar) -------------------
+# Único lugar para pruebas efímeras (probes host, volcados, capturas de comparación,
+# scripts de un solo uso). Nada de esto va al repo ni se dispersa por otros árboles:
+#   _scratch/host/  -> programas C++ de prueba/diagnóstico
+#   _scratch/out/   -> salidas (.bmp/.png/bin/volcados) regenerables
+#   _scratch/ref/   -> referencias (p. ej. frames del oráculo) regenerables
+#   _scratch/bin/   -> compilados de los probes
+# Ver `_scratch/README.md` (local) y AGENTS.md §"Scratch de pruebas".
+/_scratch/
