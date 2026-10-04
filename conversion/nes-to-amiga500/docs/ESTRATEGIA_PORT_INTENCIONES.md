@@ -141,6 +141,25 @@ hibridacion fina. La metrica que decide es **ciclos/frame en hardware real**.
 - **Medición no-warp puede estar limitada por el emulador cycle-exact** (host); conviene medir en
   hardware real o afinar el emulador antes de concluir cifras finas.
 
+## Setup de máquinas (Kickstarts) para probar A1200/A4000/CD32
+
+Descargados desde `archive.org/download/commodore-amiga-firmware` a `C:\Amiga` (512 KB c/u):
+`KICK_A1200.rom` (v3.1 r40.068), `KICK_A4000.rom` (r40.068), `KICK_A500_31.rom` (r40.063, A500/A600/A2000),
+`KICK_CD32.rom` (r40.060) + `CD32_EXT.rom` (Extended-ROM). A500 1.3 ya estaba (`KICK13.rom`).
+
+Ejecución:
+```
+WINUAE_QUICKSTART=a1200,0 WINUAE_KICKSTART=c:/Amiga/KICK_A1200.rom \
+  ./tools/run/run-demo.sh demos/nes/dk_port_xl --config A500_release
+```
+- `patchConfig` (run-demo.ts) fija `cpu_model=68020` + `fpu_model=none` para quickstarts a1200/a4000
+  (con un Kickstart 1.3 el quickstart podía no fijar la CPU).
+- **Verificado**: el build A500 (68000) arranca en A1200 real (3.1) → READY y render correcto.
+- **Pendiente**: el build `TARGET_MACHINE=A1200` con **`-m68020` NO arranca** (state=1, cuelga en
+  init) aunque el mismo config con el build 68000 sí. Es un problema del **código generado con
+  `-m68020`** (o del startup/shim del engine en 68020), a depurar. Mientras, A1200 usa el build
+  68000 (compatible con el 68020).
+
 ## Pasos recomendados (orden)
 
 1. **Input** (joystick→`$4016`) — barato, desbloquea jugable y medir fps con gameplay.
