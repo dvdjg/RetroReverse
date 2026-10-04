@@ -491,3 +491,19 @@ Se anadio un **trace de escrituras a RAM** en port y oraculo (N2A_WTRACE), que d
    frame, el port ~98 -> gran diferencia de camino de codigo a investigar. Las transiciones siguen
    ~5-10 frames por detras.
 
+
+## A500: el port tambien llega a 50 fps (no se queda corto)
+
+Medido con build 68000 + runner A500 real (quickstart=a500, cpu_model=68000, Kickstart 3.1,
+cycle_exact off): **A500 = 142958 ciclos/frame = 49.62 fps** (1.008 campos/frame), vs A1200 ~49.3-49.9.
+El trabajo del port es pequeno frente a los 20 ms del frame, asi que aunque el 68000 a 7 MHz sea ~2-3x
+mas lento que el 68020 a 14 MHz, sigue cabiendo con holgura -> **extrapolable al A500**.
+
+## Deriva del regimen: el bucle principal (spin) del oraculo vs el port
+
+Con el trace de escrituras, tras el fix del SP el init coincide; en el **frame 1** el oraculo ejecuta el
+bucle principal C7E1: JSR F4ED; JMP C7E1 en **spin** (F4ED rota el estado de 64 bits en \-\) muchas
+veces por frame (de ahi las ~4032 escrituras RAM/frame; el port hace ~98 porque su spin-yield cede al
+primer back-edge). El port **diverge a codigo en \** tras la primera iteracion en vez de seguir el
+bucle -> camino de codigo distinto a investigar (siguiente paso). Las transiciones siguen ~5-10 frames por
+detras mientras no se cierre.
