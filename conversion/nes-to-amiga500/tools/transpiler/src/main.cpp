@@ -1,4 +1,4 @@
-﻿// nes_transpiler (fase 1) â€” ROM NES (iNES/NROM) â†’ C++23 sobre `eng/core`.
+// nes_transpiler (fase 1) â€” ROM NES (iNES/NROM) â†’ C++23 sobre `eng/core`.
 //
 // Uso:
 //   nes_transpiler <entrada.nes> [-o <salida.cpp>]
@@ -347,7 +347,7 @@ constexpr eng::u8 kRamProg[] = {
 void print_usage(const char* argv0) {
 	(void)argv0;
 	n2a::out_line("nes_transpiler (fase 1) â€” NES (iNES/NROM) â†’ C++23 (eng/core)");
-	n2a::out_line("Uso: nes_transpiler <entrada.nes> [-o <salida.cpp>] [--facts <hechos.txt>]");
+	n2a::out_line("Uso: nes_transpiler <entrada.nes> [-o <salida.cpp>] [--facts <hechos.txt>] [--driver <drv.txt>]");
 	n2a::out_line("     [--chain] [--rom-direct] [--fast-ram] [--no-cycles] [--native] [--best]");
 	n2a::out_line("     [--pc-trace <hot.txt>] [--ind-targets <ind.txt>]  (telemetria de opcode_hist/ind_targets)");
 	n2a::out_line("     --emit-mini-rom   <salida.nes>");
@@ -534,12 +534,117 @@ bool load_pc_trace(const char* path, n2a::Transpiler& tp) {
 	return true;
 }
 
-/// Transpila la ROM `rom` al `.cpp` `out_cpp`. \return `true` si fue bien.
-bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
+/// Directiva de **parcheo de ROM** de un fichero de driver (`--driver`): escribe `val` en la
+/// direccion de CPU `addr` (>= 0x8000) del PRG antes de transpilar. Base de las "trampas" de
+/// port por juego (p. ej. fijar el estado del PRNG o neutralizar un temporizador).
+struct RomPatch {
+	eng::u16 addr = 0; ///< Direccion de CPU (0x8000..0xFFFF).
+	eng::u8 val = 0;   ///< Byte a escribir.
+};
+
+/// Estado del **driver** por juego (`--driver <fichero>`): decisiones de port que no se pueden
+/// inferir del codigo y que se almacenan aparte para que el generador las aplique. Version 1:
+/// parcheos de ROM (`patch`) y notas de documentacion (`note`). El resto de directivas
+/// (`wait`/`skip`/`vblank`/`rng`/`ram`/`frame_cycles`) esta especificado en
+/// `docs/DRIVERS_PORT.md` y se implementara encima de este mismo parser.
+struct DriverSpec {
+	eng::util::Vector<RomPatch, eng::util::HeapAlloc> patches {}; ///< Parcheos de ROM.
+};
+
+/// Carga un fichero de **driver** (`--driver`). Formato, una directiva por linea (`#` comenta,
+/// hex con o sin `0x`):
+/// ``` 
+/// patch <addr> <byte> [byte ...]   ; escribe bytes en la ROM (CPU >= 0x8000)
+/// note  <texto libre>              ; documenta una decision (se imprime)
+/// ``` 
+/// \return `true` si el fichero se leyo (las lineas invalidas se ignoran).
+bool load_driver(const char* path, DriverSpec& drv) {
+	ByteBuffer buf;
+	if (!n2a::read_whole_file(path, buf)) {
+		return false;
+	}
+	StringView text(reinterpret_cast<const char*>(buf.data()), buf.size());
+	while (!text.empty()) {
+		const eng::usize nl = text.find('\n');
+		StringView line = (nl == StringView::npos) ? text : text.substr(0u, nl);
+		text = (nl == StringView::npos) ? StringView {} : text.substr(nl + 1u);
+		skip_ws(line);
+		if (line.empty() || line[0] == '#') {
+			continue;
+		}
+		const StringView kind = next_token(line);
+		if (kind == "patch") {
+			eng::u16 addr = 0;
+			if (!parse_hex(next_token(line), addr)) {
+				continue;
+			}
+			while (true) {
+				eng::u16 v = 0;
+				if (!parse_hex(next_token(line), v)) {
+					break;
+				}
+				RomPatch p {};
+				p.addr = addr++;
+				p.val = static_cast<eng::u8>(v);
+				(void)drv.patches.push_back(p);
+			}
+		} else if (kind == "note") {
+			skip_ws(line);
+			Dyn m;
+			m.append("[driver] ");
+			m.append(line);
+			n2a::out_line(m.view());
+		}
+	}
+	return true;
+}
+
+/// Aplica los parcheos del driver a los bytes crudos de la ROM **antes** de `load()`: escribe en
+/// el PRG segun su tamano (`bytes[4]*16K`), mapeando `addr` a `16 + (addr - 0x8000) % prg_size`
+/// (cubre el espejo de NROM-128). \return numero de bytes parcheados.
+eng::u32 apply_rom_patches(ByteBuffer& bytes, const DriverSpec& drv) {
+	if (bytes.size() < 16u) {
+		return 0u;
+	}
+	const eng::u32 prg_size = static_cast<eng::u32>(bytes[4]) * 16384u;
+	if (prg_size == 0u) {
+		return 0u;
+	}
+	eng::u32 applied = 0u;
+	for (eng::usize i = 0; i < drv.patches.size(); ++i) {
+		const RomPatch& p = drv.patches[i];
+		if (p.addr < 0x8000u) {
+			continue;
+		}
+		const eng::u32 off = 16u + ((static_cast<eng::u32>(p.addr) - 0x8000u) % prg_size);
+		if (off < bytes.size()) {
+			bytes[off] = p.val;
+			++applied;
+		}
+	}
+	return applied;
+}
+
+/// Transpila la ROM `rom` al `.cpp` `out_cpp`. `driver` es el fichero de decisiones de port por
+/// juego (`--driver`, opcional). \return `true` si fue bien.
+bool transpile_rom(const char* rom, const char* out_cpp, const char* facts, const char* driver) {
 	ByteBuffer bytes;
 	if (!n2a::read_whole_file(rom, bytes)) {
 		n2a::err_line("error: no se pudo leer la ROM");
 		return false;
+	}
+	if (driver != nullptr) {
+		DriverSpec drv;
+		if (!load_driver(driver, drv)) {
+			n2a::err_line("error: no se pudo leer el fichero de driver (--driver)");
+			return false;
+		}
+		const eng::u32 n = apply_rom_patches(bytes, drv);
+		Dyn m;
+		m.append("--driver: ");
+		m.append_u32(n);
+		m.append(" bytes de ROM parcheados");
+		n2a::out_line(m.view());
 	}
 	n2a::Transpiler tp;
 	if (!tp.load(bytes.data(), bytes.size())) {
@@ -900,6 +1005,7 @@ int main(int argc, char** argv) {
 	eng::util::StringView output("generated_game.cpp");
 	eng::util::StringView outdir(".");
 	const char* facts_path = nullptr;
+const char* driver_path = nullptr; ///< `--driver`: decisiones de port por juego.
 	const char* entry = nullptr;
 	const char* cxx = "g++";
 	const char* target = nullptr; // plataforma destino (etiqueta del nombre del .n2x)
@@ -940,6 +1046,10 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--facts" && i + 1 < argc) {
 			facts_path = argv[++i];
+			continue;
+		}
+		if (arg == "--driver" && i + 1 < argc) {
+			driver_path = argv[++i];
 			continue;
 		}
 		if (arg == "--pc-trace" && i + 1 < argc) {
@@ -1166,7 +1276,7 @@ int main(int argc, char** argv) {
 				n2a::out_line(s.view());
 				write_sidecar(json, base, tag, rom, crc); // asegura el sidecar
 			} else {
-				if (!transpile_rom(rom, cpp, facts_path)) {
+				if (!transpile_rom(rom, cpp, facts_path, driver_path)) {
 					rc = 1;
 					continue;
 				}
@@ -1218,7 +1328,7 @@ int main(int argc, char** argv) {
 	}
 
 	// Modo simple: una ROM -> un .cpp.
-	if (!transpile_rom(in_paths[0].c_str(), output.data(), facts_path)) {
+	if (!transpile_rom(in_paths[0].c_str(), output.data(), facts_path, driver_path)) {
 		return 1;
 	}
 	return 0;

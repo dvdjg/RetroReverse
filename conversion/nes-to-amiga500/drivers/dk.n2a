@@ -1,0 +1,16 @@
+# Driver de port de Donkey Kong (World) (Rev A) -- NROM.
+# Decisiones de port por juego que el generador NO puede inferir del codigo.
+# Formato y juego de directivas: docs/DRIVERS_PORT.md.
+# Uso:  nes_transpiler "roms/nes/Donkey Kong (World) (Rev A).nes" \
+#         --decompile --flat --vblank --driver drivers/dk.n2a -o dk_port.hpp
+
+note DK: bucle principal C7E1 (JSR F4ED) = LFSR/PRNG de 64 bits en $18-$1F; corre ~377
+note     iteraciones/frame. Para mantener 50 fps NO se emula el spin (ver --driver wait/rng).
+note DK: la rutina de siembra del RNG (L_C9B1, $18=0F/$19=13) NO se alcanza en el port:
+note     la maquina de estados diverge antes de $0510=$38. Bug raiz pendiente de arreglar.
+
+# --- Ejemplos (comentados hasta implementar la directiva) -------------------------------
+# patch  BFFF EA        ; ejemplo: escribir 0xEA en el ultimo byte del PRG (prueba de patch)
+# skip   C85F           ; no emitir el handler NMI (no usar en DK)
+# wait   C7E4           ; marcar el bucle C7E4 como busy-wait (cede sin ejecutar el spin)
+# rng    F4ED 18 08     ; PRNG en $F4ED sobre 8 bytes desde $18 (modelar barato)
