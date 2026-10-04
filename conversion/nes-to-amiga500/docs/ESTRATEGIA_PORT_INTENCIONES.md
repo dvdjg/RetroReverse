@@ -110,10 +110,15 @@ checks, `g_label`/yield por bloque), o que el **emulador cycle-exact** del host 
 velocidad real (a confirmar). Ambos demos de port (Blitter y XL) dan el **mismo** ~3,3 fps → el
 cuello es la **lógica del port**, no el render.
 
-**Conclusión revisada:** 60 fps en A1200 **exige optimizar el port** (no es automático) y **medirlo
-en hardware real o emulador a velocidad plena**. Palancas: (1) **spin-yield** del bucle de espera,
-(2) codegen rápido (estado en registros/locales, sin `g_label`/yield por instrucción, `-m68020`),
-(3) menos bounds-checks en `rd/wr`. La métrica que decide es ciclos/frame medidos en hardware.
+**Actualización tras el spin-yield:** el trabajo del port bajó de **8071 a 1435 lecturas de
+bus/frame** (5,6× menos) — el busy-wait era el 82%. A ~30 ciclos/lectura serían **~43k
+ciclos/frame**, muy por debajo del presupuesto de 60 fps (238k): **el A1200 debería dar 60 fps de
+sobra**. Los **~14,6 fps** medidos (wall-clock, sin warp) son casi seguro el **techo del emulador
+cycle-exact**, no del A1200. → **Medir en hardware real** (o emulador a velocidad plena) antes de
+concluir; `-flto` solo mejoró ~2% (build 10× más lento) y se descartó.
+
+Palancas restantes (menores ya): bounds-checks en `rd/wr`, `-m68020` (arreglando el startup).
+La métrica que decide es **ciclos/frame en hardware**.
 
 ## Optimización: intentos y lecciones (2026)
 
