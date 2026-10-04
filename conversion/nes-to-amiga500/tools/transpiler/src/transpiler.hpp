@@ -3868,18 +3868,12 @@ private:
 					// header del bucle, cuya entrada cede la REGION (evita el bucle de NMIs que
 					// causaba el yield a traves de una llamada anidada).
 					if (decomp_wait_loop(b)) {
-						// Busy-wait (bucle incondicional infinito, solo salible por NMI). Con el
-						// presupuesto de ciclos (`vblank_sync`), la frontera de frame se cruza SOLO al
-						// agotar `g_frame_deadline` -> el bucle da el MISMO numero de iteraciones que el
-						// oraculo (el LFSR de `$18-$1F` avanza por iteracion), en vez de 1. Sin el, se
-						// cede al limite de frame por el contador de ciclos.
-						if (vblank_sync_) {
-							out.append("    if (g_cyc >= g_frame_deadline) { frame_event();\n");
-							if (flat_) { emit_nmi_enter(out, b); }
-							out.append("    }\n");
-						} else {
-							out.append("    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
-						}
+						// VBlank: el busy-wait dispara el NMI directamente (frame boundary);
+						// ciclos: ceder al limite de frame por el contador.
+						out.append(vblank_sync_
+							? "    frame_event();\n"
+							: "    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
+						if (flat_ && vblank_sync_) { emit_nmi_enter(out, b); }
 					}
 					if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
@@ -4024,18 +4018,10 @@ private:
 		out.append("static void f_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("(void); /* handler NMI */\n");
-		// **Modelo de timing del port**: un contador de **ciclos emulados** (`g_cyc`) mide el
-		// trabajo del 6502 y define la frontera de frame (29780 ciclos NTSC). Con `vblank_sync`
-		// (A1200/A500) el presupuesto es **fijo** y lo consume el busy-wait: solo se cruza la
-		// frontera al agotarlo -> el bucle principal da el **mismo numero de iteraciones** que el
-		// oraculo (clave: el LFSR de `$18-$1F` avanza por iteracion; 1 vs N desincronizaba el
-		// juego). Sin `vblank_sync`, el limite crece y `tick` dispara la frontera directamente
-		// (modelo de ciclos completo, PC/fidelidad).
-		if (vblank_sync_) {
-			out.append("static u32 g_cyc = 0u; static const u32 g_frame_deadline = 29780u; /* presupuesto fijo de 1 frame NTSC */\n");
-		} else {
-			out.append("static u32 g_cyc = 0, g_frame_deadline = 29780u;\n");
-		}
+		// **Modelo de timing del port**: un contador de **ciclos emulados** dispara el
+		// **evento de frame** (VBlank + NMI) en cada frontera (29780 ciclos NTSC). Es el
+		// reloj del port (no hay reloj de pared).
+		out.append("static u32 g_cyc = 0, g_frame_deadline = 29780u;\n");
 		// **Modo engine (reanudable)**: el app llama `n2a_frame()` una vez por frame; el port
 		// corre ~1 frame de ciclos, ejecuta el NMI y **cede** (cooperativo) en la siguiente
 		// frontera de bloque, guardando `g_resume` para reanudar. Con `g_engine_mode=0` el port
@@ -4050,14 +4036,7 @@ private:
 		out.append("static unsigned n2a_nmi_fires(void) { return g_nmi_fires; }\n");
 		out.append("static u16 g_resume = 0;\n");
 		out.append("static void (*hal_frame_hook)(void) = 0;\n");
-		// `frame_event`: cruza la frontera (VBlank + hook + marca NMI). Con `vblank_sync` consume
-		// el presupuesto fijo del frame (`g_cyc -= g_frame_deadline`, conserva el remanente para no
-		// acumular error ni desbordar `u32`); sin el, el limite crece (modelo de ciclos de PC).
-		if (vblank_sync_) {
-			out.append("static void frame_event(void) { g_cyc = (g_cyc >= g_frame_deadline) ? (g_cyc - g_frame_deadline) : 0u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } ");
-		} else {
-			out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } ");
-		}
+		out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } ");
 		if (flat_) {
 			// Flatten: el NMI NO se llama como funcion (seria un call C que recargaria
 			// A/X/Y); se marca y `n2a_run` lo ejecuta inline mediante la pila de retorno.
@@ -4071,18 +4050,19 @@ private:
 			out.append("(); } ");
 		}
 		out.append("if (g_engine_mode) { g_yield_req = 1u; } }\n");
-		// Sondeo de VBlank: **espera** al evento. Con `vblank_sync` avanza `g_cyc` a la frontera
-		// (consume el resto del frame) y lo ejecuta; sin el, igual (modelo de ciclos completo).
+		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
+		// ejecuta), en vez de disparar el NMI de inmediato.
 		if (vblank_sync_) {
-			out.append("static void hal_wait_vblank(void) { if (g_cyc < g_frame_deadline) { g_cyc = g_frame_deadline; } frame_event(); }\n");
+			out.append("static void hal_wait_vblank(void) { frame_event(); }\n");
 		} else {
 			out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
 		}
-		// `tick` acumula ciclos en ambos modos. Con `vblank_sync` NO dispara la frontera (lo hace
-		// el busy-wait via `g_cyc >= g_frame_deadline`): asi el bucle principal se ejecuta el mismo
-		// numero de iteraciones que el oraculo. Sin el, `tick` la dispara al cruzar el limite.
+		// VBlank (A1200): `tick` solo acumula ciclos (modelo hibrido); el frame lo marca el
+		// busy-wait/`hal_wait_vblank`. Modelo de ciclos completo si no esta activo (PC/fidelidad).
 		if (vblank_sync_) {
-			out.append("static void tick(u32 n) { g_cyc += n; }\n");
+			// VBlank: `g_cyc` no marca el frame -> `tick` es no-op; el compilador lo DCE (y el
+			// acumulador de ciclos) al no leerse en ningun sitio. Ahorra ~10 ciclos/instruccion.
+			out.append("static void tick(u32 n) { (void)n; }\n");
 		} else {
 			out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { frame_event(); } }\n");
 		}
