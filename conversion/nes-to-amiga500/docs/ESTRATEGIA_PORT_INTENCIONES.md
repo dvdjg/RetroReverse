@@ -141,6 +141,36 @@ hibridacion fina. La metrica que decide es **ciclos/frame en hardware real**.
 - **Medición no-warp puede estar limitada por el emulador cycle-exact** (host); conviene medir en
   hardware real o afinar el emulador antes de concluir cifras finas.
 
+## Objetivo de fps: **50 (PAL)** (no 60)
+
+La NES es 60 Hz (NTSC) pero el objetivo es **PAL = 50 fps**. El bucle del engine
+(`run_frames_polling`: `update → wait_vblank → render`) queda **sincronizado al VBlank de la PAL
+(50 Hz)**: 60 fps sincronizados son **imposibles en PAL**. Objetivo realista y correcto: **50 fps**.
+
+## Aislamiento de costes (A1200 + Kickstart 3.1, sin warp)
+
+Pruebas con flags de test (`kRunPort`, `kDoCompose`, `kScrollTest`):
+
+| Configuración | fps |
+|---|---|
+| Port ON, render normal (scroll) | ~22 |
+| Port ON, **scroll OFF** | ~21 |
+| Port ON, **compose/install SALTADO** | ~22 |
+| **Port OFF** (solo render) | ~45–50 |
+
+**Hallazgos (medidos):**
+1. **El render X-limited es DESPRECIABLE**: saltar `compose`/`install` no cambia el fps (~22). El
+   compositor reemite ~40 MOVEs/frame (<1 ms). **No es el cuello.**
+2. **El scroll es despreciable**: activarlo o no da lo mismo (~21 vs ~22).
+3. **El PORT es el cuello real**: apagarlo sube a ~45–50. El port añade **~22 ms/frame**
+   (~320k ciclos) ≈ 100 ciclos por instrucción 6502 (codegen ingenuo: estado en memoria, checks,
+   dispatch por bloque).
+4. El techo del **emulador cycle-exact** puede limitar la medición; confirmar sin cycle-exact/hardware.
+
+**Conclusión:** optimizar el render no ayuda; el trabajo está en **la lógica del port** (codegen).
+Meta: bajar el port de ~22 ms a ~<8 ms para que junto al render (~20 ms de VBlank) quede holgado en
+el frame de 50 fps.
+
 ## Setup de máquinas (Kickstarts) para probar A1200/A4000/CD32
 
 Descargados desde `archive.org/download/commodore-amiga-firmware` a `C:\Amiga` (512 KB c/u):
