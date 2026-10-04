@@ -423,7 +423,6 @@ un perfilado más profundo del engine. En términos absolutos el port usa **~2 %
 frame-lock del engine*, no de codegen.
 
 ### Medición por línea de raster: el trabajo SÍ cabe en el frame
-
 Instrumentando `update()` con `backend.current_raster_line()` (inicio/fin), en gameplay el trabajo
 del demo+port va de la **línea 312 (VBlank) a la ~29** → **~29 líneas ≈ 1.86 ms**, holgadamente
 dentro del frame de 20 ms. Es decir, el trabajo **no** desborda el frame; el `+0.44 ms` que separa
@@ -437,3 +436,17 @@ trabajo de engine más profundo. En cualquier caso, **el port está holgadamente
 **Conclusión #1:** abaratar el re-blit (marcador) atacaría ~0.4 ms, pero el NMI del port (0.44 ms,
 lógica de juego con HAL ya optimizado) seguiría sumando por el mismo mecanismo. El límite es el
 frame-lock, no el coste del codegen.
+
+## Fidelidad de render — borde derecho (arreglado)
+
+El compositor X-limited del engine usa un **DIW fijo de 320 px** (`kDiwStrt=0x2981`,
+`kDiwStop=0x29C1`, `xlimited_base.hpp:355`), y las demos de referencia usan `kViewportW=320`
+(`111_xlimited_sidescroller`, `112_xlimited_robocod`, `202_xlimited_dpf`). El port DK usa 256 px
+(pantalla NES) → las **4 columnas de margen del anillo (16-19)** se veían como "tiles sueltos" en el
+borde derecho.
+
+**Fix (demo):** rellenar esas columnas **VACÍAS** (`0xFFFF`) en `rebuild_world_from_port` y en el
+incremental (`update_world_from_dirty`), en vez de repetir la pantalla (bucle `c += kScreenCols`).
+Resultado: borde negro limpio; fps 48.9 → **49.5 real** (menos tiles de margen que rellenar).
+Pendiente: la pantalla NES (256 px) queda **alineada a la izquierda** en la ventana de 320 px (64 px
+de borde negro a la derecha); centrarla sería un ajuste fino del DIW/viewport.
