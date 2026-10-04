@@ -3804,11 +3804,17 @@ private:
 		out.append("(); if (g_engine_mode) { g_yield_req = 1u; } }\n");
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
 		// ejecuta), en vez de disparar el NMI de inmediato.
-		out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
+		if (vblank_sync_) {
+			out.append("static void hal_wait_vblank(void) { frame_event(); }\n");
+		} else {
+			out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
+		}
 		// VBlank (A1200): `tick` solo acumula ciclos (modelo hibrido); el frame lo marca el
 		// busy-wait/`hal_wait_vblank`. Modelo de ciclos completo si no esta activo (PC/fidelidad).
 		if (vblank_sync_) {
-			out.append("static void tick(u32 n) { g_cyc += n; }\n");
+			// VBlank: `g_cyc` no marca el frame -> `tick` es no-op; el compilador lo DCE (y el
+			// acumulador de ciclos) al no leerse en ningun sitio. Ahorra ~10 ciclos/instruccion.
+			out.append("static void tick(u32 n) { (void)n; }\n");
 		} else {
 			out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { frame_event(); } }\n");
 		}

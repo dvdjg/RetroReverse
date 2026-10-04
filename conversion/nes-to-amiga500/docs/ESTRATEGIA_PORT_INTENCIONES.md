@@ -171,6 +171,14 @@ Pruebas con flags de test (`kRunPort`, `kDoCompose`, `kScrollTest`):
 Meta: bajar el port de ~22 ms a ~<8 ms para que junto al render (~20 ms de VBlank) quede holgado en
 el frame de 50 fps.
 
+**Micro-optimizaciones probadas (poco/nulo efecto medido — el emulador domina el ruido):**
+- Quitar el `g_step_limit` de `rd`: ~0%.
+- En modo VBlank, `tick` → no-op (y `hal_wait_vblank` sin `g_cyc`): deja `g_cyc` sin leer → el
+  compilador lo DCE; ~0% medido. El coste del port está repartido entre `rd`/`wr` (accesos de bus),
+  la operación + flags por instrucción y el dispatch por bloque (~100 ciclos/instrucción) — no en
+  un único sitio. **Atacarlo de verdad requiere A/X/Y en registros locales y menos checks por
+  instrucción** (cambio amplio del codegen).
+
 ## Setup de máquinas (Kickstarts) para probar A1200/A4000/CD32
 
 Descargados desde `archive.org/download/commodore-amiga-firmware` a `C:\Amiga` (512 KB c/u):
