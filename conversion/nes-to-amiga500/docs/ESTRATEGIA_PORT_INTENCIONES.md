@@ -639,3 +639,25 @@ en flat, se rompieron referencias (probes/diagnostico) -> **revertido**.
 
 Estado actual (bueno): fix (b), demo A500 **49.75 fps**, drivers/dk.n2a + --driver (patch/wait/
 note) + docs/DRIVERS_PORT.md.
+
+### [2] Pacing por bloque: segundo intento y causa del segfault
+
+Reintento con el check de presupuesto en la entrada de cada bloque:
+- **Con yield en el check**: **segfault**. El yield cae en bloques que **no estan en kRL** (la
+  tabla de reanudacion) -> la reanudacion falla. (Se probo tambien una bandera g_in_nmi para no
+  ceder dentro del NMI; el segfault persistia por el tema de kRL.)
+- **Sin yield en el check** (solo decrementa g_cyc + VBlank): no revienta, pero es **inerte**: el
+  port hace ~**1500 ciclos/frame** (1 iteracion del spin + NMI) y **nunca alcanza 29780**.
+
+**Causa raiz del conjunto**: el port **no ejecuta el spin** (1 iteracion/frame), asi que su conteo
+de ciclos esta muy por debajo de 29780 -> cualquier pacing por presupuesto es inerte. El oraculo
+gasta la mayor parte del frame en el spin (RNG).
+
+**Conclusion / diseno completo** (para el proximo hilo):
+1. **wait** en el busy-wait marcado: **no ejecutar el cuerpo** (no hacer goto al header).
+2. **Contabilizar** los ciclos que el spin habria consumido: g_cyc = g_frame_deadline (O(1)).
+3. **ng**: avanzar el LFSR $18- por el numero de iteraciones equivalente (O(1) / tabla).
+4. Frontera de frame = 29780 ciclos, sin correr el spin -> **CPU~0 y pixel-perfect a 50 fps**.
+
+Restriccion descubierta: cualquier **yield por bloque** debe caer solo en bloques presentes en
+kRL (o ampliar kRL a todos los bloques), porque g_resume se resuelve por esa tabla.
