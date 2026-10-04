@@ -909,6 +909,9 @@ private:
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
 	bool decompile_ = false;     ///< Si `true`, emitir el decompilado (ver `set_decompile`).
+	/// Flags (ZNCV) que la instruccion actual DEBE fijar (vivacidad): los `setnz`/`Cf`/`Vf` de
+	/// flags no vivos se OMITEN (no simular trabajo absurdo). 0xFF = fijar todos (conservador).
+	eng::u8 d_keep_flags_ = 0xFFu;
 	bool vblank_sync_ = false;   ///< Si `true`, frame boundary por VBlank (sin tick/frame por instruccion; ver `set_vblank_sync`).
 	mutable const char* native_reject_ = ""; ///< Motivo del Ãºltimo rechazo de `native_ok()` (diagnÃ³stico).
 	mutable eng::u16 native_reject_addr_ = 0; ///< DirecciÃ³n asociada al rechazo (p. ej. el `JSR`).
@@ -1269,6 +1272,41 @@ private:
 
 	/// CondiciÃ³n C++ del flag que prueba una rama (`BNE` â†’ `!cpu.Z`, â€¦).
 	/// \return Cadena estÃ¡tica con la expresiÃ³n; `"false"` si no es una rama conocida.
+	/// Flags del 6502 que **escribe** una instruccion (bit0=Z, bit1=N, bit2=C, bit3=V).
+	/// 0 = transparente (STA/STX/STY/JMP/JSR/RTS/BRK/NOP/movimientos de flags del P sin aritmetica).
+	[[nodiscard]] static eng::u8 decomp_flags_written(const char* m) noexcept {
+		if (sv_equal(m, "LDA") || sv_equal(m, "LDX") || sv_equal(m, "LDY") ||
+		    sv_equal(m, "PLA") || sv_equal(m, "PLP") || sv_equal(m, "TAX") ||
+		    sv_equal(m, "TAY") || sv_equal(m, "TXA") || sv_equal(m, "TYA") ||
+		    sv_equal(m, "TSX") || sv_equal(m, "AND") || sv_equal(m, "ORA") ||
+		    sv_equal(m, "EOR") || sv_equal(m, "INC") || sv_equal(m, "DEC") ||
+		    sv_equal(m, "INX") || sv_equal(m, "DEX") || sv_equal(m, "INY") ||
+		    sv_equal(m, "DEY")) {
+			return 1u | 2u; // N,Z
+		}
+		if (sv_equal(m, "ADC") || sv_equal(m, "SBC")) return 1u | 2u | 4u | 8u; // NZCV
+		if (sv_equal(m, "CMP") || sv_equal(m, "CPX") || sv_equal(m, "CPY")) return 1u | 2u | 4u; // NZC
+		if (sv_equal(m, "ASL") || sv_equal(m, "LSR") || sv_equal(m, "ROL") || sv_equal(m, "ROR")) {
+			return 1u | 2u | 4u; // NZC
+		}
+		if (sv_equal(m, "BIT")) return 1u | 2u | 8u; // NZV
+		if (sv_equal(m, "CLC") || sv_equal(m, "SEC")) return 4u;
+		if (sv_equal(m, "CLV")) return 8u;
+		return 0u;
+	}
+	/// Flags del 6502 que **lee** una instruccion (para la vivacidad).
+	[[nodiscard]] static eng::u8 decomp_flags_read(const char* m) noexcept {
+		if (sv_equal(m, "ADC") || sv_equal(m, "SBC") || sv_equal(m, "ROL") || sv_equal(m, "ROR")) {
+			return 4u; // C
+		}
+		if (sv_equal(m, "BEQ") || sv_equal(m, "BNE")) return 1u; // Z
+		if (sv_equal(m, "BMI") || sv_equal(m, "BPL")) return 2u; // N
+		if (sv_equal(m, "BCC") || sv_equal(m, "BCS")) return 4u; // C
+		if (sv_equal(m, "BVS") || sv_equal(m, "BVC")) return 8u; // V
+		if (sv_equal(m, "PLP")) return 1u | 2u | 4u | 8u;
+		return 0u;
+	}
+
 	[[nodiscard]] static const char* branch_cond(const char* mnemonic) noexcept {
 		if (sv_equal(mnemonic, "BNE")) return "!cpu.Z";
 		if (sv_equal(mnemonic, "BEQ")) return "cpu.Z";
@@ -3287,6 +3325,8 @@ private:
 			out.append(", ");
 		};
 		const auto setnz = [&](const char* reg) {
+			// DCE: si ni N ni Z estan vivos tras esta instruccion, no se fijan.
+			if ((d_keep_flags_ & 3u) == 0u) { return; }
 			out.append(" setnz(");
 			out.append(reg);
 			out.append(");");
@@ -3642,14 +3682,55 @@ private:
 					cmp = prev;
 				}
 			}
+			// Vivacidad de flags (backward) para DCE: `keep[addr]` = flags que esa instruccion
+			// DEBE fijar (leidos mas adelante). Los no vivos se omiten en el codegen.
+			eng::u16 iaddr = 0u;
+			eng::u8 ikeep[256] {};
+			{
+				eng::u16 qq = b;
+				eng::u8 live = 0u;
+				// Flags vivos al SALIR del bloque: la rama lee sus flags; una caida a otro bloque
+				// (sucesor desconocido) es conservadora (todos vivos); un terminador duro (JMP/RTS/
+				// RTI/BRK) o el final de bloque no leen flags.
+				if (term != nullptr && kOpcodeTable[term->opcode].mode == AddrMode::Rel) {
+					live = decomp_flags_read(kOpcodeTable[term->opcode].mnemonic);
+				} else if (term == nullptr ||
+					   (!sv_equal(kOpcodeTable[term->opcode].mnemonic, "JMP") &&
+					    !sv_equal(kOpcodeTable[term->opcode].mnemonic, "RTS") &&
+					    !sv_equal(kOpcodeTable[term->opcode].mnemonic, "RTI") &&
+					    !sv_equal(kOpcodeTable[term->opcode].mnemonic, "BRK"))) {
+					live = 0xFFu;
+				}
+				while (qq != p && iaddr < 256u) {
+					const Instruction& in = instr_[qq];
+					if (term != nullptr && qq == term->addr && term_ctrl) { break; }
+					iaddr = static_cast<eng::u16>(iaddr + 1u);
+					qq = static_cast<eng::u16>(qq + kOpcodeTable[in.opcode].size);
+				}
+				const eng::u16 total = iaddr;
+				for (eng::u16 idx = total; idx > 0u; --idx) {
+					eng::u16 qq2 = b;
+					for (eng::u16 s = 1u; s < idx; ++s) {
+						qq2 = static_cast<eng::u16>(qq2 + kOpcodeTable[instr_[qq2].opcode].size);
+					}
+					const char* mm = kOpcodeTable[instr_[qq2].opcode].mnemonic;
+					const eng::u8 wr = decomp_flags_written(mm);
+					const eng::u8 rd = decomp_flags_read(mm);
+					ikeep[idx - 1u] = static_cast<eng::u8>(wr & live);
+					live = static_cast<eng::u8>((live & static_cast<eng::u8>(~wr)) | rd);
+				}
+			}
 			eng::u16 q = b;
+			eng::u16 ki = 0u;
 			while (q != p) {
 				const Instruction& in = instr_[q];
 				const OpcodeInfo& inf = kOpcodeTable[in.opcode];
 				if (term == nullptr || q != term->addr || !term_ctrl) {
 					if (cmp == nullptr || q != cmp->addr) {
+						d_keep_flags_ = ikeep[ki];
 						emit_decompile_instruction(out, in);
 					}
+					ki = static_cast<eng::u16>(ki + 1u);
 				}
 				q = static_cast<eng::u16>(q + inf.size);
 			}

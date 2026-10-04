@@ -180,6 +180,9 @@ el frame de 50 fps.
   se emite **C directo** (`if (A == n)`, `if (A < n)`, `if (((u8)(A-n))&0x80)!=0`…) y se **omite
   el CMP** (no se simulan flags). Aplicada a **429 ramas** en DK; nametable == oráculo. **Efecto
   medido ~0** (el emulador tiene ±2 fps de ruido y la ganancia es de pocos %).
+- **DCE de flags por VIVACIDAD** (el punto clave: no generar `setnz` que no se va a leer): analisis
+  backward por bloque (con la rama del terminador); `setnz` de flags no vivos se OMITE. Resultado en
+  DK: `setnz` **3853 → 1411 (−63%)**; nametable == oraculo; **fps 21,2 → 22,9 (~+8%)**.
 - **`flatten` (inlinar el grafo para A/X/Y en registros): DESCARTADO** — build 14m42s y el binario
   **no arranca**. Buscar otra vía para los registros.
 
