@@ -165,7 +165,11 @@ Pruebas con flags de test (`kRunPort`, `kDoCompose`, `kScrollTest`):
 3. **El PORT es el cuello real**: apagarlo sube a ~45–50. El port añade **~22 ms/frame**
    (~320k ciclos) ≈ 100 ciclos por instrucción 6502 (codegen ingenuo: estado en memoria, checks,
    dispatch por bloque).
-4. El techo del **emulador cycle-exact** puede limitar la medición; confirmar sin cycle-exact/hardware.
+4. **Descartado el techo del emulador**: relajando el modo `cycle_exact`+`cpu_memory_cycle_exact`+
+   `blitter_cycle_exact` (`WINUAE_NO_CYCLE_EXACT=1`) la medición da **el MISMO ~22 fps** → el
+   emulador NO es el límite; el **port sí** (su trabajo, ~23 ms, supera el frame PAL de 20 ms).
+   Es decir: **el port queda justo por encima de 50 fps**; una mejora de codegen de **~1,5×** lo
+   metería dentro del frame.
 
 **Conclusión:** optimizar el render no ayuda; el trabajo está en **la lógica del port** (codegen).
 Meta: bajar el port de ~22 ms a ~<8 ms para que junto al render (~20 ms de VBlank) quede holgado en
