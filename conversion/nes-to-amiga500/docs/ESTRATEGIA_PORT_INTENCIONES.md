@@ -221,3 +221,56 @@ WINUAE_QUICKSTART=a1200,0 WINUAE_KICKSTART=c:/Amiga/KICK_A1200.rom \
    y test de regresión del pipeline.
 4. **Optimizar el port** (estado en locales, `-m68020`) y **medir fps reales** en A1200 con scroll.
 5. **Catálogo de patrones PPU/mappers** en la KB (empezando por NROM/UxROM/CNROM/MMC1).
+
+## FLAT: A/X/Y/flags en REGISTROS (`--flat`) — IMPLEMENTADO y MEDIDO (~2x)
+
+**Qué es.** `--flat` colapsa el grafo a **una sola función** `n2a_run()` con A/X/Y/flags como
+**locales** (candidatos a registro): los `JSR` apilan `&&L_<retorno>` en una pila de punteros y
+hacen `goto` al target; los `RTS` hacen `goto *pila[--sp]` (goto computado de GCC). Sin llamadas C,
+el compilador ya puede cachear el estado 6502 en registros (con globales no puede: `ram[]` puede
+aliase bajo `-fno-strict-aliasing`).
+
+**Por qué era necesario.** El port no-flat cuesta ~7-10 instrucciones 68000 por instrucción 6502
+(~120 ciclos) porque A/X/Y/flags son globales y se recargan tras cada acceso a RAM. La causa raíz
+de la lentitud del port.
+
+**Escollos resueltos (todos reales, el port colgaba sin ellos):**
+- **`setnz` como función de fichero NO sirve en flat**: el nombre `Zf`/`Nf` se resuelve
+  **léxicamente al global** aunque la función se inline (`always_inline` no cambia el binding) → el
+  código dentro de `n2a_run` leía los Zf/Nf **locales** mientras `setnz` escribía los **globales**.
+  Síntoma: el bucle de copia a `$2007` (`$F211-$F214`) **nunca terminaba** (X se decrementaba pero
+  la salida Zf estaba desincronizada). Fix: emitir las flags **inline en el punto de uso**; cubrir
+  las 3 emisiones directas (`CMP/CPX/CPY`, `INC/DEC mem`, `ASL/LSR/ROL/ROR`).
+- **NMI**: `frame_event` (HAL) llamaba al NMI como **función** `f_C85F`, que en flat no existe (es
+  un bloque). Fix: `frame_event` marca `g_nmi_pending` y `n2a_run` entra al NMI **inline** por la
+  pila de retorno (`&&L_nmiret`). Se limpia `g_yield_req` antes de entrar para que el NMI corra
+  **hasta completarse** (la pila es local: ceder a mitad la perdería) y se **rearma** al volver.
+- **Arranque**: el primer bloque emitido NO es el reset → `if (g_resume==0) goto L_<reset>`.
+- **Labels duplicados**: un mismo bloque pertenece a varias regiones → emitir cada uno UNA vez.
+- **Resume**: la tabla `kRL` de `&&label` + **búsqueda binaria** (un `switch` de miles de casos
+  desborda la tabla de salto m68k: "switch too large").
+- **`RTS` ajusta SP; `RTI` no** (el NMI se modela como evento, sin push), igual que en no-flat.
+- **Ruta `N2A_TRACE_LABEL`**: faltaba el terminador `u;` (código generado no compilaba).
+
+**Validación.** Nametable + tabla de atributos + **OAM idénticos** al no-flat (dump de 120 frames,
+`_scratch/host/port_dump.cpp`); solo divergen ~6 líneas de cero-página (el PRNG/timing ya conocido).
+
+**Medición (decisiva).** `dk_port_xl`, A1200 (68020, 14 MHz, `cycle_exact=false`), mismo emulador y
+misma métrica (`tools/debug/measure-fps.mjs`), A/B limpio:
+
+| Build | fps emulados | ciclos/frame | campos/frame |
+|---|---|---|---|
+| No-flat | 6.98 | 1 018 398 | 7.18 |
+| **Flat** | **13.59** | **521 988** | **3.68** |
+
+→ **×1.95** (los ciclos por frame casi se parten por la mitad). El flatten **funciona**.
+
+**Lo que falta para 50 fps.** El presupuesto de un frame es `CPU_HZ/50` = 141 875 ciclos (base 7 MHz)
+o 283 751 (base 14 MHz); el flat usa 521 988 → falta **~1.8-3.7×** más. La palanca clara es el
+**bucle de upload a `$2007`** (≈87 % del coste del port, `$F211-$F214`: `LDA (zp),Y; STA $2007;
+DEY/DEX; BNE`): reconocerlo como **copia a VRAM por vector** (no byte a byte) reduciría ese 87 % en
+~un orden de magnitud → el objetivo 50 fps pasaría a ser alcanzable. Es el step 3 (codegen idiomático).
+
+**Nota de calibración.** `measure-fps.mjs` fija `CPU_HZ=7 093 790` (A500). En A1200 (14 MHz) el
+contador marca 2× → el fps **real** podría ser 2× el de la tabla (~27 fps flat). La **relación**
+flat/no-flat (×1.95) es robusta en cualquier caso.
