@@ -3671,7 +3671,10 @@ private:
 			// `g_label` (diagnostico de "ultima etiqueta") se OMITE en builds de velocidad: es un
 			// store a global por bloque (~3000/frame) sin valor en produccion. Se recupera con
 			// `-DN2A_TRACE_LABEL` (transpilador) para depuracion.
-			out.append("u; g_yield_req = 0u; return; } ");
+			out.append("u; g_yield_req = 0u; g_sA = A; g_sX = X; g_sY = Y; g_sSP = SP; g_sCf = (u8)Cf; g_sZf = (u8)Zf; g_sNf = (u8)Nf; g_sVf = (u8)Vf; g_sDf = (u8)Df; g_sIf = (u8)If; return; }");
+#ifdef N2A_WTRACE
+			out.append(" g_sp_mirror = SP;");
+#endif
 #ifdef N2A_TRACE_LABEL
 			out.append("g_label = 0x");
 			out.append_hex(b, 4u, true);
@@ -4024,6 +4027,10 @@ private:
 		// frontera de bloque, guardando `g_resume` para reanudar. Con `g_engine_mode=0` el port
 		// se autogestiona (standalone, tests host).
 		out.append("static u8 g_engine_mode = 0, g_yield_req = 0;\n");
+		// Estado 6502 persistente para el modo FLAT: los locales de `n2a_run` no sobreviven a un
+		// `return` (yield de frontera de frame). Se salvan al ceder y se restauran al reanudar.
+		out.append("static u8 g_sA = 0, g_sX = 0, g_sY = 0, g_sSP = 0xFD;\n");
+		out.append("static u8 g_sCf = 0, g_sZf = 0, g_sNf = 0, g_sVf = 0, g_sDf = 0, g_sIf = 0;\n");
 		out.append("static u8 g_nmi_pending = 0; /* flat: `frame_event` marca NMI; `n2a_run` lo ejecuta inline */\n");
 		out.append("static unsigned g_nmi_fires = 0u; /* diagnostico: NMIs disparados (debe ser 1/frame) */\n");
 		out.append("static unsigned n2a_nmi_fires(void) { return g_nmi_fires; }\n");
@@ -4076,8 +4083,9 @@ private:
 		out.append("    if (a >= 0x8000u) { return PRG_ROM[(a - 0x8000u) & (kPrgSize - 1u)]; }\n");
 		out.append("    return hal_ppu_read(a);\n}\n");
 #ifdef N2A_WTRACE
-		out.append("static u16 n2a_wt_a[65536]; static u8 n2a_wt_v[65536]; static unsigned n2a_wt_n = 0u;\n");
-		out.append("static void n2a_wt_log(u16 a, u8 v) { if (n2a_wt_n < 65536u) { n2a_wt_a[n2a_wt_n] = a; n2a_wt_v[n2a_wt_n] = v; ++n2a_wt_n; } }\n");
+		out.append("static u16 n2a_wt_a[65536]; static u8 n2a_wt_v[65536]; static u8 n2a_wt_sp[65536]; static unsigned n2a_wt_n = 0u;\n");
+		out.append("static u8 g_sp_mirror = 0xFD; /* espejo del SP (local en flat) para el trace */\n");
+		out.append("static void n2a_wt_log(u16 a, u8 v) { if (n2a_wt_n < 65536u) { n2a_wt_a[n2a_wt_n] = a; n2a_wt_v[n2a_wt_n] = v; n2a_wt_sp[n2a_wt_n] = g_sp_mirror; ++n2a_wt_n; } }\n");
 #endif
 		out.append("static __attribute__((always_inline)) inline void wr(u16 a, u8 v) {\n");
 #ifdef N2A_WTRACE
@@ -4128,8 +4136,8 @@ private:
 		if (flat_) {
 			// Flatten: UNA funcion con A/X/Y/flags LOCALES (registros) + pila de retorno.
 			out.append("[[gnu::used]] static void n2a_run(void) {\n");
-			out.append("    u8 A = 0u, X = 0u, Y = 0u, SP = 0xFD;\n");
-			out.append("    bool Cf = false, Zf = false, Nf = false, Vf = false, Df = false, If = false;\n");
+		out.append("    u8 A = g_sA, X = g_sX, Y = g_sY, SP = g_sSP;\n");
+		out.append("    bool Cf = (g_sCf != 0u), Zf = (g_sZf != 0u), Nf = (g_sNf != 0u), Vf = (g_sVf != 0u), Df = (g_sDf != 0u), If = (g_sIf != 0u);\n");
 			out.append("    void* ret_lbl[64]; u16 ret_sp = 0u;\n");
 			// Resume por tabla ordenada + busqueda binaria (un `switch` con miles de casos
 			// desborda la tabla de salto m68k) con PUNTEROS de etiqueta (`&&`).
