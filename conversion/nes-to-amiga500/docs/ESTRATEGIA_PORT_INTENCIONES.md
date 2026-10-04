@@ -518,6 +518,6 @@ Se fija **A500 (68000, 7 MHz) con 512K Chip + 512K Slow** como maquina de refere
 - Build: uild-demo.sh demos/nes/dk_port_xl --release (TARGET_MACHINE=A500 por defecto, 68000).
 - Perfil de memoria del engine equivalente: eng::amiga::game_memory_a500 (384K Chip + 448K Slow).
 
-**Medicion:** 142815 ciclos/frame = **49.67 fps** (1.007 campos/frame) con el port ON -> ~50 fps,.replace
+**Medicion:** 142815 ciclos/frame = **49.67 fps** (1.007 campos/frame) con el port ON -> ~50 fps,
 limitado por VBlank. El port cabe con holgura en el A500.
 
