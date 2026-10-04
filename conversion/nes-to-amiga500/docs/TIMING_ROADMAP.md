@@ -294,3 +294,22 @@ y se anota (como con Fase 1 sola).
 El runtime Amiga usa **hardware** (Copper/Blitter/Paula), no este sincronismo. El roadmap mejora la
 **fidelidad del oráculo** (referencia fiable para validar el port), no el runtime Amiga en sí. Es la
 condición para poder validar juegos sensibles al timing contra el port.
+
+### Caso concreto: siembra del RNG de Donkey Kong (2026) — manifestación del mismo límite
+
+El port de DK (piloto) topa con este mismo límite, no con un bug propio:
+
+- El LFSR de DK (`$F4ED`, llamado con `JSR $F4ED` desde el spin `$87E1`) computa
+  `feedback = bit1($18) XOR bit1($19)` en el temporal **`$00`**, y rota `$18..$1F`.
+- **La semilla no-cero del oráculo nace de un *race* NMI↔LFSR**: el NMI interrumpe `F4ED` entre
+  `$F4F1` y `$F4F3`; el handler NMI ejecuta `C8E0: STA $00` con `A=0x1A`, **machacando `$00`**. Al
+  reanudar en `F4F3`, `$00=0x1A` entra en el `EOR` → `feedback=1` → `$18: 00→80` (semilla). Trazas:
+  `_scratch/host/oracle_seed6.cpp` (PCs `C8F2=RTI, F4F3…`, `$00=1A`), `oracle_f4f9*.cpp`.
+- **El port ejecuta el NMI inline** en la frontera (no asíncrono) → `F4ED` **nunca** se corta a
+  mitad → `$00=0` → el LFSR **se queda en 0**. Reproducirlo exige modelar el **aterrizaje exacto del
+  NMI dentro de la rutina** (sub-instrucción), igual que los 4 juegos del límite.
+- **Decisión**: no falsear el RNG. La directiva `rng` (LFSR O(log K)) es **determinista** y no
+  captura el *race*; se mantiene como infraestructura para juegos cuyo RNG **sí** sea determinista.
+  Para DK, validar el render en tramos sin divergencia del RNG o con el RNG congelado.
+
+

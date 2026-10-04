@@ -820,12 +820,9 @@ public:
 	/// \param out Buffer de salida. \param b Bloque de origen (solo para etiqueta unica).
 	void emit_nmi_enter(Dyn& out, eng::u16 b) {
 		const eng::u32 n = nmi_enter_seq_++;
-		// **Solo cede el frame si el NMI se ejecuto** (es la frontera de frame real). Si el NMI esta
-		// deshabilitado (`$2000` bit7=0, p. ej. la espera de VBlank del reset) NO se cede: el port
-		// sigue, como el oraculo -> alinea la numeracion de frames (evita el desfase de 1 frame).
-		// Se limpia `g_yield_req` para que el NMI corra HASTA COMPLETARSE: `ret_lbl` es una
-		// LOCAL de `n2a_run`; si el NMI cediera a mitad, al reanudar en otra llamada la pila
-		// de retorno se habria perdido (underflow). Tras el NMI se rearma el yield de frame.
+		// Entra al NMI si `frame_event` lo marco. **No** cede aqui (el NMI debe correr hasta
+		// completarse: `ret_lbl` es local de `n2a_run`). La cesion de frame la hace, tras esto,
+		// `emit_frame_yield` con un bloque real de `kRL` como punto de reanudacion.
 		out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
 		out.append_u32(n);
 		out.append("; ++g_nmi_fires; goto L_");
@@ -834,9 +831,20 @@ public:
 		out.append_u32(n);
 		out.append("; }\nL_nmiret_");
 		out.append_u32(n);
-		out.append(": if (g_engine_mode) { g_yield_req = 1u; }\nL_nmiskip_");
+		out.append(": ;\nL_nmiskip_");
 		out.append_u32(n);
 		out.append(": ;\n");
+	}
+
+	/// Emite una **cesion de frame** (engine mode): guarda el estado 6502 y el punto de
+	/// reanudacion `resume` (un bloque **presente en `kRL`**) y hace `return`. Se usa en la
+	/// frontera de frame (VBlank del reset, back-edge del spin) para que el port corte donde el
+	/// oraculo lo hace (cada pre-VBlank), **independientemente** de si el NMI se ejecuto.
+	/// \param out Salida. \param resume Direccion 6502 del bloque de reanudacion (en `kRL`).
+	void emit_frame_yield(Dyn& out, eng::u16 resume) {
+		out.append("    if (g_engine_mode) { g_resume = 0x");
+		out.append_hex(resume, 4u, true);
+		out.append("u; g_sA = A; g_sX = X; g_sY = Y; g_sSP = SP; g_sCf = (u8)Cf; g_sZf = (u8)Zf; g_sNf = (u8)Nf; g_sVf = (u8)Vf; g_sDf = (u8)Df; g_sIf = (u8)If; return; }\n");
 	}
 
 	/// Con `true`, elige automÃ¡ticamente el mejor backend: el **nativo** si la ROM lo
@@ -3962,7 +3970,13 @@ private:
 					out.append(sv_equal(m, "BMI")
 						? "    if ((ppu_status & 0x80u) != 0u) { hal_wait_vblank(); }\n"
 						: "    if ((ppu_status & 0x80u) == 0u) { hal_wait_vblank(); }\n");
-					if (flat_) { emit_nmi_enter(out, b); }
+					if (flat_) {
+						emit_nmi_enter(out, b);
+						// **Cesion de frame** en el VBlank: el oraculo corta el frame en cada
+						// pre-VBlank (aunque el NMI este deshabilitado, p. ej. el reset). El port
+						// reanuda en el bloque siguiente (`next`, presente en `kRL`).
+						if (native_vis_[next] != 0u) { emit_frame_yield(out, next); }
+					}
 				} else {
 						// Ciclos exactos: base + 1 si tomada + 1 si cruza pÃ¡gina (rama).
 						const bool pc = ((static_cast<eng::u16>(term->addr + 2u)) & 0xFF00u) !=
@@ -4038,18 +4052,10 @@ private:
 								? rm.iter_cycles
 								: (decomp_block_cycles(term->target) + decomp_block_cycles(b) + lfsr_c);
 							const eng::u32 ic = (iter != 0u) ? iter : 1u;
-							out.append("    if (g_cyc >= g_frame_deadline) { frame_event();\n");
-							out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
-							out.append_u32(nmi_enter_seq_++);
-							out.append("; ++g_nmi_fires; goto L_");
-							out.append_hex(nmi_, 4u, true);
-							out.append("; } else { goto L_nmiskip_");
-							out.append_u32(nmi_enter_seq_ - 1u);
-							out.append("; }\nL_nmiret_");
-							out.append_u32(nmi_enter_seq_ - 1u);
-							out.append(": if (g_engine_mode) { g_yield_req = 1u; }\nL_nmiskip_");
-							out.append_u32(nmi_enter_seq_ - 1u);
-							out.append(": ; } else { const u32 k = (g_frame_deadline - g_cyc) / ");
+							// Frontera de frame: avanzar el LFSR K pasos O(log K) hasta el deadline
+							// y ceder el frame. La cesion reanuda en el header del bucle (`term->target`,
+							// en `kRL`); el NMI (si esta pendiente) corre inline antes de ceder.
+							out.append("    { const u32 k = (g_frame_deadline - g_cyc) / ");
 							out.append_u32(ic);
 							out.append("u; if (k > 0u) { n2a_lfsr_advance(0x");
 							out.append_hex(rm.base, 4u, true);
@@ -4058,26 +4064,22 @@ private:
 							out.append("u, k); } g_cyc += k * ");
 							out.append_u32(ic);
 							out.append("u; }\n");
+							out.append("    if (g_cyc >= g_frame_deadline) { frame_event();\n");
+							emit_nmi_enter(out, b);
+							emit_frame_yield(out, term->target);
+							out.append("    }\n");
 						} else if (vblank_sync_) {
 							// VBlank: el busy-wait dispara el NMI directamente (frame boundary); solo
 							// cruza la frontera cuando `g_cyc` la ha alcanzado (si no, el reset cederia
 							// antes de agotar el presupuesto y la maquina de estados iria por delante).
 							// Sin VBlank: se cede al alcanzar el limite de frame por el contador.
-							out.append(flat_
-								? "    if (g_cyc >= g_frame_deadline) { frame_event();\n"
-								: "    frame_event();\n");
 							if (flat_) {
-								out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
-								out.append_u32(nmi_enter_seq_++);
-								out.append("; ++g_nmi_fires; goto L_");
-								out.append_hex(nmi_, 4u, true);
-								out.append("; } else { goto L_nmiskip_");
-								out.append_u32(nmi_enter_seq_ - 1u);
-								out.append("; }\nL_nmiret_");
-								out.append_u32(nmi_enter_seq_ - 1u);
-								out.append(": if (g_engine_mode) { g_yield_req = 1u; }\nL_nmiskip_");
-								out.append_u32(nmi_enter_seq_ - 1u);
-								out.append(": ; }\n");
+								out.append("    if (g_cyc >= g_frame_deadline) { frame_event();\n");
+								emit_nmi_enter(out, b);
+								emit_frame_yield(out, term->target);
+								out.append("    }\n");
+							} else {
+								out.append("    frame_event();\n");
 							}
 						} else {
 							out.append("    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
