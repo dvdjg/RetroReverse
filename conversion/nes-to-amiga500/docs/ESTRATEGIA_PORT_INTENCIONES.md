@@ -383,3 +383,26 @@ borde derecho (columnas extra del anillo).
 **fps en GAMEPLAY** (caso pesado): **23.98 emu = real ~48 fps** (295835 ciclos/frame = +0.8 ms sobre
 el port apagado). El juego añade poco; queda **justo por debajo de 50** (el trabajo del frame supera
 ligeramente el presupuesto del VBlank). Con el título era 49.9. Margen real: pequeño.
+
+### Perfil del margen en gameplay (desglose aislado, A1200)
+
+| Escenario | ciclos/frame | real fps |
+|---|---|---|
+| Port OFF (demo sin juego) | 284204 | 49.9 |
+| Port ON, **drena sin re-blit** | 289994 | 48.9 |
+| Port ON + re-blit | 290584-295835 | 48.0-48.9 |
+
+- **NMI del port ≈ +0.4 ms** (104 bloques/frame; `_scratch/host/port_histo.cpp`): el 15 % es la
+  **lectura de mandos** (`$F524`, `$4016` bit a bit) y el 20 % un **bucle de decremento de timers**
+  (`$F4B8/$F4BE`). El HAL ya tiene fast-path (`a < 0x2000` → RAM; `$4016/$4017` antes del switch) y
+  el flat ejecuta a ~55 ciclos/bloque → **el codegen está ajustado**; poco que rascar ahí.
+- **Re-blit del demo ≈ +0.4 ms**: en gameplay el marcador cambia cada frame → el re-blit selectivo
+  se dispara cada frame (+ `execute_frame_plan`/espera del Blitter).
+- **El engine NO solapa el trabajo con el VBlank**: el bucle es `update()` → `wait_vblank()` →
+  `render()` (`engine.hpp:160-174`), así que el trabajo del port se **suma** al periodo de VBlank en
+  vez de esconderse en él. Ese es el lever real para recuperar los 50 con margen (no el codegen).
+
+**Conclusión del shave:** el objetivo de "ciclos de sobra" en gameplay no se cierra por codegen (ya
+está optimizado): el +0.85 ms es mitad NMI inherente (lógica de juego) y mitad re-blit del demo. Las
+vías serían (a) solapar `update` con el VBlank en el engine, o (b) abaratar el re-blit por-frame del
+marcador. El título (caso del test original) sí queda a 49.9.
