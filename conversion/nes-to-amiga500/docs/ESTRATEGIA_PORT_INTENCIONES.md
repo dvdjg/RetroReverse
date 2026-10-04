@@ -103,9 +103,17 @@ en vez de iterar. Coste: cambia el estado del PRNG que el spin actualiza (diverg
 ya medida). Es la palanca #1 para acercarse a 60 fps. Otras: estado en locales/registros,
 `-m68020`, eliminar bounds-checks en `rd/wr` del HAL.
 
-**Conclusión revisada:** 60 fps en A1200 **exige optimizar el port** (no es automático). El modelo
-de intenciones ya libera el render; ahora hay que atacar la **ejecución de la lógica** (spin-yield
-+ codegen rápido). Recomendado medir de nuevo tras el spin-yield: es la métrica que decide.
+**Dato clave del port:** el host mide **~8.000 lecturas de bus/frame** (~8k instrucciones 6502).
+A ~30 ciclos 68000 por lectura eso cabría en el presupuesto de 60 fps (238k). La brecha real
+(~18×) es, o bien **coste por instrucción muy alto** en el codegen actual (estado en memoria,
+checks, `g_label`/yield por bloque), o que el **emulador cycle-exact** del host no alcanza la
+velocidad real (a confirmar). Ambos demos de port (Blitter y XL) dan el **mismo** ~3,3 fps → el
+cuello es la **lógica del port**, no el render.
+
+**Conclusión revisada:** 60 fps en A1200 **exige optimizar el port** (no es automático) y **medirlo
+en hardware real o emulador a velocidad plena**. Palancas: (1) **spin-yield** del bucle de espera,
+(2) codegen rápido (estado en registros/locales, sin `g_label`/yield por instrucción, `-m68020`),
+(3) menos bounds-checks en `rd/wr`. La métrica que decide es ciclos/frame medidos en hardware.
 
 ## Pasos recomendados (orden)
 
