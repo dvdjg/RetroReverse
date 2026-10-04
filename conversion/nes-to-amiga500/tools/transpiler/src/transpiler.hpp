@@ -3816,7 +3816,11 @@ private:
 		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
 		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");
 		out.append("static u8 rd(u16 a) {\n");
+		// El contador de pasos (diagnostico) era un load+compare+branch por CADA lectura. Solo se
+		// emite bajo `N2A_TRACE_STEPS` (transpilador) para no costar en produccion.
+#ifdef N2A_TRACE_STEPS
 		out.append("    if (g_step_limit != 0 && ++g_steps > g_step_limit) { if (hal_limit_hook) { hal_limit_hook(); } }\n");
+#endif
 		out.append("    if (a < 0x2000u) { return ram[a & 0x7FFu]; }\n");
 		out.append("    if (a >= 0x8000u) { return PRG_ROM[(a - 0x8000u) & (kPrgSize - 1u)]; }\n");
 		out.append("    return hal_ppu_read(a);\n}\n");
