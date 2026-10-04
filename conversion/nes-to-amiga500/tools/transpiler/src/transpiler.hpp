@@ -3696,7 +3696,11 @@ private:
 		out.append("    case 0x2004u: oam[ppu_oam_addr++] = v; break;\n");
 		out.append("    case 0x2005u: if (ppu_latch == 0) { ppu_scroll = v; } else { ppu_scroll = (u16)((v << 8) | (ppu_scroll & 0xFFu)); } ppu_latch ^= 1u; break;\n");
 		out.append("    case 0x2006u: if (ppu_latch == 0) { ppu_addr = (u16)(v << 8); } else { ppu_addr = (u16)((ppu_addr & 0xFF00u) | v); } ppu_latch ^= 1u; break;\n");
-		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x < 0x3F00u) { vram[x & 0xFFFu] = v; nt_dirty[x & 0xFFFu] = 1u; } else { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
+		// $2007: SOLO $2000-$3EFF (nametables) van a `vram[]`; $3F00+ a paleta. Las escrituras a
+		// $0000-$1FFF (CHR) se IGNORAN: en este modelo el CHR es ROM (tablas de patrones de solo
+		// lectura) y enrutarlas a `vram[x & 0xFFF]` machacaba la nametable/atributos (DK escribe
+		// $03C0-$03FF y borraba la tabla de atributos en `vram[0x3C0]`).
+		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x >= 0x2000u && x < 0x3F00u) { vram[x & 0xFFFu] = v; nt_dirty[x & 0xFFFu] = 1u; } else if (x >= 0x3F00u) { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
 		out.append("    case 0x4014u: { const u8* s = ram + ((u16)v << 8); for (int i = 0; i < 256; ++i) { oam[i] = s[i]; } } break;\n");
 		out.append("    default: break;\n    }\n}\n");
 		// --- Intenciones para el app (traducir a motores del engine) ---
