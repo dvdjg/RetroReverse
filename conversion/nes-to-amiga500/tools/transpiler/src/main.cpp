@@ -435,6 +435,7 @@ constexpr int kCodegenVersion = 2;
 
 /// Opciones de codegen fijadas por los flags (ver `main`).
 	bool g_no_cycles = false;
+bool g_vblank = false; ///< `--vblank`: frame boundary por VBlank (sin `tick` por instruccion).
 bool g_no_idioms = false; ///< `--no-idioms` (medir el efecto de los idioms multibyte).
 bool g_fast_ram = false;
 bool g_trace = false;
@@ -567,6 +568,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_native(g_native);
 	tp.set_best(g_best);
 	tp.set_decompile(g_decompile);
+	tp.set_vblank_sync(g_vblank);
 	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
 		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
 	}
@@ -1016,6 +1018,10 @@ int main(int argc, char** argv) {
 		}
 		if (arg == "--decompile") { // decompilado a C plano + HAL (port nativo)
 			g_decompile = true;
+			continue;
+		}
+		if (arg == "--vblank") { // frame boundary por VBlank (velocidad A1200): sin tick/frame
+			g_vblank = true;
 			continue;
 		}
 		if (arg == "--best") { // nativo si se puede; si no, perfil Amiga encadenado

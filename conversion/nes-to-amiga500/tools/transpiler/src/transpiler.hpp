@@ -759,6 +759,10 @@ public:
 	/// codegen de emulación. Fase 1 del decompilador (ver `docs/DECOMPILADOR.md`).
 	/// \param b `true` para generar el decompilado.
 	void set_decompile(bool b) noexcept { decompile_ = b; }
+	/// Activa el **frame boundary por VBlank**: `tick(n)` deja de comprobar el limite de frame
+	/// (solo acumula ciclos para el modelo hibrido); el NMI lo dispara el busy-wait (spin-yield) y
+	/// `hal_wait_vblank`. Mucho mas rapido en A1200; el modelo de ciclos sigue disponible para PC.
+	void set_vblank_sync(bool b) noexcept { vblank_sync_ = b; }
 
 	/// Con `true`, elige automáticamente el mejor backend: el **nativo** si la ROM lo
 	/// soporta (`native_ok()`) y, si no, el codegen por bloques con el perfil Amiga
@@ -905,6 +909,7 @@ private:
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
 	bool decompile_ = false;     ///< Si `true`, emitir el decompilado (ver `set_decompile`).
+	bool vblank_sync_ = false;   ///< Si `true`, frame boundary por VBlank (sin tick/frame por instruccion; ver `set_vblank_sync`).
 	mutable const char* native_reject_ = ""; ///< Motivo del último rechazo de `native_ok()` (diagnóstico).
 	mutable eng::u16 native_reject_addr_ = 0; ///< Dirección asociada al rechazo (p. ej. el `JSR`).
 	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnóstico).
@@ -3659,7 +3664,11 @@ private:
 					// header del bucle, cuya entrada cede la REGION (evita el bucle de NMIs que
 					// causaba el yield a traves de una llamada anidada).
 					if (decomp_wait_loop(b)) {
-						out.append("    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
+						// VBlank: el busy-wait dispara el NMI directamente (frame boundary);
+						// ciclos: ceder al limite de frame por el contador.
+						out.append(vblank_sync_
+							? "    frame_event();\n"
+							: "    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
 					}
 					if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
@@ -3796,7 +3805,13 @@ private:
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
 		// ejecuta), en vez de disparar el NMI de inmediato.
 		out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
-		out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { frame_event(); } }\n");
+		// VBlank (A1200): `tick` solo acumula ciclos (modelo hibrido); el frame lo marca el
+		// busy-wait/`hal_wait_vblank`. Modelo de ciclos completo si no esta activo (PC/fidelidad).
+		if (vblank_sync_) {
+			out.append("static void tick(u32 n) { g_cyc += n; }\n");
+		} else {
+			out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { frame_event(); } }\n");
+		}
 		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
 		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
 		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");

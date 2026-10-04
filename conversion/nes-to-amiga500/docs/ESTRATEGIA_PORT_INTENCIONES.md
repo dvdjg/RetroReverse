@@ -111,14 +111,21 @@ velocidad real (a confirmar). Ambos demos de port (Blitter y XL) dan el **mismo*
 cuello es la **lógica del port**, no el render.
 
 **Actualización tras el spin-yield:** el trabajo del port bajó de **8071 a 1435 lecturas de
-bus/frame** (5,6× menos) — el busy-wait era el 82%. A ~30 ciclos/lectura serían **~43k
-ciclos/frame**, muy por debajo del presupuesto de 60 fps (238k): **el A1200 debería dar 60 fps de
-sobra**. Los **~14,6 fps** medidos (wall-clock, sin warp) son casi seguro el **techo del emulador
-cycle-exact**, no del A1200. → **Medir en hardware real** (o emulador a velocidad plena) antes de
-concluir; `-flto` solo mejoró ~2% (build 10× más lento) y se descartó.
+bus/frame** (5,6× menos) — el busy-wait era el 82%. Los **~14,6 fps** medidos (wall-clock, sin
+warp) son casi seguro el **techo del emulador cycle-exact**.
 
-Palancas restantes (menores ya): bounds-checks en `rd/wr`, `-m68020` (arreglando el startup).
-La métrica que decide es **ciclos/frame en hardware**.
+**Modelo VBlank-driven (`--vblank`) — HECHO.** El `tick(n)` **deja de comprobar el frame**
+(solo acumula ciclos para un modelo hibrido futuro); el NMI lo dispara el **busy-wait** (spin-yield)
+y `hal_wait_vblank`. Es la sincronizacion "asistida por hardware" esperada: el frame boundary no
+cuesta por instruccion. **Medido (sequence sin warp): ~14,6 → ~22,5 fps** (0→182 frames en ~8 s).
+Nametable/atributos == oraculo. El **modelo de ciclos completo sigue disponible** (sin `--vblank`)
+para PC/fidelidad/mid-frame; la **hibridacion fina** (contar ciclos solo donde el juego lee
+registros dependientes del ciclo) queda como refinamiento.
+
+**Progreso total de fps (A1200 emulado, sin warp): 3,3 → 14,6 (spin-yield) → 22,5 (VBlank).**
+
+Palancas restantes (menores ya): bounds-checks en `rd/wr`, `-m68020` (arreglando el startup),
+hibridacion fina. La metrica que decide es **ciclos/frame en hardware real**.
 
 ## Optimización: intentos y lecciones (2026)
 
