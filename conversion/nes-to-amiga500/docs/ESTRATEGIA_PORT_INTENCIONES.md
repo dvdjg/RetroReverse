@@ -606,3 +606,17 @@ bloque, no por instruccion) o en el **bucle** de espera; NO por instruccion (dem
 
 Diagnostico reproducible: _scratch/host/oracle_wt1.cpp / port_wt1.cpp (traza de escrituras por
 frame).
+
+### [2] Experimento de pacing por ciclos (evaluado)
+
+Re-aplicado el presupuesto de ciclos (	ick acumula g_cyc; el busy-wait cede al agotarlo):
+- **Estado estable SI queda paced por ciclos**: cyc residual ~1200/frame (consume ~29780/frame).
+- **PERO frame 1 sigue mal**: cede a cyc=18761 (< 29780) por el **VBlank del reset** (dispara el
+  NMI + cede antes de agotar el presupuesto).
+- **Y es DEMASIADO LENTO en A500**: correr el spin ~350 iteraciones/frame hace que la medida ni
+  resuelva (el canal lateral no responde). Igual que el intento anterior.
+
+Conclusion: el pacing por ciclos **solo** no sirve. El arreglo correcto = **pacing por ciclos +
+saltar el spin** (wait) **+ modelar el LFSR** (ng). El 	ick por instruccion es caro; habria
+que contarlo por **bloque** o en el bucle. Estado bueno restaurado: **49.75 fps** (fix b, sin
+presupuesto).
