@@ -274,3 +274,28 @@ DEY/DEX; BNE`): reconocerlo como **copia a VRAM por vector** (no byte a byte) re
 **Nota de calibración.** `measure-fps.mjs` fija `CPU_HZ=7 093 790` (A500). En A1200 (14 MHz) el
 contador marca 2× → el fps **real** podría ser 2× el de la tabla (~27 fps flat). La **relación**
 flat/no-flat (×1.95) es robusta en cualquier caso.
+
+## HALLAZGO (descomposición del coste): el cuello NO es el port, es el REBUILD del demo
+
+Medido con `measure-fps.mjs` en A1200, aislando capas (port OFF/ON, rebuild ON/OFF):
+
+| Escenario (dk_port_xl, flat) | fps emulados | fps reales (×2) | ms/frame |
+|---|---|---|---|
+| Port OFF (solo render + VBlank) | 24.96 | 50.0 | 20.0 |
+| **Port ON + rebuild OFF** | **22.70** | **45.4** | **22.2** |
+| Port ON + rebuild COMPLETO (real) | 13.59 | 27.2 | 36.8 |
+| No-flat + rebuild COMPLETO | 6.98 | 14.0 | 71.5 |
+
+**Conclusiones:**
+1. **El port flat cuesta solo ~2.2 ms/frame** (50→45.4). Está, de sobra, dentro del presupuesto de
+   de 20 ms. El codegen **ya no es el cuello**.
+2. **El `rebuild_world_from_port()` COMPLETO (demo) cuesta ~15 ms** y se dispara CADA frame en que el
+   port ensucia alguna celda del nametable (marcador/animación). Es **el cuello real**.
+3. `scene.compose`, el scroll (`kScrollTest`) y `scene.fill` son **despreciables** (port ON, rebuild
+   OFF y scroll ON vs OFF: 22.52 vs 22.70 — idénticos).
+
+**La vía a 50 fps NO es más optimización del codegen, sino hacer el rebuild INCREMENTAL en el demo**
+(re-blitear solo los metatiles cuyas celdas cambiaron, en vez de reconstruir los 16×15 + dedupe O(n²)
++ `fill_bank` + `scene.fill` completos). Ese cambio recupera ~15 ms → ~45 fps; el ~10 % restante
+(port+timer) lo cubre el paso 4 (fusión/DCE) o el ajuste del bucle del engine. El profiler de
+bloques del host (253 bloques/frame, `_scratch/host/port_histo.cpp`) confirma que el port ejecuta poco.
