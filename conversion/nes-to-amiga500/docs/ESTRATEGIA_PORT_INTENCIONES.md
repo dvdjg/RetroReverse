@@ -521,3 +521,38 @@ Se fija **A500 (68000, 7 MHz) con 512K Chip + 512K Slow** como maquina de refere
 **Medicion:** 142815 ciclos/frame = **49.67 fps** (1.007 campos/frame) con el port ON -> ~50 fps,
 limitado por VBlank. El port cabe con holgura en el A500.
 
+## Aviso: el runner se regenera con KICK13 (rompe la medida)
+
+Un proceso externo (¿otro agente?) regenera `out/run/dk_port_xl/A500_release/runner.uae` con
+`quickstart=a500,1`, `cpu_cycle_exact=true` y `kickstart_rom_file=c:/Amiga/KICK13.rom`. Con esa
+config la medida falla en la resolucion de `g_eng_run_status` (`runtime=0x0`). **Tras cada build,
+parchear el runner** a `kickstart_rom_file=c:/Amiga/KICK_A500_31.rom` y `cycle_exact*` a `false`.
+`bogomem_size` explicito rompe el boot: no anadirlo (el quickstart a500 ya da 512K Slow).
+
+## Presupuesto de ciclos (paso 1): implementado y evaluado — NO suficiente por sí solo
+
+**Hipotesis**: el bucle principal `C7E1: JSR F4ED; JMP C7E1` NO es una espera sino el **LFSR/PRNG**
+de DK. `F4ED` lee bit1 de `$18`/`$19`, los XOR (feedback), y **rota 64 bits `$18-$1F`** con el
+carry. El oraculo lo ejecuta ~**377 veces/frame** (hasta el VBlank); el port solo 1 (su spin-yield
+cedia al primer back-edge), así que el estado del RNG divergía.
+
+**Implementacion** (`--vblank`): `tick(n)` acumula `g_cyc`; el spin-yield cruza la frontera
+(VBlank+NMI) SOLO al agotar `g_frame_deadline` (29780), no en cada iteracion.
+
+**Resultado (host)**: el port corre **377 it/frame** y **1 NMI/frame**; nametable/atributos
+coinciden con el oraculo. **Pero la RAM sigue divergiendo**, y el hallazgo clave es que la causa
+es **ANTERIOR**: el port **nunca alcanza la rutina de siembra del RNG** (`L_C9B1`, que escribe
+`$18=0F, $19=13`), así que `$18-$1F` queda a **0** mientras el oraculo lo siembra en el frame 3
+(`BD 2E 54 08 A0 B1 E1 26`). Es una divergencia de **máquina de estados** (el port no llega a esa
+ruta), no del conteo de iteraciones.
+
+**Coste/perf**: emular fielmente el spin (~377 iter/frame × ~30 instrucciones + ~35 RMW de
+`g_cyc`) es caro en 68000 y **amenaza el 50 fps**. La via de **PORT** (no emulacion) es modelar el
+PRNG de forma barata (avanzarlo K pasos conocidos/frame), no emular el bucle. El build con este
+cambio no se pudo medir en A500 (resolucion de símbolo con el nuevo layout); el build previo mide
+**49.67 fps**.
+
+**Estado**: la implementacion queda en el historial (commit `bbcf807`, revertida en `03211f6`).
+El port del demo vuelve al comportamiento bueno. El bug raiz a atacar es la **ruta de
+siembra `L_C9B1` no alcanzada**.
+
