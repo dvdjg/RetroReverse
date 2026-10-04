@@ -3629,7 +3629,6 @@ private:
 #ifdef N2A_TRACE_LABEL
 			out.append("g_label = 0x");
 			out.append_hex(b, 4u, true);
-			out.append("u; ");
 #endif
 			out.append("\n");
 			eng::u16 p = b;
@@ -3895,13 +3894,13 @@ private:
 		out.append("static u8 hanam = 0; // hook del app: 0 = no inferir intenciones\n");
 		out.append("static u8 (*hal_ppu_read_hook)(u16) = 0;\n");
 		out.append("static void (*hal_vblank_hook)(void) = 0;\n");
-		out.append("static u8 hal_ppu_read(u16 a) {\n");
+		out.append("static __attribute__((always_inline)) inline u8 hal_ppu_read(u16 a) {\n");
 		out.append("    if (hal_ppu_read_hook != 0) { return hal_ppu_read_hook(a); }\n");
 		out.append("    if ((a & 7u) == 2u) { const u8 r = ppu_status; ppu_status = (u8)(ppu_status & 0x7Fu); ppu_latch = 0; return r; }\n");
 		// Mando: devuelve el bit bajo del registro de desplazamiento y lo desplaza (relleno de 1s).
 		out.append("    if (a == 0x4016u || a == 0x4017u) { const u8 r = (u8)(n2a_pad_shift & 1u); n2a_pad_shift = (u8)((n2a_pad_shift >> 1) | 0x80u); return r; }\n");
 		out.append("    return 0;\n}\n");
-		out.append("static void hal_ppu_write(u16 a, u8 v) {\n");
+		out.append("static __attribute__((always_inline)) inline void hal_ppu_write(u16 a, u8 v) {\n");
 		out.append("    switch (a) {\n");
 		out.append("    case 0x2000u: ppu_ctrl = v; break;\n");
 		out.append("    case 0x2001u: ppu_mask = v; break;\n");
@@ -3964,9 +3963,10 @@ private:
 			out.append("static void tick(u32 n) { g_cyc += n; while (g_cyc >= g_frame_deadline) { frame_event(); } }\n");
 		}
 		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
+
 		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
 		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");
-		out.append("static u8 rd(u16 a) {\n");
+		out.append("static __attribute__((always_inline)) inline u8 rd(u16 a) {\n");
 		// El contador de pasos (diagnostico) era un load+compare+branch por CADA lectura. Solo se
 		// emite bajo `N2A_TRACE_STEPS` (transpilador) para no costar en produccion.
 #ifdef N2A_TRACE_STEPS
@@ -3975,7 +3975,7 @@ private:
 		out.append("    if (a < 0x2000u) { return ram[a & 0x7FFu]; }\n");
 		out.append("    if (a >= 0x8000u) { return PRG_ROM[(a - 0x8000u) & (kPrgSize - 1u)]; }\n");
 		out.append("    return hal_ppu_read(a);\n}\n");
-		out.append("static void wr(u16 a, u8 v) {\n");
+		out.append("static __attribute__((always_inline)) inline void wr(u16 a, u8 v) {\n");
 		out.append("    if (a < 0x2000u) { ram[a & 0x7FFu] = v; return; }\n");
 		out.append("    hal_ppu_write(a, v);\n}\n");
 		out.append("static void setnz(u8 v) { Zf = (v == 0); Nf = ((v & 0x80u) != 0); }\n\n");
