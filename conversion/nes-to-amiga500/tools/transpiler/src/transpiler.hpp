@@ -763,6 +763,10 @@ public:
 	/// (solo acumula ciclos para el modelo hibrido); el NMI lo dispara el busy-wait (spin-yield) y
 	/// `hal_wait_vblank`. Mucho mas rapido en A1200; el modelo de ciclos sigue disponible para PC.
 	void set_vblank_sync(bool b) noexcept { vblank_sync_ = b; }
+	/// Activa el **flatten del grafo a una sola funcion**: los `JSR` se resuelven con `goto` y los
+	/// `RTS` con `goto *puntero_de_retorno` (extension GCC). Sin llamadas C, el compilador puede
+	/// mantener A/X/Y/flags en REGISTROS (con las globales no puede: `ram[]` puede aliase).
+	void set_flat(bool b) noexcept { flat_ = b; }
 
 	/// Con `true`, elige automÃ¡ticamente el mejor backend: el **nativo** si la ROM lo
 	/// soporta (`native_ok()`) y, si no, el codegen por bloques con el perfil Amiga
@@ -913,6 +917,7 @@ private:
 	/// flags no vivos se OMITEN (no simular trabajo absurdo). 0xFF = fijar todos (conservador).
 	eng::u8 d_keep_flags_ = 0xFFu;
 	bool vblank_sync_ = false;   ///< Si `true`, frame boundary por VBlank (sin tick/frame por instruccion; ver `set_vblank_sync`).
+	bool flat_ = false;          ///< Si `true`, flatea el grafo a UNA funcion (goto computado para RTS) para A/X/Y en registros.
 	mutable const char* native_reject_ = ""; ///< Motivo del Ãºltimo rechazo de `native_ok()` (diagnÃ³stico).
 	mutable eng::u16 native_reject_addr_ = 0; ///< DirecciÃ³n asociada al rechazo (p. ej. el `JSR`).
 	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnÃ³stico).
@@ -921,6 +926,7 @@ private:
 	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> decomp_region_of_ {}; ///< bloque -> region (decompilado).
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> emitted_ {}; ///< flatten: bloques ya emitidos.
 	/// VSA de Ã­ndices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
 	/// Permite plegar `LDA tabla,X` a literal cuando `X` es constante en el bloque.
 	bool native_x_known_ = false;
@@ -3600,23 +3606,29 @@ private:
 			}
 			stack[j] = k;
 		}
-		out.append("static void f_");
-		out.append_hex(entry, 4u, true);
-		out.append("(void) {\n");
-		// **Reanudacion**: si `g_resume` apunta a un bloque de esta region, salta a su etiqueta.
-		out.append("    if (g_resume != 0u) { const u16 n2a_r = g_resume; g_resume = 0u; switch (n2a_r) { ");
-		for (eng::usize si = 0; si < stack.size(); ++si) {
-			out.append("case 0x");
-			out.append_hex(stack[si], 4u, true);
-			out.append("u: goto L_");
-			out.append_hex(stack[si], 4u, true);
-			out.append("; ");
+		if (!flat_) {
+			out.append("static void f_");
+			out.append_hex(entry, 4u, true);
+			out.append("(void) {\n");
+			// **Reanudacion**: si `g_resume` apunta a un bloque de esta region, salta a su etiqueta.
+			out.append("    if (g_resume != 0u) { const u16 n2a_r = g_resume; g_resume = 0u; switch (n2a_r) { ");
+			for (eng::usize si = 0; si < stack.size(); ++si) {
+				out.append("case 0x");
+				out.append_hex(stack[si], 4u, true);
+				out.append("u: goto L_");
+				out.append_hex(stack[si], 4u, true);
+				out.append("; ");
+			}
+			out.append("} }\n");
 		}
-		out.append("} }\n");
 		for (eng::usize si = 0; si < stack.size(); ++si) {
 			const eng::u16 b = stack[si];
 			if (b < decomp_region_of_.size() && decomp_region_of_[b] == 0u) {
 				decomp_region_of_[b] = entry; // mapa bloque -> region (para el despachador)
+			}
+			if (flat_) {
+				if (b < emitted_.size() && emitted_[b] != 0u) { continue; }
+				if (b < emitted_.size()) { emitted_[b] = 1u; }
 			}
 			out.append("L_");
 			out.append_hex(b, 4u, true);
@@ -3832,18 +3844,34 @@ private:
 					out.append("u); --SP;\n    wr(0x100u + SP, 0x");
 					out.append_hex(static_cast<eng::u16>(ret & 0xFFu), 2u, true);
 					out.append("u); --SP;\n");
-					out.append("    f_");
-					out.append_hex(term->target, 4u, true);
-					out.append("();\n    SP = (u8)(SP + 2u);\n");
-					if (native_vis_[next] != 0u) {
-						out.append("    goto L_");
+					if (flat_) {
+						// Flatten: apilar el PUNTERO DE RETORNO (a la etiqueta de `next`) y `goto`
+						// al target; el `RTS` hara `goto *` de la pila. Sin llamadas C -> A/X/Y a
+						// registros.
+						out.append("    ret_lbl[ret_sp++] = &&L_");
 						out.append_hex(next, 4u, true);
+						out.append("; goto L_");
+						out.append_hex(term->target, 4u, true);
 						out.append(";\n");
+					} else {
+						out.append("    f_");
+						out.append_hex(term->target, 4u, true);
+						out.append("();\n    SP = (u8)(SP + 2u);\n");
+						if (native_vis_[next] != 0u) {
+							out.append("    goto L_");
+							out.append_hex(next, 4u, true);
+							out.append(";\n");
+						}
 					}
 				} else if (sv_equal(m, "RTS") || sv_equal(m, "RTI")) {
 					out.append("    tick(");
 					out.append_u32(op_base_cycles(term->opcode));
-					out.append("u);\n    return;\n");
+					if (flat_) {
+						// Flatten: recuperar la direccion (pila NES) y saltar al retorno guardado.
+						out.append("u); SP = (u8)(SP + 2u); goto *ret_lbl[--ret_sp];\n");
+					} else {
+						out.append("u);\n    return;\n");
+					}
 				} else if (sv_equal(m, "BRK")) {
 					out.append("    tick(");
 					out.append_u32(op_base_cycles(term->opcode));
@@ -3859,7 +3887,9 @@ private:
 				out.append(";\n");
 			}
 		}
-		out.append("}\n\n");
+		if (!flat_) {
+			out.append("}\n\n");
+		}
 	}
 
 	/// Emite el **decompilado** completo a `out` (fase 1: C plano + HAL + regiones).
@@ -4011,29 +4041,61 @@ private:
 		for (eng::u32 i = 0; i < kSpace; ++i) {
 			decomp_region_of_[i] = 0u;
 		}
+		(void)emitted_.resize(kSpace, 0u);
+		for (eng::u32 i = 0; i < kSpace; ++i) { emitted_[i] = 0u; }
+		if (flat_) {
+			// Flatten: UNA funcion con A/X/Y/flags LOCALES (registros) + pila de retorno.
+			out.append("[[gnu::used]] static void n2a_run(void) {\n");
+			out.append("    u8 A = 0u, X = 0u, Y = 0u, SP = 0xFD;\n");
+			out.append("    bool Cf = false, Zf = false, Nf = false, Vf = false, Df = false, If = false;\n");
+			out.append("    void* ret_lbl[64]; u16 ret_sp = 0u;\n");
+			// Resume por tabla ordenada + busqueda binaria (un `switch` con miles de casos
+			// desborda la tabla de salto m68k) con PUNTEROS de etiqueta (`&&`).
+			out.append("    static const struct { u16 a; const void* l; } kRL[] = {\n");
+			for (eng::u32 a = 0; a < kSpace; ++a) {
+				if (leaders_[a] != 0u && has_instr_[a] != 0u) {
+					out.append("        {0x");
+					out.append_hex(static_cast<eng::u16>(a), 4u, true);
+					out.append("u, &&L_");
+					out.append_hex(static_cast<eng::u16>(a), 4u, true);
+					out.append("}, ");
+				}
+			}
+			out.append("\n    };\n");
+			out.append("    if (g_resume != 0u) { const u16 n2a_r = g_resume; g_resume = 0u; u16 lo = 0u, hi = (u16)(sizeof(kRL)/sizeof(kRL[0]));\n");
+			out.append("        while (lo < hi) { const u16 mid = (u16)((lo + hi) / 2u); if (kRL[mid].a < n2a_r) { lo = (u16)(mid + 1u); } else { hi = mid; } }\n");
+			out.append("        if (lo < (u16)(sizeof(kRL)/sizeof(kRL[0])) && kRL[lo].a == n2a_r) { goto *kRL[lo].l; } }\n");
+		}
 		for (eng::usize i = 0; i < entries.size(); ++i) {
 			emit_decompile_region(out, entries[i]);
+		}
+		if (flat_) {
+			out.append("}\n\n");
 		}
 		// **`n2a_frame()`**: el app lo llama una vez por frame. La primera vez arranca por
 		// `reset`; despues reanuda en el bloque guardado en `g_resume` (corre ~1 frame de
 		// ciclos, ejecuta el NMI y cede). `g_engine_mode=1` activa el modo reanudable.
 		// Tabla bloque->region (ordenada) + busqueda binaria. Un `switch` con miles de
 		// casos DESBORDA la tabla de salto del ensamblador m68k ("switch too large").
-		out.append("struct N2A_Res { u16 a; void (*fn)(void); };\n");
-		out.append("static const N2A_Res kRes[] = {\n");
-		for (eng::u32 a = 0; a < kSpace; ++a) {
-			if (decomp_region_of_[a] != 0u) {
-				out.append("    {0x");
-				out.append_hex(static_cast<eng::u16>(a), 4u, true);
-				out.append("u, &f_");
-				out.append_hex(decomp_region_of_[a], 4u, true);
-				out.append("},\n");
+		if (flat_) {
+			out.append("[[gnu::used]] void n2a_frame(void) { g_engine_mode = 1u; n2a_run(); }\n");
+		} else {
+			out.append("struct N2A_Res { u16 a; void (*fn)(void); };\n");
+			out.append("static const N2A_Res kRes[] = {\n");
+			for (eng::u32 a = 0; a < kSpace; ++a) {
+				if (decomp_region_of_[a] != 0u) {
+					out.append("    {0x");
+					out.append_hex(static_cast<eng::u16>(a), 4u, true);
+					out.append("u, &f_");
+					out.append_hex(decomp_region_of_[a], 4u, true);
+					out.append("},\n");
+				}
 			}
+			out.append("};\nstatic const u16 kResN = (u16)(sizeof(kRes) / sizeof(kRes[0]));\n");
+			out.append("[[gnu::used]] void n2a_frame(void) {\n    g_engine_mode = 1u;\n    if (g_resume == 0u) { f_");
+			out.append_hex(reset_, 4u, true);
+			out.append("(); return; }\n    u16 lo = 0u, hi = kResN;\n    while (lo < hi) { const u16 mid = (u16)((lo + hi) / 2u); if (kRes[mid].a < g_resume) { lo = (u16)(mid + 1u); } else { hi = mid; } }\n    if (lo < kResN && kRes[lo].a == g_resume) { kRes[lo].fn(); return; }\n    g_resume = 0u;\n}\n");
 		}
-		out.append("};\nstatic const u16 kResN = (u16)(sizeof(kRes) / sizeof(kRes[0]));\n");
-		out.append("[[gnu::used]] void n2a_frame(void) {\n    g_engine_mode = 1u;\n    if (g_resume == 0u) { f_");
-		out.append_hex(reset_, 4u, true);
-		out.append("(); return; }\n    u16 lo = 0u, hi = kResN;\n    while (lo < hi) { const u16 mid = (u16)((lo + hi) / 2u); if (kRes[mid].a < g_resume) { lo = (u16)(mid + 1u); } else { hi = mid; } }\n    if (lo < kResN && kRes[lo].a == g_resume) { kRes[lo].fn(); return; }\n    g_resume = 0u;\n}\n");
 		out.append("[[gnu::used]] void game_main(void) {\n    for (;;) { n2a_frame(); if (halted) { return; } }\n}\n");
 		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
 		out.append("int main() { game_main(); return 0; }\n#endif\n");

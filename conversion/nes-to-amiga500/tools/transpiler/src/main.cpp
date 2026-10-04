@@ -1,12 +1,12 @@
-// nes_transpiler (fase 1) — ROM NES (iNES/NROM) → C++23 sobre `eng/core`.
+﻿// nes_transpiler (fase 1) â€” ROM NES (iNES/NROM) â†’ C++23 sobre `eng/core`.
 //
 // Uso:
 //   nes_transpiler <entrada.nes> [-o <salida.cpp>]
-//   nes_transpiler --emit-mini-rom   <salida.nes>   ROM mínima propia (LDA/STA/INX/BRK)
+//   nes_transpiler --emit-mini-rom   <salida.nes>   ROM mÃ­nima propia (LDA/STA/INX/BRK)
 //   nes_transpiler --emit-branch-rom <salida.nes>   ROM propia con bucle/ADC/BNE/JSR/RTS
 //   nes_transpiler --help
 //
-// Diseño: docs/TRANSPILER.md y tools/transpiler/README.md.
+// DiseÃ±o: docs/TRANSPILER.md y tools/transpiler/README.md.
 
 #include "host_io.hpp"
 #include "raster_idioms.hpp"
@@ -31,7 +31,7 @@ using n2a::Dyn;
 using eng::util::StringView;
 
 /// Convierte un texto hexadecimal (con o sin `0x`) a 16 bits.
-/// \return `false` si el texto no es hexadecimal válido.
+/// \return `false` si el texto no es hexadecimal vÃ¡lido.
 bool parse_hex(StringView s, eng::u16& out) {
 	if (s.size() >= 2u && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
 		s.remove_prefix(2u);
@@ -61,7 +61,7 @@ bool parse_hex(StringView s, eng::u16& out) {
 /// Igual que `parse_hex` pero para un contador de 32 bits (calor de bloque).
 /// \param s Texto hexadecimal (con o sin `0x`).
 /// \param out Valor parseado.
-/// \return `true` si `s` era un hexadecimal válido.
+/// \return `true` si `s` era un hexadecimal vÃ¡lido.
 bool parse_hex32(StringView s, eng::u32& out) {
 	if (s.size() >= 2u && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
 		s.remove_prefix(2u);
@@ -113,7 +113,7 @@ StringView next_token(StringView& s) {
 
 /// Carga un fichero de hechos de valores (`--facts`) y los registra en `tp`.
 ///
-/// Formato, una regla por línea (hexadecimal con o sin `0x`; `#` comenta):
+/// Formato, una regla por lÃ­nea (hexadecimal con o sin `0x`; `#` comenta):
 /// ```
 /// eq     <addr> <valor>
 /// range  <addr> <min> <max>
@@ -121,7 +121,7 @@ StringView next_token(StringView& s) {
 /// power2 <addr>
 /// hot    <addr> <ejecuciones>   (marca el bloque `hot`/`cold`)
 /// ```
-/// \return `true` si el fichero se leyó (las líneas inválidas se ignoran).
+/// \return `true` si el fichero se leyÃ³ (las lÃ­neas invÃ¡lidas se ignoran).
 bool load_facts(const char* path, n2a::Transpiler& tp) {
 	ByteBuffer buf;
 	if (!n2a::read_whole_file(path, buf)) {
@@ -185,13 +185,13 @@ bool load_facts(const char* path, n2a::Transpiler& tp) {
 }
 
 /// Envuelve `prog` en una ROM iNES NROM (16 KB de PRG) con los tres vectores
-/// apuntando a `$8000`. El contenido es **propio** (homebrew mínimo), sin
+/// apuntando a `$8000`. El contenido es **propio** (homebrew mÃ­nimo), sin
 /// material de terceros, y sirve para probar el pipeline sin ROMs ajenas.
 ///
 /// \param path     Fichero `.nes` de destino.
 /// \param prog     Bytes del programa 6502 (se copian al inicio de la PRG).
-/// \param prog_len Número de bytes del programa.
-/// \return `true` si la ROM se escribió correctamente.
+/// \param prog_len NÃºmero de bytes del programa.
+/// \return `true` si la ROM se escribiÃ³ correctamente.
 bool write_ines_rom_mapped(const char* path, const eng::u8* prog, eng::usize prog_len,
 			   eng::u8 mapper, eng::u8 chr_pages) {
 	constexpr eng::u32 kPrg = 16384u;
@@ -204,8 +204,8 @@ bool write_ines_rom_mapped(const char* path, const eng::u8* prog, eng::usize pro
 	rom[1] = 'E';
 	rom[2] = 'S';
 	rom[3] = 0x1Au;
-	rom[4] = 1u;           // una página de PRG (16 KB)
-	rom[5] = chr_pages;    // páginas de CHR
+	rom[4] = 1u;           // una pÃ¡gina de PRG (16 KB)
+	rom[5] = chr_pages;    // pÃ¡ginas de CHR
 	rom[6] = static_cast<eng::u8>(mapper << 4u);        // mapper (nibble bajo)
 	rom[7] = static_cast<eng::u8>(mapper & 0xF0u);      // mapper (nibble alto)
 
@@ -228,13 +228,13 @@ bool write_ines_rom_mapped(const char* path, const eng::u8* prog, eng::usize pro
 /// Envuelve `prog` en una ROM iNES **NROM** (mapper 0, sin CHR).
 /// \param path Fichero `.nes` de destino.
 /// \param prog Bytes del programa 6502.
-/// \param prog_len Nº de bytes del programa.
-/// \return `true` si la ROM se escribió.
+/// \param prog_len NÂº de bytes del programa.
+/// \return `true` si la ROM se escribiÃ³.
 bool write_ines_rom(const char* path, const eng::u8* prog, eng::usize prog_len) {
 	return write_ines_rom_mapped(path, prog, prog_len, 0u, 0u);
 }
 
-// Programa de la ROM mínima: A9 23 (LDA #$23) · 85 00 (STA $00) · E8 (INX) · 00 (BRK).
+// Programa de la ROM mÃ­nima: A9 23 (LDA #$23) Â· 85 00 (STA $00) Â· E8 (INX) Â· 00 (BRK).
 constexpr eng::u8 kMiniProg[] = {0xA9u, 0x23u, 0x85u, 0x00u, 0xE8u, 0x00u};
 
 // ROM de idioms multibyte (16 bits):
@@ -244,7 +244,7 @@ constexpr eng::u8 kMiniProg[] = {0xA9u, 0x23u, 0x85u, 0x00u, 0xE8u, 0x00u};
 //   INC $30; BNE skip; INC $31  (++16 bits)   E6 30 D0 02 E6 31
 //   comparar $30 con #$0100 (CMP/SBC)         A5 30 C9 00 A5 31 E9 01
 //   LDX #$02; LDA $8000,X; STA $40            A2 02 BD 00 80 85 40
-//   (tabla ROM con índice constante -> literal; $8000+2 = 85)
+//   (tabla ROM con Ã­ndice constante -> literal; $8000+2 = 85)
 //   BRK                                       00
 constexpr eng::u8 kMultibyteProg[] = {
 	0xA9u, 0x34u, 0x85u, 0x10u, 0xA9u, 0x12u, 0x85u, 0x11u,
@@ -302,7 +302,7 @@ constexpr eng::u8 kBranchProg[] = {
 //   $8022: LDX #$07 ; DEX ; BNE $8024             (X = 0)
 //   $8027: LDA #$55 ; STA $40 ; BRK               (ram[$40] = $55)
 // El BEQ no tomado existe para que el transpilador decodifique $8022 (destino
-// del salto indirecto, que no se puede resolver estáticamente) como bloque.
+// del salto indirecto, que no se puede resolver estÃ¡ticamente) como bloque.
 constexpr eng::u8 kMiscProg[] = {
 	0xA9u, 0x81u, 0x48u, 0xA9u, 0x00u, 0x68u, 0x0Au, 0x6Au, 0x4Au, 0x85u,
 	0x10u, 0xA9u, 0x03u, 0x85u, 0x20u, 0xE6u, 0x20u, 0xC6u, 0x20u, 0x06u,
@@ -315,9 +315,9 @@ constexpr eng::u8 kMiscProg[] = {
 // $2A y emite `N2A_ASSUME` sin necesidad de un fichero de hechos.
 constexpr eng::u8 kAssumeProg[] = {0xA9u, 0x2Au, 0x85u, 0x10u, 0xA5u, 0x10u, 0x00u};
 
-// ROM de **carga de cálculo** para medir el codegen: bucle doble (128×256
+// ROM de **carga de cÃ¡lculo** para medir el codegen: bucle doble (128Ã—256
 // iteraciones) con CLC/ADC/STA/LDA/EOR/ROL/DEC/BNE y termina en BRK. No depende
-// de la PPU, así que sirve para comparar codegen vs intérprete vs ejecutor rápido.
+// de la PPU, asÃ­ que sirve para comparar codegen vs intÃ©rprete vs ejecutor rÃ¡pido.
 //   $8000: LDX #$00 ; LDA #$00 ; STA $10 ; LDA #$FF ; STA $12
 //   $800A: CLC ; ADC #$07 ; STA $10 ; LDA $10 ; EOR #$5A ; STA $11 ; ROL $11
 //          DEC $12 ; BNE $800A          (256 iteraciones)
@@ -331,7 +331,7 @@ constexpr eng::u8 kBenchProg[] = {
 };
 
 // ROM que **copia una rutina a RAM ($0200) y la ejecuta** (JSR $0200), para
-// validar el código en RAM: el transpilador no la decodifica (está en RAM), así
+// validar el cÃ³digo en RAM: el transpilador no la decodifica (estÃ¡ en RAM), asÃ­
 // que se resuelve por el fallback del runtime.
 //   $8000: LDX #$00 ; copia 17 bytes de $8012 a $0200 ; JSR $0200 ; BRK
 //   $8012: LDY #$00 ; LDA #$00 ; STA $10 ; bucle: CLC; ADC #$05; STA $10; EOR
@@ -342,11 +342,11 @@ constexpr eng::u8 kRamProg[] = {
 	0x18u, 0x69u, 0x05u, 0x85u, 0x10u, 0x49u, 0x3Cu, 0x88u, 0xD0u, 0xF7u, 0x60u,
 };
 
-/// Imprime la ayuda de línea de comandos.
+/// Imprime la ayuda de lÃ­nea de comandos.
 /// \param argv0 Nombre del programa (no se usa; se mantiene por uniformidad).
 void print_usage(const char* argv0) {
 	(void)argv0;
-	n2a::out_line("nes_transpiler (fase 1) — NES (iNES/NROM) → C++23 (eng/core)");
+	n2a::out_line("nes_transpiler (fase 1) â€” NES (iNES/NROM) â†’ C++23 (eng/core)");
 	n2a::out_line("Uso: nes_transpiler <entrada.nes> [-o <salida.cpp>] [--facts <hechos.txt>]");
 	n2a::out_line("     [--chain] [--rom-direct] [--fast-ram] [--no-cycles] [--native] [--best]");
 	n2a::out_line("     [--pc-trace <hot.txt>] [--ind-targets <ind.txt>]  (telemetria de opcode_hist/ind_targets)");
@@ -367,7 +367,7 @@ void print_usage(const char* argv0) {
 	n2a::out_line("   (la entrada tambien admite .7z con varias .nes dentro)");
 }
 
-/// Extrae el nombre base (sin directorio ni extensión) de `path` en `out`.
+/// Extrae el nombre base (sin directorio ni extensiÃ³n) de `path` en `out`.
 void base_name(const char* path, char* out, eng::usize cap) {
 	eng::usize start = 0u;
 	for (eng::usize i = 0; path[i] != '\0'; ++i) {
@@ -429,13 +429,14 @@ bool extract_7z(const char* sevenzip, const std::string& archive, const std::str
 	return std::system(cmd.c_str()) == 0;
 }
 
-/// Versión del **codegen/ABI**: subirla invalida la caché de plugins (se escribe
+/// VersiÃ³n del **codegen/ABI**: subirla invalida la cachÃ© de plugins (se escribe
 /// en el sidecar como `"gen"`). v2 = +`kMirroring`/`n2a_mirroring`.
 constexpr int kCodegenVersion = 2;
 
 /// Opciones de codegen fijadas por los flags (ver `main`).
 	bool g_no_cycles = false;
 bool g_vblank = false; ///< `--vblank`: frame boundary por VBlank (sin `tick` por instruccion).
+bool g_flat = false; ///< `--flat`: flatea el grafo a una funcion (A/X/Y en registros).
 bool g_no_idioms = false; ///< `--no-idioms` (medir el efecto de los idioms multibyte).
 bool g_fast_ram = false;
 bool g_trace = false;
@@ -448,8 +449,8 @@ const char* g_pc_trace = nullptr; ///< Fichero de PC ejecutados (`--pc-trace`) p
 const char* g_ind_targets = nullptr; ///< Fichero de destinos de `JMP (ind)` (`--ind-targets`) por sitio.
 
 /// Carga un fichero de **destinos indirectos** (`--ind-targets`, de `ind_targets`):
-/// líneas `ind <sitio> <destino>` (hex, con o sin `0x`). Habilita el despacho
-/// nativo de `JMP (ind)`. \return `true` si se leyó el fichero.
+/// lÃ­neas `ind <sitio> <destino>` (hex, con o sin `0x`). Habilita el despacho
+/// nativo de `JMP (ind)`. \return `true` si se leyÃ³ el fichero.
 bool load_ind_targets(const char* path, n2a::Transpiler& tp) {
 	ByteBuffer buf;
 	if (!n2a::read_whole_file(path, buf)) {
@@ -486,10 +487,10 @@ bool load_ind_targets(const char* path, n2a::Transpiler& tp) {
 }
 
 /// Carga una **traza de PC** (`--pc-trace`): direcciones 6502 ejecutadas, en el formato
-/// de `opcode_hist ... <hot.txt>` (`hot <addr> <n>`) o una dirección por línea. Añade
+/// de `opcode_hist ... <hot.txt>` (`hot <addr> <n>`) o una direcciÃ³n por lÃ­nea. AÃ±ade
 /// como **puntos de entrada** las direcciones con ejecuciones > 0, completando el CFG
-/// donde el análisis estático no puede seguir un salto indirecto/tabla.
-/// \return `true` si se leyó el fichero.
+/// donde el anÃ¡lisis estÃ¡tico no puede seguir un salto indirecto/tabla.
+/// \return `true` si se leyÃ³ el fichero.
 bool load_pc_trace(const char* path, n2a::Transpiler& tp) {
 	ByteBuffer buf;
 	if (!n2a::read_whole_file(path, buf)) {
@@ -543,7 +544,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	n2a::Transpiler tp;
 	if (!tp.load(bytes.data(), bytes.size())) {
 		if (tp.prg_banked()) {
-			// Mapper con PRG bancada: el oráculo lo ejecuta, pero el codegen por
+			// Mapper con PRG bancada: el orÃ¡culo lo ejecuta, pero el codegen por
 			// banco es el trabajo pendiente de F9 (docs/TRANSPILER_BANKING.md).
 			Dyn e;
 			e.append("error: mapper ");
@@ -569,6 +570,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts) {
 	tp.set_best(g_best);
 	tp.set_decompile(g_decompile);
 	tp.set_vblank_sync(g_vblank);
+	tp.set_flat(g_flat);
 	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
 		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
 	}
@@ -637,14 +639,14 @@ void dir_name(const char* path, char* out, eng::usize cap) {
 	out[j] = '\0';
 }
 
-/// Datos de cabecera iNES útiles para el sidecar de metadatos.
+/// Datos de cabecera iNES Ãºtiles para el sidecar de metadatos.
 struct RomInfo {
-	int mapper = 0;     ///< Número de mapper iNES.
-	eng::u32 prg = 0u;  ///< Tamaño de PRG en bytes.
-	eng::u32 chr = 0u;  ///< Tamaño de CHR en bytes.
+	int mapper = 0;     ///< NÃºmero de mapper iNES.
+	eng::u32 prg = 0u;  ///< TamaÃ±o de PRG en bytes.
+	eng::u32 chr = 0u;  ///< TamaÃ±o de CHR en bytes.
 };
 
-/// Lee la cabecera iNES de `path`. \return `false` si no es válida.
+/// Lee la cabecera iNES de `path`. \return `false` si no es vÃ¡lida.
 bool rom_info(const char* path, RomInfo& out) {
 	ByteBuffer b;
 	if (!n2a::read_whole_file(path, b) || b.size() < 16u) {
@@ -770,7 +772,7 @@ eng::u32 read_cached_crc(const char* path) {
 /// Compila el plugin `.n2x` a partir de `entry` (`plugin_entry.cpp`) y del
 /// transpilado `n2a_game_impl.cpp` que debe estar en `outdir`. Autodetecta los
 /// `-I` de runtime a partir de la ruta de `entry` (`<runtime>/plugin/...`).
-/// \return `true` si el compilador terminó con éxito.
+/// \return `true` si el compilador terminÃ³ con Ã©xito.
 bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, const char* n2x,
 		      const eng::util::Vector<eng::util::StringView, eng::util::HeapAlloc>& incs) {
 	char cmd[8192];
@@ -780,7 +782,7 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 			cmd[o++] = *s++;
 		}
 	};
-	// Rutas **entre comillas** (`"..."`): los nombres de ROM llevan espacios/paréntesis
+	// Rutas **entre comillas** (`"..."`): los nombres de ROM llevan espacios/parÃ©ntesis
 	// (p. ej. `Super Mario Bros (World).nes`), y sin comillas el shell parte el comando.
 	auto appq = [&](const char* s) {
 		app("\"");
@@ -794,7 +796,7 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 #endif
 	app(" -I");
 	appq(outdir);
-	// Autodetección: `<entry_dir>/..` = runtime -> include y plugin.
+	// AutodetecciÃ³n: `<entry_dir>/..` = runtime -> include y plugin.
 	char edir[1024];
 	dir_name(entry, edir, sizeof edir);
 	char rdir[1024];
@@ -821,9 +823,9 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 	cmd[o] = '\0';
 	n2a::out_line(eng::util::StringView(cmd));
 	// En Windows `std::system` ejecuta `cmd /c <cmd>` y `cmd.exe` **quita la primera y
-	// la última comilla** si el comando empieza por `"`. Como hemos citado las rutas, el
+	// la Ãºltima comilla** si el comando empieza por `"`. Como hemos citado las rutas, el
 	// comando empieza por `"`: se envuelve **todo** en una comilla adicional
-	// (`cmd /c ""prog" args"`), que es el idioma estándar para este caso.
+	// (`cmd /c ""prog" args"`), que es el idioma estÃ¡ndar para este caso.
 	std::string full = cmd;
 #if defined(_WIN32)
 	if (!full.empty() && full[0] == '"') {
@@ -836,8 +838,8 @@ bool build_plugin_lib(const char* cxx, const char* entry, const char* outdir, co
 } // namespace
 
 /// Escribe el **mapeo de idiomas de raster** de `roms` a `out_path` (JSON), que
-/// consumirá el codegen/backend Amiga para emitir las primitivas HLE (ver
-/// `docs/TIMING_AMIGA.md`). \return `true` si se escribió el fichero.
+/// consumirÃ¡ el codegen/backend Amiga para emitir las primitivas HLE (ver
+/// `docs/TIMING_AMIGA.md`). \return `true` si se escribiÃ³ el fichero.
 static bool write_raster_json(const std::vector<std::string>& roms, const char* out_path) {
 	std::FILE* f = std::fopen(out_path, "wb");
 	if (f == nullptr) {
@@ -886,7 +888,7 @@ static bool write_raster_json(const std::vector<std::string>& roms, const char* 
 /// Punto de entrada del transpilador. Interpreta los argumentos, y o bien emite
 /// una ROM de prueba, o bien transpila la ROM indicada al `.cpp` de salida.
 ///
-/// \param argc Número de argumentos (incluye el nombre del programa).
+/// \param argc NÃºmero de argumentos (incluye el nombre del programa).
 /// \param argv Vector de argumentos.
 /// \return 0 si todo fue bien; 1 ante error de uso, de lectura o de escritura.
 int main(int argc, char** argv) {
@@ -992,7 +994,7 @@ int main(int argc, char** argv) {
 			g_no_cycles = true;
 			continue;
 		}
-		if (arg == "--no-idioms") { // desactivar idioms multibyte (medición)
+		if (arg == "--no-idioms") { // desactivar idioms multibyte (mediciÃ³n)
 			g_no_idioms = true;
 			continue;
 		}
@@ -1000,7 +1002,7 @@ int main(int argc, char** argv) {
 			g_fast_ram = true;
 			continue;
 		}
-		if (arg == "--trace") { // traza por instrucción (comparar con el intérprete)
+		if (arg == "--trace") { // traza por instrucciÃ³n (comparar con el intÃ©rprete)
 			g_trace = true;
 			continue;
 		}
@@ -1021,8 +1023,19 @@ int main(int argc, char** argv) {
 			continue;
 		}
 		if (arg == "--vblank") { // frame boundary por VBlank (velocidad A1200): sin tick/frame
+
 			g_vblank = true;
+
 			continue;
+
+		}
+
+		if (arg == "--flat") { // flatea el grafo a una funcion (A/X/Y en registros)
+
+			g_flat = true;
+
+			continue;
+
 		}
 		if (arg == "--best") { // nativo si se puede; si no, perfil Amiga encadenado
 			g_best = true;
@@ -1109,7 +1122,7 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-	// Modo biblioteca: una o más ROMs -> .cpp (fuente) + .n2x (plugin compilado).
+	// Modo biblioteca: una o mÃ¡s ROMs -> .cpp (fuente) + .n2x (plugin compilado).
 	if (emit_lib) {
 		if (entry == nullptr) {
 			n2a::err_line("error: --emit-lib requiere --entry <plugin_entry.cpp>");
@@ -1139,10 +1152,10 @@ int main(int argc, char** argv) {
 			char arc[1024];
 			join_path(outdir, stem, ".7z", arc, sizeof arc);
 
-			// Caché: si el plugin existe y el CRC de la ROM no cambió, no se rehace.
+			// CachÃ©: si el plugin existe y el CRC de la ROM no cambiÃ³, no se rehace.
 			const eng::u32 crc = crc32_file(rom);
 			ByteBuffer existing;
-			// La caché caduca si cambia la ROM **o** la versión de codegen/ABI.
+			// La cachÃ© caduca si cambia la ROM **o** la versiÃ³n de codegen/ABI.
 			const bool cached = n2a::read_whole_file(n2x, existing) &&
 					    read_cached_crc(json) == crc &&
 					    read_sidecar_int(json, "gen") == kCodegenVersion;
@@ -1173,14 +1186,14 @@ int main(int argc, char** argv) {
 					rc = 1;
 					continue;
 				}
-				// Sidecar de metadatos (título/arch/mapper/CRC) para el gestor.
+				// Sidecar de metadatos (tÃ­tulo/arch/mapper/CRC) para el gestor.
 				write_sidecar(json, base, tag, rom, crc);
 				Dyn ok;
 				ok.append("plugin -> ");
 				ok.append(n2x);
 				n2a::out_line(ok.view());
 			}
-			// Mapeo de **idiomas de raster** de esta ROM (lo consumirá el codegen/buscará
+			// Mapeo de **idiomas de raster** de esta ROM (lo consumirÃ¡ el codegen/buscarÃ¡
 			// el backend Amiga para emitir las primitivas HLE; ver docs/TIMING_AMIGA.md).
 			char rjson[1024];
 			join_path(outdir, stem, ".raster.json", rjson, sizeof rjson);
