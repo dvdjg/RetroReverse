@@ -450,3 +450,27 @@ incremental (`update_world_from_dirty`), en vez de repetir la pantalla (bucle `c
 Resultado: borde negro limpio; fps 48.9 → **49.5 real** (menos tiles de margen que rellenar).
 Pendiente: la pantalla NES (256 px) queda **alineada a la izquierda** en la ventana de 320 px (64 px
 de borde negro a la derecha); centrarla sería un ajuste fino del DIW/viewport.
+
+## Fidelidad de render — centrado (arreglado) y timing (acotado)
+
+**Centrado (hecho):** el juego se escribe desplazado `kMarginTx = 2` metatiles en `g_cells` (margen
+negro vertical a ambos lados); la pantalla NES de 256 px queda centrada en la ventana de 320 px.
+fps ~49.4.
+
+**Timing (acotado):** comparando oráculo↔port por-frame (input scripteado, `oracle_script`/
+`port_script`), los **estados estables coinciden** (título 340-395, blank de transición, gameplay
+500); solo las **TRANSICIONES** ocurren en frames distintos (el port va ~5-10 frames por detrás: en
+400-405 y 450 el oráculo ya transicionó y el port no; en 410/420/500 vuelven a coincidir).
+
+El origen está acotado: en un frame estable divergen solo **29 bytes de RAM de 2048**:
+- zero-page `$0000`, `$0016-$001F`, `$0034`, `$0043` — contadores/estado del juego, **varios off-by-1**
+  (desfase acumulado que retrasa la transición).
+- **pila `$01EF-$01FF`** — el port tiene la pila desplazada ~1-2 bytes: el modelado del **NMI/RTI**
+  del port **no empuja los 3 bytes del marco de NMI** (`PCH/PCL/P`) que sí empuja el NES real.
+- `$06F0`.
+
+**Evaluación:** es **abordable pero profundo** — la divergencia es pequeña y localizada, pero exige
+que el decompilador modele el **NMI/stack como el NES real** (push de 3 bytes al entrar el NMI, RTI
+que los saca, y el timing de disparo del NMI alineado al scanline) para que los contadores del juego
+avancen igual. Es decir, el mismo límite de *sincronización PPU/NMI sub-instrucción* que ya consta
+en `TIMING_ROADMAP.md`.
