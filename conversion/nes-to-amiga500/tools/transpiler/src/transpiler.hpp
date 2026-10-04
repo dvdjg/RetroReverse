@@ -789,6 +789,9 @@ public:
 	/// \param out Buffer de salida. \param b Bloque de origen (solo para etiqueta unica).
 	void emit_nmi_enter(Dyn& out, eng::u16 b) {
 		const eng::u32 n = nmi_enter_seq_++;
+		// **Solo cede el frame si el NMI se ejecuto** (es la frontera de frame real). Si el NMI esta
+		// deshabilitado (`$2000` bit7=0, p. ej. la espera de VBlank del reset) NO se cede: el port
+		// sigue, como el oraculo -> alinea la numeracion de frames (evita el desfase de 1 frame).
 		// Se limpia `g_yield_req` para que el NMI corra HASTA COMPLETARSE: `ret_lbl` es una
 		// LOCAL de `n2a_run`; si el NMI cediera a mitad, al reanudar en otra llamada la pila
 		// de retorno se habria perdido (underflow). Tras el NMI se rearma el yield de frame.
@@ -796,9 +799,13 @@ public:
 		out.append_u32(n);
 		out.append("; ++g_nmi_fires; goto L_");
 		out.append_hex(nmi_, 4u, true);
+		out.append("; } else { goto L_nmiskip_");
+		out.append_u32(n);
 		out.append("; }\nL_nmiret_");
 		out.append_u32(n);
-		out.append(": if (g_engine_mode) { g_yield_req = 1u; }\n");
+		out.append(": if (g_engine_mode) { g_yield_req = 1u; }\nL_nmiskip_");
+		out.append_u32(n);
+		out.append(": ;\n");
 	}
 
 	/// Con `true`, elige automÃ¡ticamente el mejor backend: el **nativo** si la ROM lo
@@ -4066,7 +4073,9 @@ private:
 			out.append_hex(nmi_, 4u, true);
 			out.append("(); } ");
 		}
-		out.append("if (g_engine_mode) { g_yield_req = 1u; } }\n");
+		// Flat: el yield lo hace `emit_nmi_enter` SOLO si el NMI se ejecuto (ver alli) -> no ceder
+		// en esperas de VBlank con NMI deshabilitado. Non-flat: sigue cediendo aqui (NMI inline).
+		out.append(flat_ ? "}\n" : "if (g_engine_mode) { g_yield_req = 1u; } }\n");
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
 		// ejecuta), en vez de disparar el NMI de inmediato.
 		if (vblank_sync_) {
