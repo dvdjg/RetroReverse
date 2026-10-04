@@ -780,7 +780,7 @@ public:
 		// de retorno se habria perdido (underflow). Tras el NMI se rearma el yield de frame.
 		out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
 		out.append_u32(n);
-		out.append("; goto L_");
+		out.append("; ++g_nmi_fires; goto L_");
 		out.append_hex(nmi_, 4u, true);
 		out.append("; }\nL_nmiret_");
 		out.append_u32(n);
@@ -4019,6 +4019,8 @@ private:
 		// se autogestiona (standalone, tests host).
 		out.append("static u8 g_engine_mode = 0, g_yield_req = 0;\n");
 		out.append("static u8 g_nmi_pending = 0; /* flat: `frame_event` marca NMI; `n2a_run` lo ejecuta inline */\n");
+		out.append("static unsigned g_nmi_fires = 0u; /* diagnostico: NMIs disparados (debe ser 1/frame) */\n");
+		out.append("static unsigned n2a_nmi_fires(void) { return g_nmi_fires; }\n");
 		out.append("static u16 g_resume = 0;\n");
 		out.append("static void (*hal_frame_hook)(void) = 0;\n");
 		out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } ");
@@ -4027,7 +4029,7 @@ private:
 			// A/X/Y); se marca y `n2a_run` lo ejecuta inline mediante la pila de retorno.
 			out.append("g_nmi_pending = 1u; ");
 		} else {
-			out.append("f_");
+			out.append("++g_nmi_fires; f_");
 			out.append_hex(nmi_, 4u, true);
 			out.append("(); ");
 		}
