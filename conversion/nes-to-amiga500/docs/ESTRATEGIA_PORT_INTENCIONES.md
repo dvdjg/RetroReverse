@@ -71,6 +71,20 @@ port decompilado contra ella (diferencial por frame de RAM+PPU+OAM). Pipeline id
 Cada juego nuevo automatiza el 80–90%; solo aporta “patrones raros”. No es “juego a juego desde
 cero”, sino **KB creciente + casos**.
 
+## Estado del hilo (progreso)
+
+- **Input: HECHO.** El HAL del port modela el mando NES (`$4016/$4017` strobe+shift) con accessor
+  `n2a_set_pad`; los demos leen el joystick Amiga (`eng::amiga::poll_input`) y lo mapean.
+  Verificado en host: con **Start** el juego avanza del título al gameplay; sin input se queda.
+- **Diferencial port↔oráculo: HECHO** (ctrl+nametable+atributos+RAM+OAM, `_scratch/cmp_state.sh`).
+  Nametable/atributos **idénticos**. La **RAM diverge en ~12–14 líneas** (de 128) de forma
+  **acotada y estable** (no crece): consistente con el **PRNG / nº de iteraciones del bucle
+  principal** (timing del frame), no con un bug de render. Para el título es cosmético; para
+  fidelidad de gameplay hay que alinear el modelo de frame.
+- **Sprites HW: cableados** (OAM→8 canales, subpaleta, DATA de la pattern table de sprites,
+  COLOR16-31). **Posición/paleta pendientes de calibrar** (se ve un sprite desplazado); queda tras
+  `kSpritesOn=false` en el demo XL.
+
 ## Pasos recomendados (orden)
 
 1. **Input** (joystick→`$4016`) — barato, desbloquea jugable y medir fps con gameplay.
