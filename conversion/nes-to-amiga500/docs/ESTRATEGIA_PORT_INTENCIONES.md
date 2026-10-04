@@ -556,3 +556,13 @@ cambio no se pudo medir en A500 (resolucion de símbolo con el nuevo layout); el
 El port del demo vuelve al comportamiento bueno. El bug raiz a atacar es la **ruta de
 siembra `L_C9B1` no alcanzada**.
 
+### Precisión de la ruta de siembra (dónde diverge la máquina de estados)
+
+La region `C940..C9B1` (que contiene la siembra `$18=0F,$19=13`) se entra desde `L_C914` solo si
+`$0510 != 0` (`A=rd(0x0510); if(!Zf) goto L_C940`). El port SI tiene el camino que escribe
+`$0510=0x38` (linea 3758, que abre la ruta) pero **nunca lo ejecuta**: `$18-$1F` permanece a 0
+hasta el frame 120, mientras el oraculo siembra en el frame 3. Es una **ruta muerta**, no un lag:
+la máquina de estados diverge **antes** de escribir `$0510=$38`. Conteo del RNG del port: 0 en
+todos los frames probados. **Siguiente investigación**: localizar el primer punto donde el estado
+interno del juego (p. ej. `$0510`, `$44`, `$58`) diverge del oráculo frame a frame.
+
