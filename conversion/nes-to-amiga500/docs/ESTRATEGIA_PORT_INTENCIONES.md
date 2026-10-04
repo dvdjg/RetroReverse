@@ -589,3 +589,20 @@ lateral no responde. Con **KICK_A500_31 (3.1)** el demo arranca y mide **49.67 f
 valida (`exec.library`, 256 KB) y el engine declara soporte 1.3 (OpenLibrary `dos.library` v0,
 `trackdisk.device` KS1.3), sin API 2.0+ evidente -> huele a **mecanismo de arranque/boot** (ficheros
 de la extension / arranque desde `dh0`) mas que a incompatibilidad de API. **Pendiente**.
+
+## [2] Causa raiz del desfase: la frontera de frame (no el init)
+
+Con el comparador de escrituras (1 frame, oraculo vs port) tras el fix (b): **las primeras 2363
+escrituras son IDENTICAS** (todo el frame 1 del oraculo); el port tiene **336 escrituras de mas**.
+Conclusion: el **reset+init del port es exacto**; el problema es que **no cede en la frontera de
+frame**. El oraculo corta el frame a los 29780 ciclos; el port cede tras la 1a iteracion del bucle
+principal -> ejecuta 336 escrituras de mas -> la maquina de estados va por delante y nunca alcanza
+la siembra del RNG (frame 3 del oraculo).
+
+**Arreglo**: **pacing de frame por ciclos**. Contar los ciclos y ceder cuando cyc >= 29780. Para
+mantener el minimo coste de CPU (criterio del usuario), contar a nivel de **bloque** (1 suma por
+bloque, no por instruccion) o en el **bucle** de espera; NO por instruccion (demasiado caro en
+68000). Combinado con saltar el spin (wait) + modelar el LFSR (ng) para el estado estable.
+
+Diagnostico reproducible: _scratch/host/oracle_wt1.cpp / port_wt1.cpp (traza de escrituras por
+frame).
