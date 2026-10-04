@@ -175,6 +175,14 @@ Pruebas con flags de test (`kRunPort`, `kDoCompose`, `kScrollTest`):
 Meta: bajar el port de ~22 ms a ~<8 ms para que junto al render (~20 ms de VBlank) quede holgado en
 el frame de 50 fps.
 
+**Inferencia de intenciones (codegen), hecha:**
+- **Fusión `CMP #imm` + rama**: si el `CMP/CPX/CPY` inmediato precede a una rama que lee sus flags,
+  se emite **C directo** (`if (A == n)`, `if (A < n)`, `if (((u8)(A-n))&0x80)!=0`…) y se **omite
+  el CMP** (no se simulan flags). Aplicada a **429 ramas** en DK; nametable == oráculo. **Efecto
+  medido ~0** (el emulador tiene ±2 fps de ruido y la ganancia es de pocos %).
+- **`flatten` (inlinar el grafo para A/X/Y en registros): DESCARTADO** — build 14m42s y el binario
+  **no arranca**. Buscar otra vía para los registros.
+
 **Micro-optimizaciones probadas (poco/nulo efecto medido — el emulador domina el ruido):**
 - Quitar el `g_step_limit` de `rd`: ~0%.
 - En modo VBlank, `tick` → no-op (y `hal_wait_vblank` sin `g_cyc`): deja `g_cyc` sin leer → el

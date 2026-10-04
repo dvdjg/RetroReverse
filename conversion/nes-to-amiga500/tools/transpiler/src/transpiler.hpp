@@ -1,12 +1,12 @@
-#pragma once
+﻿#pragma once
 
 /// \file transpiler.hpp
-/// Núcleo del transpilador NES→Amiga (fase 1): parsea la cabecera iNES, obtiene
+/// NÃºcleo del transpilador NESâ†’Amiga (fase 1): parsea la cabecera iNES, obtiene
 /// la PRG-ROM y sus vectores, la desensambla de forma recursiva, agrupa las
 /// instrucciones en *basic blocks* y emite un `.cpp` C++23 que usa el runtime del
 /// nodo (`runtime/include/nes_runtime.hpp`). Todo sobre `eng/core` (sin STL).
 ///
-/// Diseño y fases en [`../../docs/TRANSPILER.md`](../../docs/TRANSPILER.md).
+/// DiseÃ±o y fases en [`../../docs/TRANSPILER.md`](../../docs/TRANSPILER.md).
 /// Alcance actual: NROM (mapper 0), opcodes oficiales + ilegales frecuentes.
 
 #include <eng/core/types/types.hpp>
@@ -20,34 +20,34 @@
 
 namespace n2a {
 
-/// Búfer de texto de salida del codegen: cadena que crece en el heap del host.
+/// BÃºfer de texto de salida del codegen: cadena que crece en el heap del host.
 using Dyn = eng::util::DynamicString<eng::util::HeapAlloc>;
 
-/// Una instrucción de 6502 ya decodificada y ubicada en el espacio de la CPU.
+/// Una instrucciÃ³n de 6502 ya decodificada y ubicada en el espacio de la CPU.
 ///
 /// `operand` guarda el operando **tal cual aparece en la ROM** (inmediato de 8
-/// bits, dirección de página cero o dirección absoluta de 16 bits). `target` es
+/// bits, direcciÃ³n de pÃ¡gina cero o direcciÃ³n absoluta de 16 bits). `target` es
 /// el destino resuelto de ramas y de `JMP`/`JSR` absolutos; para el resto de
 /// modos vale 0 y no debe usarse. Los bits `has_operand`/`has_target` de `flags`
-/// indican cuáles de esos campos son válidos.
+/// indican cuÃ¡les de esos campos son vÃ¡lidos.
 struct Instruction {
-	eng::u16 addr = 0;    ///< Dirección 6502 donde empieza la instrucción.
-	eng::u16 operand = 0; ///< Operando inmediato o dirección, según el modo.
+	eng::u16 addr = 0;    ///< DirecciÃ³n 6502 donde empieza la instrucciÃ³n.
+	eng::u16 operand = 0; ///< Operando inmediato o direcciÃ³n, segÃºn el modo.
 	eng::u16 target = 0;  ///< Destino resuelto de rama/JMP/JSR (si `has_target`).
-	eng::u8 opcode = 0;   ///< Byte de opcode (índice en `kOpcodeTable`).
-	eng::u8 flags = 0;    ///< bit0 = operando válido, bit1 = destino válido.
+	eng::u8 opcode = 0;   ///< Byte de opcode (Ã­ndice en `kOpcodeTable`).
+	eng::u8 flags = 0;    ///< bit0 = operando vÃ¡lido, bit1 = destino vÃ¡lido.
 };
 
-/// El campo `flags` de `Instruction` marca que `operand` es válido.
+/// El campo `flags` de `Instruction` marca que `operand` es vÃ¡lido.
 inline constexpr eng::u8 kHasOperand = 0x01u;
-/// El campo `flags` de `Instruction` marca que `target` es válido.
+/// El campo `flags` de `Instruction` marca que `target` es vÃ¡lido.
 inline constexpr eng::u8 kHasTarget = 0x02u;
 
-/// Ciclos **base** (sin penalización de página/rama) de cada opcode 6502, igual
-/// que la tabla del intérprete del runtime. Se usa para estimar los ciclos de un
-/// bloque en el código generado (`n2a_block_cycles`), de modo que el runtime pueda
-/// avanzar la PPU al ejecutar bloques generados. La estimación omite solo las
-/// penalizaciones dependientes de datos (≤ 1 ciclo por instrucción).
+/// Ciclos **base** (sin penalizaciÃ³n de pÃ¡gina/rama) de cada opcode 6502, igual
+/// que la tabla del intÃ©rprete del runtime. Se usa para estimar los ciclos de un
+/// bloque en el cÃ³digo generado (`n2a_block_cycles`), de modo que el runtime pueda
+/// avanzar la PPU al ejecutar bloques generados. La estimaciÃ³n omite solo las
+/// penalizaciones dependientes de datos (â‰¤ 1 ciclo por instrucciÃ³n).
 /// \param op Byte de opcode.
 /// \return Ciclos base (2..8; 0 si el opcode no tiene entrada).
 [[nodiscard]] inline eng::u8 op_base_cycles(eng::u8 op) noexcept {
@@ -72,11 +72,11 @@ inline constexpr eng::u8 kHasTarget = 0x02u;
 	return t[op];
 }
 
-/// ¿La lectura de `op` usa direccionamiento indexado que penaliza **+1 ciclo** al
-/// cruzar de página? (Las escrituras y los RMW no penalizan.) Debe coincidir con
-/// el intérprete del runtime para que la temporalización sea idéntica.
+/// Â¿La lectura de `op` usa direccionamiento indexado que penaliza **+1 ciclo** al
+/// cruzar de pÃ¡gina? (Las escrituras y los RMW no penalizan.) Debe coincidir con
+/// el intÃ©rprete del runtime para que la temporalizaciÃ³n sea idÃ©ntica.
 /// \param op Byte de opcode.
-/// \return `true` si cruzar página añade un ciclo.
+/// \return `true` si cruzar pÃ¡gina aÃ±ade un ciclo.
 [[nodiscard]] inline bool op_read_indexed_penalty(eng::u8 op) noexcept {
 	switch (op) {
 	case 0x1D: case 0x19: case 0x11:
@@ -95,44 +95,44 @@ inline constexpr eng::u8 kHasTarget = 0x02u;
 	}
 }
 
-/// Clase de hecho de valores sobre una dirección (aportado por análisis o
-/// telemetría; ver [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
+/// Clase de hecho de valores sobre una direcciÃ³n (aportado por anÃ¡lisis o
+/// telemetrÃ­a; ver [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
 enum class FactKind : eng::u8 {
 	Eq,     ///< Siempre vale `values[0]`.
-	Range,  ///< Está en `[0, values[1]]` (`values[0]` = mínimo, informativo).
+	Range,  ///< EstÃ¡ en `[0, values[1]]` (`values[0]` = mÃ­nimo, informativo).
 	Set,    ///< Pertenece al conjunto `values[0..count-1]`.
 	Power2, ///< Es una potencia de dos (o cero).
-	Hot,    ///< `addr` es inicio de bloque y se ejecutó `count` veces (0 = nunca).
+	Hot,    ///< `addr` es inicio de bloque y se ejecutÃ³ `count` veces (0 = nunca).
 };
 
-/// Hecho sobre una dirección que el codegen consume: los de **valor**
+/// Hecho sobre una direcciÃ³n que el codegen consume: los de **valor**
 /// (`Eq`/`Range`/`Set`/`Power2`) se traducen a `N2A_ASSUME` en los bloques que
-/// leen esa dirección; los de **calor** (`Hot`) marcan el bloque como
-/// `__attribute__((hot))`/`((cold))` para reordenar y ajustar el código (ver
+/// leen esa direcciÃ³n; los de **calor** (`Hot`) marcan el bloque como
+/// `__attribute__((hot))`/`((cold))` para reordenar y ajustar el cÃ³digo (ver
 /// [`../../docs/OPTIMIZATION.md`](../../docs/OPTIMIZATION.md)).
 struct Fact {
-	FactKind kind = FactKind::Eq; ///< Interpretación de `values`/`count`.
-	eng::u16 addr = 0;            ///< Dirección observada (valor) o inicio de bloque (calor).
-	eng::u8 values[4] {};         ///< Valores según `kind`.
-	eng::u8 count = 0;            ///< Nº de valores usados (para `Set`).
+	FactKind kind = FactKind::Eq; ///< InterpretaciÃ³n de `values`/`count`.
+	eng::u16 addr = 0;            ///< DirecciÃ³n observada (valor) o inicio de bloque (calor).
+	eng::u8 values[4] {};         ///< Valores segÃºn `kind`.
+	eng::u8 count = 0;            ///< NÂº de valores usados (para `Set`).
 	eng::u32 heat = 0;            ///< Ejecuciones observadas (para `Hot`).
 };
 
 /// Transpilador de una ROM NES (NROM) a C++23.
 ///
 /// Ciclo de vida (llamar en este orden):
-/// 1. `load()`            — valida y descompone la ROM en `rom_`/`prg_`.
-/// 2. `disassemble()`     — decodifica las instrucciones alcanzables.
-/// 3. `build_basic_blocks()` — calcula líderes y metadatos de bloques.
-/// 4. `generate()`        — escribe el `.cpp` en un `Dyn`.
+/// 1. `load()`            â€” valida y descompone la ROM en `rom_`/`prg_`.
+/// 2. `disassemble()`     â€” decodifica las instrucciones alcanzables.
+/// 3. `build_basic_blocks()` â€” calcula lÃ­deres y metadatos de bloques.
+/// 4. `generate()`        â€” escribe el `.cpp` en un `Dyn`.
 ///
-/// El objeto mantiene tablas de 0x10000 entradas indexadas por dirección 6502
-/// (instrucción, marcas); por eso su coste en memoria es de unos pocos cientos
+/// El objeto mantiene tablas de 0x10000 entradas indexadas por direcciÃ³n 6502
+/// (instrucciÃ³n, marcas); por eso su coste en memoria es de unos pocos cientos
 /// de KB, aceptable en la herramienta host (no en el Amiga).
 class Transpiler {
 public:
-	/// Reserva las tablas indexadas por dirección (0x0000..0xFFFF). El coste se
-	/// paga una vez y evita buscar en mapas durante el análisis.
+	/// Reserva las tablas indexadas por direcciÃ³n (0x0000..0xFFFF). El coste se
+	/// paga una vez y evita buscar en mapas durante el anÃ¡lisis.
 	Transpiler() {
 		(void)instr_.resize(kSpace, Instruction {});
 		(void)has_instr_.resize(kSpace, 0u);
@@ -146,14 +146,14 @@ public:
 		(void)worklist_.reserve(4096u);
 	}
 
-	/// Carga una ROM iNES ya leída en memoria.
+	/// Carga una ROM iNES ya leÃ­da en memoria.
 	///
 	/// Comprueba la firma `NES\x1A`, copia los bytes a `rom_` y delega en
-	/// `parse_header()` y `extract_prg()`. Es el único punto de entrada de datos.
+	/// `parse_header()` y `extract_prg()`. Es el Ãºnico punto de entrada de datos.
 	///
 	/// \param data Puntero a los bytes de la ROM (no se conserva el puntero).
-	/// \param size Número de bytes.
-	/// \return `true` si es una ROM iNES NROM válida y no truncada.
+	/// \param size NÃºmero de bytes.
+	/// \return `true` si es una ROM iNES NROM vÃ¡lida y no truncada.
 	bool load(const eng::u8* data, eng::usize size) {
 		if (size < 16u) {
 			return false;
@@ -168,17 +168,17 @@ public:
 		return parse_header() && extract_prg();
 	}
 
-	/// Escanea la PRG en busca del idioma de **tabla de salto** y añade sus destinos
+	/// Escanea la PRG en busca del idioma de **tabla de salto** y aÃ±ade sus destinos
 	/// como puntos de entrada al desensamblado: cobertura de CFG **determinista**, sin
-	/// depender de una traza. Patrón (13 bytes):
+	/// depender de una traza. PatrÃ³n (13 bytes):
 	///
 	///   `LDA tbl,X` (`$BD lo hi`) ; `STA zp p` (`$85 p`) ; `LDA tbl+1,X` (`$BD lo+1 hi`) ;
 	///   `STA zp p+1` (`$85 p+1`) ; `JMP (zp p)` (`$6C p 00`)
 	///
 	/// Enumera los destinos `tbl[k] | (tbl[1+k] << 8)` mientras caigan en la PRG
 	/// (`$8000-$FFFF`), hasta 256. No basta para toda la PRG (el despacho por puntero en
-	/// RAM es más común), pero complementa a `--pc-trace` sin necesitar ejecución.
-	/// \return Nº de tablas encontradas.
+	/// RAM es mÃ¡s comÃºn), pero complementa a `--pc-trace` sin necesitar ejecuciÃ³n.
+	/// \return NÂº de tablas encontradas.
 	eng::u32 scan_static_jump_tables() {
 		if (prg_.size() < 13u || prg_size_ < 13u) {
 			return 0u;
@@ -202,7 +202,7 @@ public:
 			if (tbl < 0x8000u) {
 				continue;
 			}
-			// Sitio del `JMP ($zp)` → dirección CPU (`PRG` se mapea en `$8000`).
+			// Sitio del `JMP ($zp)` â†’ direcciÃ³n CPU (`PRG` se mapea en `$8000`).
 			const eng::u16 site = static_cast<eng::u16>(0x8000u + i + 10u);
 			const eng::u32 base = static_cast<eng::u32>(tbl - 0x8000u);
 			for (eng::u32 k = 0u; k < 256u && base + 1u + k < n; ++k) {
@@ -212,7 +212,7 @@ public:
 					break;
 				}
 				add_entry_point(tgt);
-				// Registra también el destino como observado para ese sitio, de modo que
+				// Registra tambiÃ©n el destino como observado para ese sitio, de modo que
 				// el backend **nativo** pueda despachar el `JMP (ind)` **sin traza**.
 				add_ind_target(site, tgt);
 			}
@@ -225,7 +225,7 @@ public:
 	///
 	/// Usa una pila de trabajo (`worklist_`) con los puntos de entrada: el vector
 	/// de reset y, si apuntan a la PRG, los de NMI e IRQ. Desde cada entrada
-	/// decodifica en línea hasta una instrucción de fin de flujo (`JMP`, `JSR`,
+	/// decodifica en lÃ­nea hasta una instrucciÃ³n de fin de flujo (`JMP`, `JSR`,
 	/// rama, `RTS`/`RTI`/`BRK`), apilando los destinos y las continuaciones. Las
 	/// direcciones ya vistas (`visited_`) no se repiten. Rellena `instr_` y
 	/// `has_instr_`; los bytes que no se alcanzan no se decodifican.
@@ -237,14 +237,14 @@ public:
 		if (irq_ >= 0x8000u) {
 			push_work(irq_);
 		}
-		// Cobertura **determinista** de saltos por tabla estática (sin traza).
-		// `-DN2A_NO_STATIC_TABLES`: desactivar (diagnóstico de regresiones de CFG).
+		// Cobertura **determinista** de saltos por tabla estÃ¡tica (sin traza).
+		// `-DN2A_NO_STATIC_TABLES`: desactivar (diagnÃ³stico de regresiones de CFG).
 #if !defined(N2A_NO_STATIC_TABLES)
 		if (!prg_banked_) {
 			(void)scan_static_jump_tables();
 		}
 #endif
-		// Entradas extra de telemetría (PC ejecutados): completan el CFG en saltos
+		// Entradas extra de telemetrÃ­a (PC ejecutados): completan el CFG en saltos
 		// indirectos. No aplican a PRG bancada (la ventana conmutable se analiza aparte).
 		if (!prg_banked_) {
 			for (eng::usize i = 0; i < extra_entries_.size(); ++i) {
@@ -256,7 +256,7 @@ public:
 
 	/// Desensambla un **banco conmutable** (UxROM) desde las entradas descubiertas
 	/// en `switch_targets_`. Antes hay que llamar a `reset_analysis()` y fijar
-	/// `bank_` al índice del banco.
+	/// `bank_` al Ã­ndice del banco.
 	void disassemble_bank(const eng::util::Vector<eng::u16, eng::util::HeapAlloc>& entries) {
 		for (eng::usize i = 0; i < entries.size(); ++i) {
 			push_work(entries[i]);
@@ -264,7 +264,7 @@ public:
 		run_worklist();
 	}
 
-	/// Bucle de desensamblado recursivo común (usa `worklist_` ya sembrada).
+	/// Bucle de desensamblado recursivo comÃºn (usa `worklist_` ya sembrada).
 	void run_worklist() {
 		while (!worklist_.empty()) {
 			const eng::u16 addr = worklist_.back();
@@ -316,8 +316,8 @@ public:
 						}
 					}
 				}
-				// Instrucción truncada al final de la PRG (operandos fuera de la
-				// ROM): no es código válido, no se emite (evita llamadas sin
+				// InstrucciÃ³n truncada al final de la PRG (operandos fuera de la
+				// ROM): no es cÃ³digo vÃ¡lido, no se emite (evita llamadas sin
 				// argumento, p. ej. `ISB_absx()`).
 				if (info.size >= 2u && !has_operand(in)) {
 					++unknown_;
@@ -360,7 +360,7 @@ public:
 		}
 	}
 
-	/// Reinicia el estado del análisis para reutilizarlo con otro banco (F9/B1b).
+	/// Reinicia el estado del anÃ¡lisis para reutilizarlo con otro banco (F9/B1b).
 	void reset_analysis() {
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			instr_[a] = Instruction {};
@@ -379,7 +379,7 @@ public:
 		block_count_ = 0u;
 	}
 
-	/// Recoge los destinos en `$8000-$BFFF` (JMP/JSR/rama) del análisis actual
+	/// Recoge los destinos en `$8000-$BFFF` (JMP/JSR/rama) del anÃ¡lisis actual
 	/// como puntos de entrada candidatos de los bancos conmutables (UxROM).
 	void collect_switch_targets() {
 		switch_targets_.clear();
@@ -394,7 +394,7 @@ public:
 				continue;
 			}
 			const eng::u16 t = in.target;
-			// Ventanas conmutables por mapper: MMC3 (2×8 KB), FME-7 (3×8 KB).
+			// Ventanas conmutables por mapper: MMC3 (2Ã—8 KB), FME-7 (3Ã—8 KB).
 			eng::util::Vector<eng::u16, eng::util::HeapAlloc>* dst;
 			if (mapper_ == 4) {
 				if (t >= 0x8000u && t < 0xA000u) {
@@ -455,12 +455,12 @@ public:
 		}
 	}
 
-	/// Calcula los *líderes* (inicios de basic block) a partir del CFG implícito.
+	/// Calcula los *lÃ­deres* (inicios de basic block) a partir del CFG implÃ­cito.
 	///
-	/// Un líder es: el vector de reset/NMI/IRQ, el destino de una rama/`JMP`/`JSR`
-	/// y la instrucción siguiente a cualquier salto o fin de flujo. Después llama
+	/// Un lÃ­der es: el vector de reset/NMI/IRQ, el destino de una rama/`JMP`/`JSR`
+	/// y la instrucciÃ³n siguiente a cualquier salto o fin de flujo. DespuÃ©s llama
 	/// a `compute_block_metadata()`, que deriva las etiquetas y los destinos que
-	/// necesitará el codegen. Debe ejecutarse tras `disassemble()`.
+	/// necesitarÃ¡ el codegen. Debe ejecutarse tras `disassemble()`.
 	void build_basic_blocks() {
 		mark_leader(reset_);
 		if (has_instr_[nmi_] != 0u) {
@@ -495,9 +495,9 @@ public:
 				}
 			}
 		}
-		// Puntos de entrada de la **telemetría** (`--pc-trace`) y **destinos
+		// Puntos de entrada de la **telemetrÃ­a** (`--pc-trace`) y **destinos
 		// indirectos observados** (`--ind-targets`) son entradas reales: se marcan
-		// como líderes para que el codegen pueda iniciar ahí una región (nativo) o un
+		// como lÃ­deres para que el codegen pueda iniciar ahÃ­ una regiÃ³n (nativo) o un
 		// bloque, y para que los checks de entrada (p. ej. destino de `JSR`) los acepten.
 		for (eng::usize i = 0; i < extra_entries_.size(); ++i) {
 			if (extra_entries_[i] < kSpace && has_instr_[extra_entries_[i]] != 0u) {
@@ -515,16 +515,16 @@ public:
 
 	/// Deriva los metadatos que usan el codegen y la ficha de cada bloque.
 	///
-	/// Rellena, para cada dirección:
+	/// Rellena, para cada direcciÃ³n:
 	/// - `labels_`: la etiqueta `L_xxxx` se emite solo si un salto **dentro del
 	///   mismo bloque** la usa (auto-bucle). Los saltos entre bloques se resuelven
 	///   volviendo al despacho (`cpu.PC = destino; return;`) porque una etiqueta
-	///   C++ no es visible desde otra función; así se evita `-Wunused-label`.
-	/// - `branch_target_`, `jmp_target_`, `jsr_target_`: si la dirección es destino
+	///   C++ no es visible desde otra funciÃ³n; asÃ­ se evita `-Wunused-label`.
+	/// - `branch_target_`, `jmp_target_`, `jsr_target_`: si la direcciÃ³n es destino
 	///   de una rama, de un `JMP` absoluto o de un `JSR` (para la ficha del bloque).
-	/// - `fallin_`: si la dirección es la continuación natural del bloque anterior.
+	/// - `fallin_`: si la direcciÃ³n es la continuaciÃ³n natural del bloque anterior.
 	///
-	/// Se invoca al final de `build_basic_blocks()`; no genera código.
+	/// Se invoca al final de `build_basic_blocks()`; no genera cÃ³digo.
 	void compute_block_metadata() {
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			labels_[a] = 0u;
@@ -599,7 +599,7 @@ public:
 	/// 4. los *basic blocks* (`bb_XXXX`) con su ficha;
 	/// 5. la tabla de despacho, `game_main()` y el `main()` de host.
 	///
-	/// \param out Búfer de texto donde se acumula la salida (no se vacía).
+	/// \param out BÃºfer de texto donde se acumula la salida (no se vacÃ­a).
 	void generate(Dyn& out) {
 		if (decompile_) {
 			emit_decompile(out);
@@ -612,7 +612,7 @@ public:
 		emit_rom(out);
 		// Backend nativo (estilo descompilador): sustituye todo el codegen por bloques.
 		// Con `--best` se elige solo si la ROM lo soporta; si no, cae al codegen por
-		// bloques (con el perfil Amiga si el llamador lo activó).
+		// bloques (con el perfil Amiga si el llamador lo activÃ³).
 		if ((native_ || best_) && native_ok()) {
 			emit_native(out);
 			return;
@@ -669,24 +669,24 @@ public:
 		emit_dispatch(out);
 	}
 
-	/// Registra un hecho de valores que el codegen emitirá como `N2A_ASSUME` en
-	/// los bloques que lean esa dirección. Llamar antes de `generate()`.
-	/// \param f Hecho a añadir (se copia).
+	/// Registra un hecho de valores que el codegen emitirÃ¡ como `N2A_ASSUME` en
+	/// los bloques que lean esa direcciÃ³n. Llamar antes de `generate()`.
+	/// \param f Hecho a aÃ±adir (se copia).
 	void add_fact(const Fact& f) { (void)facts_.push_back(f); }
 
-	/// Añade un **punto de entrada** extra al desensamblado (p. ej. los PC ejecutados
-	/// observados por telemetría: `opcode_hist ... <hot.txt>`). Completa el CFG cuando
-	/// el análisis estático no puede seguir un salto indirecto/tabla. Llamar **antes**
+	/// AÃ±ade un **punto de entrada** extra al desensamblado (p. ej. los PC ejecutados
+	/// observados por telemetrÃ­a: `opcode_hist ... <hot.txt>`). Completa el CFG cuando
+	/// el anÃ¡lisis estÃ¡tico no puede seguir un salto indirecto/tabla. Llamar **antes**
 	/// de `disassemble()`; se ignora en PRG bancada (solo ventana fija).
-	/// \param a Dirección 6502 de inicio de código (`$8000-$FFFF`).
+	/// \param a DirecciÃ³n 6502 de inicio de cÃ³digo (`$8000-$FFFF`).
 	void add_entry_point(eng::u16 a) { (void)extra_entries_.push_back(a); }
 
 	/// Registra el **destino observado** de un `JMP (ind)` en el sitio `site`
-	/// (telemetría de `ind_targets <rom> <out>`, consumida por `--ind-targets`).
+	/// (telemetrÃ­a de `ind_targets <rom> <out>`, consumida por `--ind-targets`).
 	/// Permite al backend nativo emitir un **despacho** (`switch`) en lugar de
-	/// caer al intérprete. Deduplica el par. Llamar **antes** de `disassemble()`.
+	/// caer al intÃ©rprete. Deduplica el par. Llamar **antes** de `disassemble()`.
 	/// \param site   `PC` del opcode `$6C`.
-	/// \param target `PC` destino observado (inicio de instrucción).
+	/// \param target `PC` destino observado (inicio de instrucciÃ³n).
 	void add_ind_target(eng::u16 site, eng::u16 target) {
 		for (eng::usize i = 0; i < ind_site_.size(); ++i) {
 			if (ind_site_[i] == site && ind_target_[i] == target) {
@@ -697,7 +697,7 @@ public:
 		(void)ind_target_.push_back(target);
 	}
 
-	/// \return Nº de destinos observados para el sitio `site` (`0` si no hay datos).
+	/// \return NÂº de destinos observados para el sitio `site` (`0` si no hay datos).
 	[[nodiscard]] eng::usize ind_targets_count(eng::u16 site) const {
 		eng::usize n = 0;
 		for (eng::usize i = 0; i < ind_site_.size(); ++i) {
@@ -709,54 +709,54 @@ public:
 	}
 
 	/// Con `true`, **no** se emite la contabilidad de ciclos (`cpu.cycles += N`) ni
-	/// las penalizaciones de página/rama. Para destinos sin PPU ciclo-exacta
+	/// las penalizaciones de pÃ¡gina/rama. Para destinos sin PPU ciclo-exacta
 	/// (Amiga/`--release`), donde los ciclos solo agobian al 68000.
 	/// \param b `true` para desactivar los ciclos.
 	void set_no_cycles(bool b) noexcept { no_cycles_ = b; }
 
-	/// Con `true`, emite `N2A_TRACE(0xADDR);` antes de cada instrucción, para
-	/// trazar el flujo del codegen y compararlo con el intérprete. Sin definir,
+	/// Con `true`, emite `N2A_TRACE(0xADDR);` antes de cada instrucciÃ³n, para
+	/// trazar el flujo del codegen y compararlo con el intÃ©rprete. Sin definir,
 	/// `N2A_TRACE` es un no-op (coste cero). \param b `true` para activar la traza.
 	void set_trace(bool b) noexcept { trace_ = b; }
 
 	/// Con `true`, las instrucciones de **zero-page** se emiten con acceso directo a
-	/// `cpu.mem->ram[...]` (sin el método/`switch` de región). Ganancia en 68000.
-	/// \param b `true` para activar el acceso directo a RAM de página cero.
+	/// `cpu.mem->ram[...]` (sin el mÃ©todo/`switch` de regiÃ³n). Ganancia en 68000.
+	/// \param b `true` para activar el acceso directo a RAM de pÃ¡gina cero.
 	void set_fast_ram(bool b) noexcept { fast_ram_ = b; }
 
-	/// Con `true`, **encadena los bloques** por control de flujo estático: un salto,
-	/// caída o `JMP` con destino conocido se emite como **llamada en cola** al bloque
+	/// Con `true`, **encadena los bloques** por control de flujo estÃ¡tico: un salto,
+	/// caÃ­da o `JMP` con destino conocido se emite como **llamada en cola** al bloque
 	/// siguiente (`return bb_XXXX(cpu);`), y `JSR`/`RTS` como **llamada/retorno C**
 	/// (`bb_call(cpu); return bb_ret(cpu);` / `cpu.pull16(); return;`). Evita el
-	/// despachador por búsqueda binaria en cada bloque (el mayor coste en 68000).
-	/// Solo se activa con `--no-cycles`: sin cesión por deadline el control se
+	/// despachador por bÃºsqueda binaria en cada bloque (el mayor coste en 68000).
+	/// Solo se activa con `--no-cycles`: sin cesiÃ³n por deadline el control se
 	/// transfiere directamente y el runtime debe ceder en los puntos de evento.
 	/// \param b `true` para encadenar bloques.
 	void set_chain(bool b) noexcept { chain_ = b; }
 	/// Con `false`, **desactiva** los idioms multibyte (copia/constante/suma/resta 16 bits).
-	/// Sirve para medir su efecto (tamaño/ciclos 68000) frente al byte a byte.
+	/// Sirve para medir su efecto (tamaÃ±o/ciclos 68000) frente al byte a byte.
 	/// \param b `true` (por defecto) para aplicar idioms.
 	void set_idioms(bool b) noexcept { idioms_ = b; }
 
 	/// Con `true`, las lecturas de la ventana fija de ROM (NROM/CNROM, `Abs`/`AbsX`/
 	/// `AbsY`) se emiten como **acceso directo a `PRG_ROM[...]`** (constexpr) en vez
-	/// de pasar por `NESMemory::read` (que decodifica región y hace `idx % prg_size`,
+	/// de pasar por `NESMemory::read` (que decodifica regiÃ³n y hace `idx % prg_size`,
 	/// una libcall de 32 bits en 68000). Permite a g++ ver los datos fijos.
 	/// \param b `true` para emitir lecturas directas de ROM.
 	void set_rom_direct(bool b) noexcept { rom_direct_ = b; }
 
 	/// Con `true`, emite un **backend "nativo" estilo descompilador**: en vez de bloques
-	/// que llaman a métodos de `CPU` (con el estado en `struct`), genera **una función C++
-	/// por REGIÓN** (punto de entrada = `reset`/NMI/IRQ/`JSR`) con el estado del 6502 en
+	/// que llaman a mÃ©todos de `CPU` (con el estado en `struct`), genera **una funciÃ³n C++
+	/// por REGIÃ“N** (punto de entrada = `reset`/NMI/IRQ/`JSR`) con el estado del 6502 en
 	/// **variables locales** (`a/x/y/flags`), lecturas de ROM como **literales** (PRG fija)
-	/// y control de flujo C++ normal (`goto`). Así el optimizador global de g++ puede
+	/// y control de flujo C++ normal (`goto`). AsÃ­ el optimizador global de g++ puede
 	/// propagar valores, plegar constantes y asignar registros entre bloques.
 	/// Solo para **PRG no bancada** y sin opcodes indirectos/ilegales (si no, el llamador
 	/// debe usar el codegen por bloques).
 	/// \param b `true` para activar el backend nativo.
 	void set_native(bool b) noexcept { native_ = b; }
 	/// Con `true`, emite el **decompilado** (port nativo en C plano + HAL) en vez del
-	/// codegen de emulación. Fase 1 del decompilador (ver `docs/DECOMPILADOR.md`).
+	/// codegen de emulaciÃ³n. Fase 1 del decompilador (ver `docs/DECOMPILADOR.md`).
 	/// \param b `true` para generar el decompilado.
 	void set_decompile(bool b) noexcept { decompile_ = b; }
 	/// Activa el **frame boundary por VBlank**: `tick(n)` deja de comprobar el limite de frame
@@ -764,18 +764,18 @@ public:
 	/// `hal_wait_vblank`. Mucho mas rapido en A1200; el modelo de ciclos sigue disponible para PC.
 	void set_vblank_sync(bool b) noexcept { vblank_sync_ = b; }
 
-	/// Con `true`, elige automáticamente el mejor backend: el **nativo** si la ROM lo
+	/// Con `true`, elige automÃ¡ticamente el mejor backend: el **nativo** si la ROM lo
 	/// soporta (`native_ok()`) y, si no, el codegen por bloques con el perfil Amiga
 	/// (`--chain`/`--rom-direct`/`--fast-ram`, que el llamador debe activar). Pensado
 	/// para el pipeline por juego.
-	/// \param b `true` para selección automática de backend.
+	/// \param b `true` para selecciÃ³n automÃ¡tica de backend.
 	void set_best(bool b) noexcept { best_ = b; }
 	/// \return `true` si el backend nativo puede emitir esta ROM (PRG fija y opcodes
 	/// soportados). Lo consulta el llamador para elegir el codegen.
-	/// \return El **motivo** por el que `native_ok()` rechazó la ROM (cadena vacía si
-	/// la aceptó). Diagnóstico para el pipeline; no altera el comportamiento.
+	/// \return El **motivo** por el que `native_ok()` rechazÃ³ la ROM (cadena vacÃ­a si
+	/// la aceptÃ³). DiagnÃ³stico para el pipeline; no altera el comportamiento.
 	[[nodiscard]] const char* native_reject_reason() const noexcept { return native_reject_; }
-	/// \return Dirección asociada al último rechazo de `native_ok()` (0 si no aplica).
+	/// \return DirecciÃ³n asociada al Ãºltimo rechazo de `native_ok()` (0 si no aplica).
 	[[nodiscard]] eng::u16 native_reject_addr() const noexcept { return native_reject_addr_; }
 
 	[[nodiscard]] bool native_ok() const noexcept {
@@ -806,7 +806,7 @@ public:
 				native_reject_ = "opcode no soportado en nativo";
 				return false;
 			}
-			// Todo destino de `JSR` debe estar **decodificado** (será entrada de región).
+			// Todo destino de `JSR` debe estar **decodificado** (serÃ¡ entrada de regiÃ³n).
 			const Instruction& in = instr_[a];
 			if (sv_equal(kOpcodeTable[in.opcode].mnemonic, "JSR") && has_operand(in) &&
 			    !(in.target < kSpace && has_instr_[in.target] != 0u)) {
@@ -818,23 +818,23 @@ public:
 		return true;
 	}
 
-	/// Número de mapper iNES de la ROM cargada.
+	/// NÃºmero de mapper iNES de la ROM cargada.
 	[[nodiscard]] int mapper() const noexcept { return mapper_; }
-	/// Tamaño de la PRG-ROM en bytes.
+	/// TamaÃ±o de la PRG-ROM en bytes.
 	[[nodiscard]] eng::u32 prg_size() const noexcept { return prg_size_; }
-	/// Tamaño de banco de PRG en bytes (NROM/CNROM: la PRG entera).
+	/// TamaÃ±o de banco de PRG en bytes (NROM/CNROM: la PRG entera).
 	[[nodiscard]] eng::u32 prg_bank_size() const noexcept { return prg_bank_size_; }
-	/// Número de bancos de PRG (NROM/CNROM: 1).
+	/// NÃºmero de bancos de PRG (NROM/CNROM: 1).
 	[[nodiscard]] eng::u32 prg_bank_count() const noexcept { return prg_bank_count_; }
-	/// `true` si la PRG está **bancada** (UxROM/MMC1/MMC3/MMC5/VRC6/FME-7). El
+	/// `true` si la PRG estÃ¡ **bancada** (UxROM/MMC1/MMC3/MMC5/VRC6/FME-7). El
 	/// codegen **por banco** es el trabajo pendiente de F9; hoy el transpilador
 	/// solo emite PRG fija (NROM/CNROM). Ver `docs/TRANSPILER_BANKING.md`.
 	[[nodiscard]] bool prg_banked() const noexcept { return prg_banked_; }
-	/// Número de instrucciones decodificadas.
+	/// NÃºmero de instrucciones decodificadas.
 	[[nodiscard]] eng::usize instruction_count() const noexcept { return count_; }
-	/// Número de *basic blocks* detectados.
+	/// NÃºmero de *basic blocks* detectados.
 	[[nodiscard]] eng::usize block_count() const noexcept { return block_count_; }
-	/// \return Nº de idioms multibyte aplicados (diagnóstico de medición).
+	/// \return NÂº de idioms multibyte aplicados (diagnÃ³stico de mediciÃ³n).
 	[[nodiscard]] eng::u32 idiom_hits() const noexcept { return idiom_hits_; }
 	/// \return De los idioms, los casados por el **IR flexible** (`try_ir_multibyte`).
 	[[nodiscard]] eng::u32 idiom_ir_hits() const noexcept { return ir_hits_; }
@@ -846,30 +846,30 @@ public:
 	[[nodiscard]] eng::u16 nmi_vector() const noexcept { return nmi_; }
 	/// Vector de IRQ/BRK (`$FFFE`).
 	[[nodiscard]] eng::u16 irq_vector() const noexcept { return irq_; }
-	/// Opcodes encontrados que no están en la tabla (posible código no alcanzado).
+	/// Opcodes encontrados que no estÃ¡n en la tabla (posible cÃ³digo no alcanzado).
 	[[nodiscard]] eng::usize unknown_count() const noexcept { return unknown_; }
 
 private:
-	/// Tamaño del espacio de direcciones del 6502: índices `0x0000..0xFFFF`.
+	/// TamaÃ±o del espacio de direcciones del 6502: Ã­ndices `0x0000..0xFFFF`.
 	static constexpr eng::u32 kSpace = 0x10000u;
 
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> rom_ {}; ///< ROM iNES completa.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> prg_ {}; ///< Solo la PRG-ROM.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> chr_ {}; ///< Solo la CHR-ROM (si la hay).
-	eng::u32 prg_size_ = 0;                                   ///< Tamaño de PRG en bytes.
-	eng::u32 chr_size_ = 0;                                   ///< Tamaño de CHR en bytes (0 = CHR RAM).
-	int mapper_ = 0;                                          ///< Número de mapper iNES.
-	eng::u32 prg_bank_size_ = 0;                              ///< Tamaño de banco de PRG (layout).
-	eng::u32 prg_bank_count_ = 1;                             ///< Nº de bancos de PRG (layout).
-	bool prg_banked_ = false;                                 ///< ¿PRG bancada? (codegen F9/B1b).
+	eng::u32 prg_size_ = 0;                                   ///< TamaÃ±o de PRG en bytes.
+	eng::u32 chr_size_ = 0;                                   ///< TamaÃ±o de CHR en bytes (0 = CHR RAM).
+	int mapper_ = 0;                                          ///< NÃºmero de mapper iNES.
+	eng::u32 prg_bank_size_ = 0;                              ///< TamaÃ±o de banco de PRG (layout).
+	eng::u32 prg_bank_count_ = 1;                             ///< NÂº de bancos de PRG (layout).
+	bool prg_banked_ = false;                                 ///< Â¿PRG bancada? (codegen F9/B1b).
 
-	/// Información de un bloque para las tablas de despacho.
+	/// InformaciÃ³n de un bloque para las tablas de despacho.
 	struct BlockInfo {
 		eng::u8 bank;    ///< 0xFF = ventana fija; 0.. = banco conmutable (UxROM).
-		eng::u16 start;  ///< Dirección 6502 de inicio del bloque.
+		eng::u16 start;  ///< DirecciÃ³n 6502 de inicio del bloque.
 		eng::u16 cycles; ///< Ciclos base del bloque (para avanzar la PPU).
 	};
-	int bank_ = -1; ///< Contexto de análisis: -1 = fijo; >=0 = banco conmutable.
+	int bank_ = -1; ///< Contexto de anÃ¡lisis: -1 = fijo; >=0 = banco conmutable.
 	int win_ = -1;  ///< Ventana MMC3: -1 = fija; 0 = `$8000-$9FFF`; 1 = `$A000-$BFFF`.
 	eng::util::Vector<BlockInfo, eng::util::HeapAlloc> fixed_blocks_ {}; ///< Bloques de $C000+ (o NROM).
 	eng::util::Vector<BlockInfo, eng::util::HeapAlloc> bank_blocks_ {};  ///< Bloques de la ventana conmutable.
@@ -878,22 +878,22 @@ private:
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets3_ {}; ///< Entradas de $C000-$DFFF (W2 FME-7).
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> switch_targets4_ {}; ///< Entradas de $E000-$FFFF (W3 MMC5).
 	bool mirror_h_ = false;                                   ///< Mirroring horizontal (bit0 flags6).
-	bool has_trainer_ = false;                                ///< ¿Trae trainer de 512 B?
+	bool has_trainer_ = false;                                ///< Â¿Trae trainer de 512 B?
 	eng::u16 reset_ = 0;                                      ///< Vector de reset.
 	eng::u16 nmi_ = 0;                                        ///< Vector de NMI.
 	eng::u16 irq_ = 0;                                        ///< Vector de IRQ.
 
-	eng::util::Vector<Instruction, eng::util::HeapAlloc> instr_ {}; ///< Instrucción por dirección.
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> has_instr_ {}; ///< 1 si la dirección tiene instrucción.
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> leaders_ {};   ///< 1 si la dirección inicia bloque.
+	eng::util::Vector<Instruction, eng::util::HeapAlloc> instr_ {}; ///< InstrucciÃ³n por direcciÃ³n.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> has_instr_ {}; ///< 1 si la direcciÃ³n tiene instrucciÃ³n.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> leaders_ {};   ///< 1 si la direcciÃ³n inicia bloque.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> labels_ {};    ///< 1 si hay que emitir `L_xxxx`.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> branch_target_ {}; ///< Destino de rama.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> jmp_target_ {};    ///< Destino de `JMP` abs.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> jsr_target_ {};    ///< Destino de `JSR`.
-	eng::util::Vector<eng::u8, eng::util::HeapAlloc> fallin_ {};        ///< Continuación del bloque previo.
+	eng::util::Vector<eng::u8, eng::util::HeapAlloc> fallin_ {};        ///< ContinuaciÃ³n del bloque previo.
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> visited_ {};       ///< Direcciones ya desensambladas.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> worklist_ {};     ///< Pila de puntos de entrada.
-	eng::util::Vector<eng::u16, eng::util::HeapAlloc> extra_entries_ {}; ///< Entradas extra (telemetría de PC).
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> extra_entries_ {}; ///< Entradas extra (telemetrÃ­a de PC).
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> ind_site_ {};     ///< Sitios de `JMP (ind)` (ver `add_ind_target`).
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> ind_target_ {};   ///< Destino observado paralelo a `ind_site_`.
 	eng::util::Vector<Fact, eng::util::HeapAlloc> facts_ {};            ///< Hechos de valores (ver `add_fact`).
@@ -903,22 +903,22 @@ private:
 	eng::usize block_count_ = 0; ///< Bloques detectados.
 	bool no_cycles_ = false;     ///< Si `true`, no emitir ciclos (ver `set_no_cycles`).
 	bool fast_ram_ = false;      ///< Si `true`, zero-page con acceso directo (ver `set_fast_ram`).
-	bool trace_ = false;         ///< Si `true`, emitir `N2A_TRACE` por instrucción (ver `set_trace`).
+	bool trace_ = false;         ///< Si `true`, emitir `N2A_TRACE` por instrucciÃ³n (ver `set_trace`).
 	bool chain_ = false;         ///< Si `true`, encadenar bloques (ver `set_chain`).
 	bool idioms_ = true;         ///< Si `true`, aplicar idioms multibyte (ver `set_idioms`).
 	bool rom_direct_ = false;    ///< Si `true`, lecturas directas de ROM (ver `set_rom_direct`).
 	bool native_ = false;        ///< Si `true`, backend nativo por regiones (ver `set_native`).
 	bool decompile_ = false;     ///< Si `true`, emitir el decompilado (ver `set_decompile`).
 	bool vblank_sync_ = false;   ///< Si `true`, frame boundary por VBlank (sin tick/frame por instruccion; ver `set_vblank_sync`).
-	mutable const char* native_reject_ = ""; ///< Motivo del último rechazo de `native_ok()` (diagnóstico).
-	mutable eng::u16 native_reject_addr_ = 0; ///< Dirección asociada al rechazo (p. ej. el `JSR`).
-	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnóstico).
+	mutable const char* native_reject_ = ""; ///< Motivo del Ãºltimo rechazo de `native_ok()` (diagnÃ³stico).
+	mutable eng::u16 native_reject_addr_ = 0; ///< DirecciÃ³n asociada al rechazo (p. ej. el `JSR`).
+	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnÃ³stico).
 	mutable eng::u32 ir_hits_ = 0;            ///< De ellos, casados por el IR flexible.
 	mutable eng::u32 exact_hits_ = 0;         ///< De ellos, casados por el matcher exacto.
 	bool best_ = false;          ///< Si `true`, elige nativo si es posible (ver `set_best`).
 	eng::util::Vector<eng::u8, eng::util::HeapAlloc> native_vis_ {}; ///< Scratch de regiones.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> decomp_region_of_ {}; ///< bloque -> region (decompilado).
-	/// VSA de índices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
+	/// VSA de Ã­ndices del nativo: `LDX/LDY #imm` fija el valor; otra escritura lo invalida.
 	/// Permite plegar `LDA tabla,X` a literal cuando `X` es constante en el bloque.
 	bool native_x_known_ = false;
 	bool native_y_known_ = false;
@@ -926,36 +926,36 @@ private:
 	eng::u8 native_x_val_ = 0;
 	eng::u8 native_y_val_ = 0;
 	eng::u8 native_a_val_ = 0;
-	/// Dirección cuya **primera instrucción** debe omitirse al emitir su bloque (para
+	/// DirecciÃ³n cuya **primera instrucciÃ³n** debe omitirse al emitir su bloque (para
 	/// absorberse en un idiom, p. ej. el `DEC lo` de un decremento de 16 bits).
 	eng::u16 native_skip_first_ = 0xFFFFu;
-	int cur_bank_ = -1;          ///< Banco del bloque en emisión (`-1` = ventana fija).
-	bool cur_nz_live_ = true;    ///< ¿`Z`/`N` viven tras la instrucción actual? (liveness, ver `nz_dead_after`).
+	int cur_bank_ = -1;          ///< Banco del bloque en emisiÃ³n (`-1` = ventana fija).
+	bool cur_nz_live_ = true;    ///< Â¿`Z`/`N` viven tras la instrucciÃ³n actual? (liveness, ver `nz_dead_after`).
 
 	// --- Utilidades internas ---
 
-	/// Compara un mnemónico de la tabla con un literal (sin construir `StringView`
+	/// Compara un mnemÃ³nico de la tabla con un literal (sin construir `StringView`
 	/// en el llamador). \return `true` si son iguales.
 	[[nodiscard]] static bool sv_equal(const char* mnemonic, const char* other) noexcept {
 		eng::util::StringView a(mnemonic);
 		eng::util::StringView b(other);
 		return a == b;
 	}
-	/// \return `true` si `in` tiene operando válido.
+	/// \return `true` si `in` tiene operando vÃ¡lido.
 	[[nodiscard]] static bool has_operand(const Instruction& in) noexcept {
 		return (in.flags & kHasOperand) != 0u;
 	}
-	/// \return `true` si `in` tiene destino de salto válido.
+	/// \return `true` si `in` tiene destino de salto vÃ¡lido.
 	[[nodiscard]] static bool has_target(const Instruction& in) noexcept {
 		return (in.flags & kHasTarget) != 0u;
 	}
 
 	// --- Parseo de la ROM ---
 
-	/// Lee la cabecera iNES (16 bytes) y deriva tamaño de PRG, mapper y trainer.
-	/// \return `true` si la PRG no está vacía y el mapper tiene **PRG fija**
+	/// Lee la cabecera iNES (16 bytes) y deriva tamaÃ±o de PRG, mapper y trainer.
+	/// \return `true` si la PRG no estÃ¡ vacÃ­a y el mapper tiene **PRG fija**
 	///         (NROM 0 o CNROM 3). UxROM (2) y MMC1 (1) conmutan bancos de PRG y
-	///         no se pueden decodificar estáticamente todavía.
+	///         no se pueden decodificar estÃ¡ticamente todavÃ­a.
 	bool parse_header() {
 		const eng::u8 prg_pages = rom_[4];
 		const eng::u8 chr_pages = rom_[5];
@@ -968,20 +968,20 @@ private:
 		// Bit0 de flags6: 0 = mirroring horizontal, 1 = vertical.
 		mirror_h_ = (flags6 & 0x01u) == 0u;
 		// --- Layout de PRG (F9/B0) ---
-		// Se calcula aunque el mapper no sea aún transpilable, para poder dar un
-		// diagnóstico preciso (mapper, nº de bancos) y preparar el codegen por
+		// Se calcula aunque el mapper no sea aÃºn transpilable, para poder dar un
+		// diagnÃ³stico preciso (mapper, nÂº de bancos) y preparar el codegen por
 		// banco. El valor de retorno sigue indicando "PRG fija" (NROM/CNROM): solo
-		// esas se pueden decodificar estáticamente hoy.
+		// esas se pueden decodificar estÃ¡ticamente hoy.
 		prg_banked_ = false;
 		prg_bank_size_ = prg_size_;
 		prg_bank_count_ = 1u;
 		switch (mapper_) {
-		case 2: // UxROM: ventana conmutable de 16 KB + fija (último banco).
+		case 2: // UxROM: ventana conmutable de 16 KB + fija (Ãºltimo banco).
 			prg_bank_size_ = 0x4000u;
 			prg_bank_count_ = prg_size_ / prg_bank_size_;
 			prg_banked_ = true;
 			break;
-		case 24: case 26: // VRC6: ventana de 16 KB ($8000) + 8 KB ($C000); máx = bancos de 8 KB.
+		case 24: case 26: // VRC6: ventana de 16 KB ($8000) + 8 KB ($C000); mÃ¡x = bancos de 8 KB.
 			prg_bank_size_ = 0x2000u;
 			prg_bank_count_ = prg_size_ / 0x2000u;
 			prg_banked_ = true;
@@ -1000,7 +1000,7 @@ private:
 			break;
 		}
 		// "codegen-ready": NROM/CNROM (PRG fija), UxROM (2) y **MMC1 (1)** en modo
-		// 16K con banco en `$8000` (sentinela de modo en runtime → fallback si el
+		// 16K con banco en `$8000` (sentinela de modo en runtime â†’ fallback si el
 		// juego cambia de modo). Verificado byte-exact en Metroid/Mega Man 2 a 60
 		// frames (docs/TIMING_CODEGEN.md).
 		const bool codegen_ok = (mapper_ == 0 || mapper_ == 1 || mapper_ == 2 ||
@@ -1009,8 +1009,8 @@ private:
 		return prg_size_ != 0u && codegen_ok;
 	}
 
-	/// Copia la PRG-ROM a `prg_` y extrae los tres vectores de los últimos 6 bytes.
-	/// \return `false` si el fichero está truncado o no hay vectores.
+	/// Copia la PRG-ROM a `prg_` y extrae los tres vectores de los Ãºltimos 6 bytes.
+	/// \return `false` si el fichero estÃ¡ truncado o no hay vectores.
 	bool extract_prg() {
 		eng::usize offset = 16u;
 		if (has_trainer_) {
@@ -1043,22 +1043,22 @@ private:
 		return true;
 	}
 
-	/// Traduce una dirección 6502 a un desplazamiento dentro de `prg_`.
+	/// Traduce una direcciÃ³n 6502 a un desplazamiento dentro de `prg_`.
 	///
 	/// - **NROM/CNROM** (PRG fija): mapeo lineal `$8000`+ con espejo de 16 KB.
-	/// - **UxROM (2)** (B1a): `$C000-$FFFF` = **último banco (fijo)**; la ventana
-	///   conmutable `$8000-$BFFF` **no** se mapea aquí (se devuelve vacío) para que
-	///   el análisis estático la omita y la ejecute el **intérprete del runtime**,
-	///   que ya lee a través del mapper (`NesSystem::io_read` → `Mapper::cpu_read`).
+	/// - **UxROM (2)** (B1a): `$C000-$FFFF` = **Ãºltimo banco (fijo)**; la ventana
+	///   conmutable `$8000-$BFFF` **no** se mapea aquÃ­ (se devuelve vacÃ­o) para que
+	///   el anÃ¡lisis estÃ¡tico la omita y la ejecute el **intÃ©rprete del runtime**,
+	///   que ya lee a travÃ©s del mapper (`NesSystem::io_read` â†’ `Mapper::cpu_read`).
 	///
-	/// \return Offset dentro de `prg_`, o vacío si la dirección no es PRG.
+	/// \return Offset dentro de `prg_`, o vacÃ­o si la direcciÃ³n no es PRG.
 	[[nodiscard]] eng::util::Optional<eng::usize> prg_offset(eng::u16 addr) const {
 		if (addr < 0x8000u) {
 			return {};
 		}
 		eng::usize off;
 		// MMC3 (4): dos ventanas conmutables de 8 KB + dos fijas (modo0).
-		//  - W0 `$8000-$9FFF` = R6 · W1 `$A000-$BFFF` = R7 (conmutables, `win_`).
+		//  - W0 `$8000-$9FFF` = R6 Â· W1 `$A000-$BFFF` = R7 (conmutables, `win_`).
 		//  - `$C000-$DFFF` = n8-2 y `$E000-$FFFF` = n8-1 (fijas, `win_ < 0`).
 		if (mapper_ == 4) {
 			const eng::usize n8 = prg_size_ / 0x2000u;
@@ -1084,7 +1084,7 @@ private:
 		} else if (mapper_ == 5) {
 			// MMC5 (modo 3, por defecto): cuatro ventanas de 8 KB
 			// ($8000/$A000/$C000/$E000 = `mmc5_prg_banks[1..4]`, `win_` 0..3). El
-			// análisis "fijo" (`win_<0`) mapea `$E000-$FFFF` al **último banco** (boot
+			// anÃ¡lisis "fijo" (`win_<0`) mapea `$E000-$FFFF` al **Ãºltimo banco** (boot
 			// y vectores); la ventana 3 lo cubre igual en el despacho.
 			const eng::usize n8 = prg_size_ / 0x2000u;
 			if (win_ >= 0 && win_ <= 3) {
@@ -1099,7 +1099,7 @@ private:
 			}
 		} else if (mapper_ == 24 || mapper_ == 26) {
 			// VRC6 (24/26): `$8000-$BFFF` = 16 KB conmutable (`win_` 0, banco 16 KB),
-			// `$C000-$DFFF` = 8 KB conmutable (`win_` 1), `$E000-$FFFF` = último 8 KB.
+			// `$C000-$DFFF` = 8 KB conmutable (`win_` 1), `$E000-$FFFF` = Ãºltimo 8 KB.
 			const eng::usize n8 = prg_size_ / 0x2000u;
 			if (win_ == 0) {
 				if (addr < 0x8000u || addr >= 0xC000u) return {};
@@ -1113,7 +1113,7 @@ private:
 			}
 		} else if (mapper_ == 69) {
 			// FME-7 (69): tres ventanas conmutables de 8 KB (`$8000/$A000/$C000` =
-			// `fme7_prg[0..2]`, `win_` 0/1/2) + `$E000-$FFFF` fija (último banco).
+			// `fme7_prg[0..2]`, `win_` 0/1/2) + `$E000-$FFFF` fija (Ãºltimo banco).
 			const eng::usize n8 = prg_size_ / 0x2000u;
 			if (win_ == 0) {
 				if (addr < 0x8000u || addr >= 0xA000u) return {};
@@ -1130,9 +1130,9 @@ private:
 			}
 		} else if (mapper_ == 2 || mapper_ == 1) {
 			// UxROM (2) y MMC1 (1) en modo 16K con banco conmutable en $8000: misma
-			// forma de ventanas (conmutable $8000-$BFFF + último banco fijo $C000-$FFFF).
+			// forma de ventanas (conmutable $8000-$BFFF + Ãºltimo banco fijo $C000-$FFFF).
 			if (bank_ >= 0) {
-				// Análisis de un banco conmutable: solo se resuelve $8000-$BFFF.
+				// AnÃ¡lisis de un banco conmutable: solo se resuelve $8000-$BFFF.
 				if (addr < 0x8000u || addr >= 0xC000u) {
 					return {};
 				}
@@ -1156,7 +1156,7 @@ private:
 		return off;
 	}
 
-	/// Lee el byte de la PRG-ROM en la dirección 6502 `addr` (vacío si no es PRG).
+	/// Lee el byte de la PRG-ROM en la direcciÃ³n 6502 `addr` (vacÃ­o si no es PRG).
 	[[nodiscard]] eng::util::Optional<eng::u8> read_byte(eng::u16 addr) const {
 		const auto off = prg_offset(addr);
 		if (!off) {
@@ -1165,7 +1165,7 @@ private:
 		return prg_[*off];
 	}
 
-	/// Lee la palabra little-endian de la PRG-ROM en `addr` (vacío si falta algún byte).
+	/// Lee la palabra little-endian de la PRG-ROM en `addr` (vacÃ­o si falta algÃºn byte).
 	[[nodiscard]] eng::util::Optional<eng::u16> read_word(eng::u16 addr) const {
 		const auto lo = read_byte(addr);
 		const auto hi = read_byte(static_cast<eng::u16>(addr + 1u));
@@ -1175,7 +1175,7 @@ private:
 		return static_cast<eng::u16>(*lo | (static_cast<eng::u16>(*hi) << 8));
 	}
 
-	/// Apila una dirección de entrada si cae en la PRG (`>= $8000`).
+	/// Apila una direcciÃ³n de entrada si cae en la PRG (`>= $8000`).
 	void push_work(eng::u16 addr) {
 		if (addr >= 0x8000u) {
 			(void)worklist_.push_back(addr);
@@ -1187,7 +1187,7 @@ private:
 			push_work(in.target);
 		}
 	}
-	/// Marca `addr` como líder (si tiene instrucción y aún no lo era).
+	/// Marca `addr` como lÃ­der (si tiene instrucciÃ³n y aÃºn no lo era).
 	void mark_leader(eng::u16 addr) {
 		if (leaders_[addr] == 0u && has_instr_[addr] != 0u) {
 			leaders_[addr] = 1u;
@@ -1197,8 +1197,8 @@ private:
 
 	// --- Codegen ---
 
-	/// Sufijo del método de `CPU` según el modo de direccionamiento
-	/// (`_imm`, `_zp`, `_absx`, …). \return Cadena estática; `""` para modos sin sufijo.
+	/// Sufijo del mÃ©todo de `CPU` segÃºn el modo de direccionamiento
+	/// (`_imm`, `_zp`, `_absx`, â€¦). \return Cadena estÃ¡tica; `""` para modos sin sufijo.
 	[[nodiscard]] static const char* mode_suffix(AddrMode mode) noexcept {
 		switch (mode) {
 		case AddrMode::Imm: return "_imm";
@@ -1215,9 +1215,9 @@ private:
 		}
 	}
 
-	/// Escribe en `out` el **nombre del método** de `CPU` para `info`:
-	/// mnemónico + sufijo de modo; los desplazamientos implícitos añaden `_A` y
-	/// los `NOP` usan un nombre por modo (`NOP_imm`, `NOP_abs`…).
+	/// Escribe en `out` el **nombre del mÃ©todo** de `CPU` para `info`:
+	/// mnemÃ³nico + sufijo de modo; los desplazamientos implÃ­citos aÃ±aden `_A` y
+	/// los `NOP` usan un nombre por modo (`NOP_imm`, `NOP_abs`â€¦).
 	static void append_method_name(Dyn& out, const OpcodeInfo& info) {
 		if (sv_equal(info.mnemonic, "NOP")) {
 			switch (info.mode) {
@@ -1240,8 +1240,8 @@ private:
 		}
 	}
 
-	/// Escribe el **argumento** de la llamada (`0xNN` o `0xNNNN`) según la anchura
-	/// del modo: 2 dígitos para inmediatos/página cero/indX/indY y 4 para absolutos.
+	/// Escribe el **argumento** de la llamada (`0xNN` o `0xNNNN`) segÃºn la anchura
+	/// del modo: 2 dÃ­gitos para inmediatos/pÃ¡gina cero/indX/indY y 4 para absolutos.
 	static void append_arg(Dyn& out, const Instruction& in, const OpcodeInfo& info) {
 		out.append("0x");
 		const bool narrow = (info.mode == AddrMode::Imm || info.mode == AddrMode::Zp ||
@@ -1250,7 +1250,7 @@ private:
 		out.append_hex(in.operand, narrow ? 2u : 4u, true);
 	}
 
-	/// Escribe el comentario `// $ADDR: MNEMONICO $OPERANDO` al final de una línea
+	/// Escribe el comentario `// $ADDR: MNEMONICO $OPERANDO` al final de una lÃ­nea
 	/// generada, para que el `.cpp` se lea como el desensamblador.
 	static void append_comment(Dyn& out, const Instruction& in, const OpcodeInfo& info) {
 		out.append("  // $");
@@ -1267,8 +1267,8 @@ private:
 		}
 	}
 
-	/// Condición C++ del flag que prueba una rama (`BNE` → `!cpu.Z`, …).
-	/// \return Cadena estática con la expresión; `"false"` si no es una rama conocida.
+	/// CondiciÃ³n C++ del flag que prueba una rama (`BNE` â†’ `!cpu.Z`, â€¦).
+	/// \return Cadena estÃ¡tica con la expresiÃ³n; `"false"` si no es una rama conocida.
 	[[nodiscard]] static const char* branch_cond(const char* mnemonic) noexcept {
 		if (sv_equal(mnemonic, "BNE")) return "!cpu.Z";
 		if (sv_equal(mnemonic, "BEQ")) return "cpu.Z";
@@ -1281,13 +1281,13 @@ private:
 		return "false";
 	}
 
-	/// Escribe una referencia a etiqueta (`prefijo` + 4 dígitos hex).
+	/// Escribe una referencia a etiqueta (`prefijo` + 4 dÃ­gitos hex).
 	static void append_label_ref(Dyn& out, eng::u16 addr, const char* prefix = "L_") {
 		out.append(prefix);
 		out.append_hex(addr, 4u, true);
 	}
 
-	/// Escribe el **nombre de función** de un basic block: `bb_XXXX` para la
+	/// Escribe el **nombre de funciÃ³n** de un basic block: `bb_XXXX` para la
 	/// ventana fija (`bank < 0`) o `bbB<banco>_XXXX` para un banco conmutable.
 	static void append_block_name(Dyn& out, int bank, eng::u16 addr) {
 		out.append("bb");
@@ -1301,14 +1301,14 @@ private:
 		out.append_hex(addr, 4u, true);
 	}
 
-	/// \return `true` si `a` es un **inicio de bloque** decodificado (destino válido
+	/// \return `true` si `a` es un **inicio de bloque** decodificado (destino vÃ¡lido
 	/// para encadenar con una llamada directa `bb_XXXX(cpu)`).
 	[[nodiscard]] bool is_block(eng::u16 a) const noexcept {
 		return a < kSpace && has_instr_[a] != 0u && leaders_[a] != 0u;
 	}
 
 	/// \return `true` si el bloque que empieza en `start` **lee el estado del PPU**
-	/// (`$2002`), señal de un bucle de espera de VBlank/sprite-0. Con `--chain` estos
+	/// (`$2002`), seÃ±al de un bucle de espera de VBlank/sprite-0. Con `--chain` estos
 	/// bucles **ceden** al runtime (`cpu.yield = true; return;`) en vez de encadenarse
 	/// consigo mismos, para que el runtime pueda avanzar el PPU/NMI.
 	[[nodiscard]] bool block_reads_ppu_status(eng::u16 start) const noexcept {
@@ -1333,11 +1333,11 @@ private:
 	}
 
 	/// \return `true` si `term` es una **rama cuyo bloque destino lee `$2002`** y es un
-	/// bucle hacia atrás: el patrón de espera de VBlank/sprite-0. Sirve para que el
+	/// bucle hacia atrÃ¡s: el patrÃ³n de espera de VBlank/sprite-0. Sirve para que el
 	/// backend nativo **ceda** al runtime en vez de girar. El bucle puede estar partido
-	/// en dos bloques (el fall-through del `BPL` es líder), por eso se mira el bloque
+	/// en dos bloques (el fall-through del `BPL` es lÃ­der), por eso se mira el bloque
 	/// **destino** de la rama, no solo el actual.
-	/// \param term Instrucción terminadora (debe ser de rama relativa).
+	/// \param term InstrucciÃ³n terminadora (debe ser de rama relativa).
 	[[nodiscard]] bool native_vblank_wait(const Instruction& term) const noexcept {
 		if (kOpcodeTable[term.opcode].mode != AddrMode::Rel) {
 			return false;
@@ -1346,8 +1346,8 @@ private:
 		return t < kSpace && t <= term.addr && block_reads_ppu_status(t);
 	}
 
-	/// \return `true` si el mnemónico **escribe memoria** (store o RMW), para distinguir
-	/// bucles de **espera** (leen un flag y no lo escriben) de bucles de **cálculo**.
+	/// \return `true` si el mnemÃ³nico **escribe memoria** (store o RMW), para distinguir
+	/// bucles de **espera** (leen un flag y no lo escriben) de bucles de **cÃ¡lculo**.
 	[[nodiscard]] static bool mnemonic_writes_mem(const char* m) noexcept {
 		return sv_equal(m, "STA") || sv_equal(m, "STX") || sv_equal(m, "STY") ||
 		       sv_equal(m, "SAX") || sv_equal(m, "INC") || sv_equal(m, "DEC") ||
@@ -1357,11 +1357,11 @@ private:
 		       sv_equal(m, "RRA");
 	}
 
-	/// \return `true` si el bloque `start` **lee memoria de datos** (algún operando de
-	/// modo memoria) y **no escribe** ninguna: patrón de **espera por flag**
+	/// \return `true` si el bloque `start` **lee memoria de datos** (algÃºn operando de
+	/// modo memoria) y **no escribe** ninguna: patrÃ³n de **espera por flag**
 	/// (`LDA flag; BNE ...`), que debe **ceder** al runtime aunque no lea `$2002`
-	/// (el flag lo cambia el NMI). Un bucle de cálculo (`DEC zp; BNE`) escribe memoria
-	/// → no es espera. `JSR` puede escribir → no se considera espera.
+	/// (el flag lo cambia el NMI). Un bucle de cÃ¡lculo (`DEC zp; BNE`) escribe memoria
+	/// â†’ no es espera. `JSR` puede escribir â†’ no se considera espera.
 	[[nodiscard]] bool block_waits_on_flag(eng::u16 start) const noexcept {
 		eng::u16 pc = start;
 		bool reads = false;
@@ -1404,7 +1404,7 @@ private:
 		return block_reads_ppu_status(hdr) || block_waits_on_flag(hdr);
 	}
 
-	/// \return `true` si el mnemónico escribe `Z`/`N` (carga/ALU/comparación/inc-dec/
+	/// \return `true` si el mnemÃ³nico escribe `Z`/`N` (carga/ALU/comparaciÃ³n/inc-dec/
 	/// desplazamiento/transferencia/PLA/BIT/PLP/RTI). Se usa para el **liveness** local
 	/// que suprime escrituras muertas de flags.
 	[[nodiscard]] static bool mnemonic_writes_nz(const char* m) noexcept {
@@ -1421,8 +1421,8 @@ private:
 	}
 
 	/// **Liveness local** de `Z`/`N`: recorre hacia delante desde `pc` (dentro del bloque
-	/// `start`) hasta la primera instrucción que **lee** `Z`/`N` (rama/`PHP` → viven) o que
-	/// las **escribe** (→ la escritura de `pc` es muerta). Atravesar el fin de bloque o un
+	/// `start`) hasta la primera instrucciÃ³n que **lee** `Z`/`N` (rama/`PHP` â†’ viven) o que
+	/// las **escribe** (â†’ la escritura de `pc` es muerta). Atravesar el fin de bloque o un
 	/// terminador devuelve `false` (conservador: el sucesor puede leerlas).
 	/// \return `true` si las dos (`Z` y `N`) escritas por `pc` son **muertas**.
 	[[nodiscard]] bool nz_dead_after(eng::u16 start, eng::u16 pc) const {
@@ -1448,34 +1448,34 @@ private:
 		}
 	}
 
-	/// Escribe la cabecera documentada del fichero generado: qué es, quién lo
-	/// compila/ejecuta, en qué contexto y qué recursos necesita. Termina con el
+	/// Escribe la cabecera documentada del fichero generado: quÃ© es, quiÃ©n lo
+	/// compila/ejecuta, en quÃ© contexto y quÃ© recursos necesita. Termina con el
 	/// `#include` de `eng/core` que el resto del fichero presupone.
-	/// \param out Búfer de salida (se añade al final).
+	/// \param out BÃºfer de salida (se aÃ±ade al final).
 	void emit_header(Dyn& out) const {
 		out.append("// ============================================================\n");
-		out.append("// Código C++23 generado por nes_transpiler (fase 1; eng/core, sin STL)\n");
+		out.append("// CÃ³digo C++23 generado por nes_transpiler (fase 1; eng/core, sin STL)\n");
 		out.append("// ============================================================\n");
 		out.append("//\n");
-		out.append("// QUÉ ES\n");
-		out.append("//   Traducción de la PRG-ROM de una ROM NES (mapper ");
+		out.append("// QUÃ‰ ES\n");
+		out.append("//   TraducciÃ³n de la PRG-ROM de una ROM NES (mapper ");
 		out.append_s32(mapper_);
 		out.append(", ");
 		out.append_u32(prg_size_);
 		out.append(" bytes de PRG) a basic blocks C++23.\n");
-		out.append("//   Cada función bb_XXXX cubre un rango de direcciones 6502 y ejecuta las\n");
-		out.append("//   mismas operaciones llamando a los métodos de CPU.\n");
+		out.append("//   Cada funciÃ³n bb_XXXX cubre un rango de direcciones 6502 y ejecuta las\n");
+		out.append("//   mismas operaciones llamando a los mÃ©todos de CPU.\n");
 		out.append("//\n");
-		out.append("// QUIÉN LO USA / CONTEXTO\n");
+		out.append("// QUIÃ‰N LO USA / CONTEXTO\n");
 		out.append("//   - Lo compila el runtime del nodo (conversion/nes-to-amiga500/runtime/)\n");
 		out.append("//     para Amiga 500, o el host para tests.\n");
 		out.append("//   - Punto de entrada: game_main(), bucle de despacho por cpu.PC.\n");
-		out.append("//   - Los bloques usan CPU (cpu.LDA_abs(...)), único punto de enganche con\n");
+		out.append("//   - Los bloques usan CPU (cpu.LDA_abs(...)), Ãºnico punto de enganche con\n");
 		out.append("//     RAM/PPU/APU/mapper (interceptable por la capa HLE).\n");
 		out.append("//\n");
 		out.append("// RECURSOS\n");
-		out.append("//   - Sin memoria dinámica; PRG_ROM es constexpr.\n");
-		out.append("//   - Despacho disperso: tablas ordenadas (bloque/ciclos) + búsqueda binaria.\n");
+		out.append("//   - Sin memoria dinÃ¡mica; PRG_ROM es constexpr.\n");
+		out.append("//   - Despacho disperso: tablas ordenadas (bloque/ciclos) + bÃºsqueda binaria.\n");
 		out.append("//   - Requiere el header del runtime: nes_runtime.hpp.\n");
 		out.append("//\n");
 		out.append("// VECTORES  Reset=$");
@@ -1486,18 +1486,18 @@ private:
 		out.append_hex(irq_, 4u, true);
 		out.append("\n// ============================================================\n\n");
 		out.append("#include <eng/core/types/types.hpp>\n\n");
-		// Traza opcional por instrucción (`--trace`): el que incluya este fichero
+		// Traza opcional por instrucciÃ³n (`--trace`): el que incluya este fichero
 		// puede definir `N2A_TRACE(addr)` antes; si no, es un no-op.
 		out.append("#ifndef N2A_TRACE\n#define N2A_TRACE(addr) ((void)0)\n#endif\n\n");
 	}
 
-	/// Escribe `kPrgSize` y la tabla `PRG_ROM` con los bytes de la PRG, 16 por línea.
+	/// Escribe `kPrgSize` y la tabla `PRG_ROM` con los bytes de la PRG, 16 por lÃ­nea.
 	/// El runtime (`NESMemory::read`) las consulta; por eso van antes de su `#include`.
 	void emit_rom(Dyn& out) const {
 		out.append("static constexpr eng::usize kPrgSize = ");
 		out.append_u32(prg_size_);
 		out.append(";\n");
-		// ¿El codegen reloja la PPU **por acceso** (`cpu.mem->tick`)? Con ciclos sí; con
+		// Â¿El codegen reloja la PPU **por acceso** (`cpu.mem->tick`)? Con ciclos sÃ­; con
 		// `--no-cycles` **no** (solo suma los ciclos base por bloque). El runtime debe
 		// fijar `fast_ticks = kBlocksTickPpu`; si no, con `--no-cycles` la PPU no avanza.
 		out.append("static constexpr bool kBlocksTickPpu = ");
@@ -1519,7 +1519,7 @@ private:
 		}
 		out.append("};\n\n");
 		// CHR-ROM y mapper, para que el transpilado sea un **cartucho autocontenido**
-		// (lo usa el plugin `.n2x`: PRG para el código, CHR/mapper para la PPU).
+		// (lo usa el plugin `.n2x`: PRG para el cÃ³digo, CHR/mapper para la PPU).
 		out.append("static constexpr eng::usize kChrSize = ");
 		out.append_u32(chr_size_);
 		out.append(";\nstatic constexpr eng::u8 CHR_ROM[kChrSize > 0u ? kChrSize : 1u] = {\n");
@@ -1543,7 +1543,7 @@ private:
 		out.append_s32(mirror_h_ ? 0 : 1); // 0 = horizontal, 1 = vertical
 		// Layout de PRG (F9): permite al runtime/plugin saber si hay bancos. En
 		// UxROM (B1a) solo se transpila la ventana fija ($C000-$FFFF); la
-		// conmutable ($8000-$BFFF) la ejecuta el intérprete leyendo por el mapper.
+		// conmutable ($8000-$BFFF) la ejecuta el intÃ©rprete leyendo por el mapper.
 		out.append(";\nstatic constexpr eng::u32 kPrgBankCount = ");
 		out.append_u32(prg_bank_count_);
 		out.append(";\nstatic constexpr eng::u32 kPrgBankSize = ");
@@ -1552,10 +1552,10 @@ private:
 		out.append(prg_banked_ ? "true" : "false");
 		// MMC1 (1): el modo de ventanas es runtime; el runtime invalida el modelo
 		// con `prg_bank = 0xFF` si el juego cambia a un modo no soportado (el
-		// plugin entonces cae al intérprete).
+		// plugin entonces cae al intÃ©rprete).
 		out.append(";\nstatic constexpr bool kPrgModeSensitive = ");
 		out.append((mapper_ == 1 || mapper_ == 4 || mapper_ == 5) ? "true" : "false");
-		// Límite superior de la ventana conmutable: MMC5 (modo 3) llega a `$FFFF`.
+		// LÃ­mite superior de la ventana conmutable: MMC5 (modo 3) llega a `$FFFF`.
 		out.append(";\nstatic constexpr eng::u16 kBankedTop = ");
 		out.append(mapper_ == 5 ? "0x10000" : "0xC000");
 		out.append(";\nstatic constexpr eng::u8 kMapperKind = ");
@@ -1572,16 +1572,16 @@ private:
 		out.append("    w = __builtin_bswap16(w);\n#endif\n    __builtin_memcpy(p, &w, 2u);\n}\n\n");
 	}
 
-	/// Con `--fast-ram`, emite la instrucción de **zero-page** con acceso directo a
-	/// `cpu.mem->ram[...]` (sin la llamada al método ni el `switch` de región de
-	/// `mem->read`), que en 68000 es notablemente más rápido. Solo cubre los
-	/// opcodes de carga/almacén/ALU/CMP en modo `Zp` (dirección `$00-$FF`).
+	/// Con `--fast-ram`, emite la instrucciÃ³n de **zero-page** con acceso directo a
+	/// `cpu.mem->ram[...]` (sin la llamada al mÃ©todo ni el `switch` de regiÃ³n de
+	/// `mem->read`), que en 68000 es notablemente mÃ¡s rÃ¡pido. Solo cubre los
+	/// opcodes de carga/almacÃ©n/ALU/CMP en modo `Zp` (direcciÃ³n `$00-$FF`).
 	/// \param out Salida.
-	/// \param in Instrucción (modo `Zp`).
-	/// \return `true` si se emitió en línea; `false` para usar el método normal.
+	/// \param in InstrucciÃ³n (modo `Zp`).
+	/// \return `true` si se emitiÃ³ en lÃ­nea; `false` para usar el mÃ©todo normal.
 	[[nodiscard]] bool emit_zp_inline(Dyn& out, const Instruction& in) const {
 		const char* m = kOpcodeTable[in.opcode].mnemonic;
-		// Código de operación (0 = no soportado).
+		// CÃ³digo de operaciÃ³n (0 = no soportado).
 		int op = -1;
 		if (sv_equal(m, "LDA")) op = 0;
 		else if (sv_equal(m, "LDX")) op = 1;
@@ -1633,7 +1633,7 @@ private:
 		case 11: out.append("cpu.CMP_impl(cpu.A, "); ram(); out.append(");"); break;
 		case 12: out.append("cpu.CMP_impl(cpu.X, "); ram(); out.append(");"); break;
 		case 13: out.append("cpu.CMP_impl(cpu.Y, "); ram(); out.append(");"); break;
-		// RMW/desplazamientos en zero-page: lectura + operación + escritura directas,
+		// RMW/desplazamientos en zero-page: lectura + operaciÃ³n + escritura directas,
 		// sin las dos llamadas a `read`/`write` (caliente en PRNG/bucles de la NES).
 		case 14: out.append("{ eng::u8 n2a_v = "); ram();
 			out.append("; cpu.C = (n2a_v & 0x80u) != 0u; n2a_v = static_cast<eng::u8>(n2a_v << 1u); ");
@@ -1661,22 +1661,22 @@ private:
 	/// instrucciones de **carga/ALU/CMP** cuyo operando efectivo (modo `Abs`/`AbsX`/
 	/// `AbsY`) cae en la ventana fija de ROM y el mapper tiene la PRG **fija**
 	/// (NROM/CNROM). Sustituye `cpu.METODO(dir)` (que en el runtime hace el `switch`
-	/// de región y `idx % prg_size`) por `PRG_ROM[índice]` — datos `constexpr` que el
+	/// de regiÃ³n y `idx % prg_size`) por `PRG_ROM[Ã­ndice]` â€” datos `constexpr` que el
 	/// compilador puede plegar o indexar directamente.
 	///
-	/// El índice replica el mapeo del bus: `((operando - $8000) + X/Y) & (prg_size-1)`
-	/// (potencia de dos). Solo es válido para `prg_size` potencia de dos; en otro caso
-	/// cae al método normal.
+	/// El Ã­ndice replica el mapeo del bus: `((operando - $8000) + X/Y) & (prg_size-1)`
+	/// (potencia de dos). Solo es vÃ¡lido para `prg_size` potencia de dos; en otro caso
+	/// cae al mÃ©todo normal.
 	///
 	/// \param out Salida.
-	/// \param in Instrucción (modo `Abs`/`AbsX`/`AbsY` con operando en `$8000-$FFFF`).
-	/// \return `true` si se emitió en línea; `false` para usar el método normal.
+	/// \param in InstrucciÃ³n (modo `Abs`/`AbsX`/`AbsY` con operando en `$8000-$FFFF`).
+	/// \return `true` si se emitiÃ³ en lÃ­nea; `false` para usar el mÃ©todo normal.
 	[[nodiscard]] bool emit_rom_inline(Dyn& out, const Instruction& in) const {
 		if (!rom_direct_ || prg_banked_ || prg_size_ == 0u) {
 			return false;
 		}
 		if ((prg_size_ & (prg_size_ - 1u)) != 0u) {
-			return false; // no es potencia de dos: el módulo no es máscara
+			return false; // no es potencia de dos: el mÃ³dulo no es mÃ¡scara
 		}
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		if (info.mode != AddrMode::Abs && info.mode != AddrMode::AbsX && info.mode != AddrMode::AbsY) {
@@ -1703,12 +1703,12 @@ private:
 		}
 		const eng::u32 mask = prg_size_ - 1u;
 		const eng::u32 base = (static_cast<eng::u32>(in.operand) - 0x8000u) & mask;
-		// **Dirección absoluta** (sin índice): el byte es una **constante de compilación**
+		// **DirecciÃ³n absoluta** (sin Ã­ndice): el byte es una **constante de compilaciÃ³n**
 		// (PRG fija, no bancada). Se emite como **inmediato** para que g++ lo pliegue: la
 		// carga puede desaparecer y las operaciones con ella resolverse en compile-time.
 		if (info.mode == AddrMode::Abs) {
 			const eng::u8 val = prg_[base];
-			// Sin Z/N vivas: emisión directa (la carga/operación no actualiza flags).
+			// Sin Z/N vivas: emisiÃ³n directa (la carga/operaciÃ³n no actualiza flags).
 			if (!cur_nz_live_ && (op == 0 || op == 1 || op == 2 || op == 5 || op == 6 || op == 7)) {
 				out.append("    cpu.");
 				if (op == 0 || op == 5 || op == 6 || op == 7) {
@@ -1748,7 +1748,7 @@ private:
 			out.append(");");
 			return true;
 		}
-		// Expresión del índice dentro de PRG_ROM.
+		// ExpresiÃ³n del Ã­ndice dentro de PRG_ROM.
 		auto rom = [&]() {
 			out.append("n2a_prg[");
 			if (info.mode == AddrMode::Abs) {
@@ -1785,8 +1785,8 @@ private:
 
 	/// Idioms multibyte **del backend por bloques** (`--chain` + `--fast-ram` +
 	/// `--no-cycles`): mismos patrones que el nativo pero emitiendo sobre `cpu` y el
-	/// puntero `n2a_ram`. Mantiene la semántica de flags del 6502.
-	/// \return `true` si se emitió (y actualizó `next`).
+	/// puntero `n2a_ram`. Mantiene la semÃ¡ntica de flags del 6502.
+	/// \return `true` si se emitiÃ³ (y actualizÃ³ `next`).
 	[[nodiscard]] bool try_chain_multibyte_impl(Dyn& out, eng::u16 p, eng::u16& next) const {
 		const auto at = [&](eng::u16 a) -> const Instruction* {
 			return (a < kSpace && has_instr_[a] != 0u) ? &instr_[a] : nullptr;
@@ -1794,7 +1794,7 @@ private:
 		const auto mn = [&](const Instruction* in) -> const char* {
 			return (in != nullptr) ? kOpcodeTable[in->opcode].mnemonic : "";
 		};
-		// `true` + offset si `in` es RAM de dirección constante (zp, o abs < $2000).
+		// `true` + offset si `in` es RAM de direcciÃ³n constante (zp, o abs < $2000).
 		const auto ramoff = [&](const Instruction* in, eng::u16& off) -> bool {
 			if (in == nullptr) {
 				return false;
@@ -1844,7 +1844,7 @@ private:
 		const Instruction* i1 = at(static_cast<eng::u16>(p + 2u));
 		const Instruction* i2 = at(static_cast<eng::u16>(p + 4u));
 		const Instruction* i3 = at(static_cast<eng::u16>(p + 6u));
-		// --- Copia 16 bits: LDA/STA ×2 sobre RAM (zp o abs) ---
+		// --- Copia 16 bits: LDA/STA Ã—2 sobre RAM (zp o abs) ---
 		{
 			eng::u16 a = 0, c = 0, a1 = 0, c1 = 0;
 			if (sv_equal(mn(i0), "LDA") && sv_equal(mn(i1), "STA") &&
@@ -1884,7 +1884,7 @@ private:
 				return true;
 			}
 		}
-		// --- Comparación 16 bits ---
+		// --- ComparaciÃ³n 16 bits ---
 		{
 			eng::u16 a = 0, a1 = 0;
 			if (sv_equal(mn(i0), "LDA") && ramoff(i0, a) && sv_equal(mn(i2), "LDA") &&
@@ -1973,10 +1973,10 @@ private:
 		return false;
 	}
 
-	/// \brief Efecto normalizado de una instrucción 6502 (**IR mínimo** del matcher flexible).
+	/// \brief Efecto normalizado de una instrucciÃ³n 6502 (**IR mÃ­nimo** del matcher flexible).
 	///
-	/// POR QUÉ: los reconocedores de idioms comparan **opcodes exactos en offsets fijos**,
-	/// así que no ven **variaciones** (una instrucción neutra en medio, la misma operación
+	/// POR QUÃ‰: los reconocedores de idioms comparan **opcodes exactos en offsets fijos**,
+	/// asÃ­ que no ven **variaciones** (una instrucciÃ³n neutra en medio, la misma operaciÃ³n
 	/// escrita de otra forma). El IR abstrae el **efecto** (def/uso) y permite casar por
 	/// **predicados**, saltando lo neutro. Es la base para un reconocedor estructural.
 	enum class IrKind : eng::u8 {
@@ -1995,7 +1995,7 @@ private:
 		CmpA,   ///< `CMP x`.
 	};
 
-	/// \return Índice de registro (0=A, 1=X, 2=Y) si `k` es carga/almacén de registro; -1 si no.
+	/// \return Ãndice de registro (0=A, 1=X, 2=Y) si `k` es carga/almacÃ©n de registro; -1 si no.
 	[[nodiscard]] static int ir_reg(IrKind k) noexcept {
 		switch (k) {
 		case IrKind::LoadA:
@@ -2015,25 +2015,25 @@ private:
 	[[nodiscard]] static bool ir_is_load(IrKind k) noexcept {
 		return k == IrKind::LoadA || k == IrKind::LoadX || k == IrKind::LoadY;
 	}
-	/// \return `true` si `k` es un **almacén** de registro (`STA`/`STX`/`STY`).
+	/// \return `true` si `k` es un **almacÃ©n** de registro (`STA`/`STX`/`STY`).
 	[[nodiscard]] static bool ir_is_store(IrKind k) noexcept {
 		return k == IrKind::StoreA || k == IrKind::StoreX || k == IrKind::StoreY;
 	}
 
-	/// \brief Un paso del IR: la instrucción normalizada a un efecto + su operando.
+	/// \brief Un paso del IR: la instrucciÃ³n normalizada a un efecto + su operando.
 	struct IrStep {
 		IrKind kind = IrKind::Other; ///< Efecto normalizado.
-		eng::u16 addr = 0;           ///< Dirección 6502 original.
-		eng::u16 mem = 0;            ///< Dirección RAM (si `is_mem`).
+		eng::u16 addr = 0;           ///< DirecciÃ³n 6502 original.
+		eng::u16 mem = 0;            ///< DirecciÃ³n RAM (si `is_mem`).
 		eng::u8 imm = 0;             ///< Inmediato (si `is_imm`).
-		eng::u8 size = 1;            ///< Bytes de la instrucción.
+		eng::u8 size = 1;            ///< Bytes de la instrucciÃ³n.
 		bool is_mem = false;         ///< El operando es RAM (zp o abs < `$2000`).
 		bool is_imm = false;         ///< El operando es inmediato.
 	};
 
 	/// Traduce las instrucciones del bloque desde `start` (hasta `maxn`) a pasos del IR.
-	/// \param start Dirección de inicio.
-	/// \param maxn  Máximo de instrucciones a traducir.
+	/// \param start DirecciÃ³n de inicio.
+	/// \param maxn  MÃ¡ximo de instrucciones a traducir.
 	/// \return La lista de pasos (hasta fin de bloque o `maxn`).
 	[[nodiscard]] eng::util::Vector<IrStep, eng::util::HeapAlloc>
 	build_ir(eng::u16 start, eng::usize maxn) const {
@@ -2103,8 +2103,8 @@ private:
 	}
 
 	/// Casado **flexible por IR** de los idioms de 16 bits (copia y constante), tolerando
-	/// **`NOP` intercalados** (la única instrucción realmente neutra: no toca registros ni
-	/// flags). Variante más general que el casado exacto (que exige offsets fijos): el mismo
+	/// **`NOP` intercalados** (la Ãºnica instrucciÃ³n realmente neutra: no toca registros ni
+	/// flags). Variante mÃ¡s general que el casado exacto (que exige offsets fijos): el mismo
 	/// idiom con un `NOP` en medio. \return `true` y `next` tras el idiom (los `NOP`
 	/// intercalados quedan consumidos).
 	[[nodiscard]] bool try_ir_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
@@ -2113,7 +2113,7 @@ private:
 		int n = 0;
 		for (eng::usize i = 0; i < ir.size() && n < 12; ++i) {
 			// Solo `NOP` es realmente neutro (no cambia registros ni flags). `CLC`/`SEC`
-			// cambian `C` (observable) → **no** se saltan: si aparecen, el patrón no casa
+			// cambian `C` (observable) â†’ **no** se saltan: si aparecen, el patrÃ³n no casa
 			// y se cae al matcher exacto / byte a byte (correcto, sin perder el flag).
 			if (ir[i].kind == IrKind::Nop) {
 				continue;
@@ -2247,8 +2247,8 @@ private:
 
 	/// Reconocedor de idioms multibyte del backend encadenado: primero el **IR flexible**
 	/// (`try_ir_multibyte`, tolera neutros) y, si no, el **exacto** (`try_chain_multibyte_impl`).
-	/// Cuenta los aciertos en `idiom_hits_` (diagnóstico).
-	/// \return `true` si casó algún idiom (y `next` queda tras él).
+	/// Cuenta los aciertos en `idiom_hits_` (diagnÃ³stico).
+	/// \return `true` si casÃ³ algÃºn idiom (y `next` queda tras Ã©l).
 	[[nodiscard]] bool try_chain_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
 #if !defined(N2A_NO_IR)
 		if (try_ir_multibyte(out, p, next)) {
@@ -2265,19 +2265,19 @@ private:
 		return false;
 	}
 
-	/// Traduce una instrucción a una o varias líneas de C++.
+	/// Traduce una instrucciÃ³n a una o varias lÃ­neas de C++.
 	///
 	/// Casos especiales:
-	/// - Ramas y `JMP` absoluto con destino **en el mismo bloque** → `goto L_xxxx`.
-	/// - Los mismos con destino en **otro bloque** → `cpu.PC = destino; return;`
+	/// - Ramas y `JMP` absoluto con destino **en el mismo bloque** â†’ `goto L_xxxx`.
+	/// - Los mismos con destino en **otro bloque** â†’ `cpu.PC = destino; return;`
 	///   (vuelve al despachador, porque la etiqueta no cruza funciones).
-	/// - `JMP (ind)` → `cpu.JMP_ind(...)`: el destino se conoce en ejecución.
-	/// - `JSR` → `cpu.JSR_abs(destino, retorno)`: apila la dirección de regreso.
-	/// - `RTS`/`RTI`/`BRK` → método de `CPU` seguido de `return`.
-	/// - Resto → `cpu.METODO(arg);` con un comentario con la instrucción original.
+	/// - `JMP (ind)` â†’ `cpu.JMP_ind(...)`: el destino se conoce en ejecuciÃ³n.
+	/// - `JSR` â†’ `cpu.JSR_abs(destino, retorno)`: apila la direcciÃ³n de regreso.
+	/// - `RTS`/`RTI`/`BRK` â†’ mÃ©todo de `CPU` seguido de `return`.
+	/// - Resto â†’ `cpu.METODO(arg);` con un comentario con la instrucciÃ³n original.
 	///
-	/// \param in          Instrucción a emitir.
-	/// \param block_start Dirección de inicio del bloque (para decidir `goto`).
+	/// \param in          InstrucciÃ³n a emitir.
+	/// \param block_start DirecciÃ³n de inicio del bloque (para decidir `goto`).
 	void emit_one_instruction(Dyn& out, const Instruction& in, eng::u16 block_start) const {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
@@ -2289,20 +2289,20 @@ private:
 		}
 
 		// Las ramas y `JMP` **siempre** vuelven al despacho (`cpu.PC = destino;
-		// return;`), sin `goto` interno: así el runtime puede avanzar la PPU entre
+		// return;`), sin `goto` interno: asÃ­ el runtime puede avanzar la PPU entre
 		// bloques y no se cuelga en un bucle de espera de VBlank. `block_start` ya
-		// no decide nada aquí (se conserva el parámetro por uniformidad).
+		// no decide nada aquÃ­ (se conserva el parÃ¡metro por uniformidad).
 		(void)block_start;
-		// Coste exacto en `cpu.cycles`: base + penalización de página/rama, igual
-		// que el intérprete del runtime. El runtime lee el delta por bloque.
+		// Coste exacto en `cpu.cycles`: base + penalizaciÃ³n de pÃ¡gina/rama, igual
+		// que el intÃ©rprete del runtime. El runtime lee el delta por bloque.
 		// Con `--no-cycles` (Amiga, sin PPU ciclo-exacta) **no se emite nada**: ahorra
-		// una operación por instrucción (clave en 68000).
+		// una operaciÃ³n por instrucciÃ³n (clave en 68000).
 		auto emit_base = [&]() {
 			if (no_cycles_) {
 				return;
 			}
 			// Ciclos base **y** avance de PPU por acceso: el acceso a datos (p. ej.
-			// leer `$2002`) ve la PPU en el mismo ciclo que el intérprete. El host
+			// leer `$2002`) ve la PPU en el mismo ciclo que el intÃ©rprete. El host
 			// no re-reloja el bloque (`NesSystem::fast_ticks`).
 			out.append("    cpu.cycles += ");
 			out.append_u32(op_base_cycles(in.opcode));
@@ -2321,7 +2321,7 @@ private:
 			out.append(") {");
 			if (!no_cycles_) {
 				out.append(" cpu.cycles += 1u; cpu.mem->tick(1);");
-				// Cruce de página de la rama: `pc+2` vs destino (estático).
+				// Cruce de pÃ¡gina de la rama: `pc+2` vs destino (estÃ¡tico).
 				if (((in.addr + 2u) & 0xFF00u) != (in.target & 0xFF00u)) {
 					out.append(" cpu.cycles += 1u; cpu.mem->tick(1);");
 				}
@@ -2353,7 +2353,7 @@ private:
 			out.append('\n');
 			emit_base();
 			if (chain_ && !prg_banked_ && in.target == block_start) {
-				// `JMP a sí mismo`: espera de NMI; cede al runtime.
+				// `JMP a sÃ­ mismo`: espera de NMI; cede al runtime.
 				out.append("    cpu.yield = true; cpu.PC = 0x");
 				out.append_hex(block_start, 4u, true);
 				out.append("; return;\n");
@@ -2385,7 +2385,7 @@ private:
 			emit_base();
 			const eng::u16 ret3 = static_cast<eng::u16>(in.addr + 3u); // primer byte tras el JSR
 			if (chain_ && !prg_banked_ && is_block(in.target) && is_block(ret3)) {
-				// Encadenado: llamada C al subbloque y continuación directa en el
+				// Encadenado: llamada C al subbloque y continuaciÃ³n directa en el
 				// retorno. Se apila `PC+2` (fidelidad de pila); el `RTS` encadenado
 				// solo descarta el valor y devuelve por la pila C.
 				out.append("    cpu.push16(0x");
@@ -2398,8 +2398,8 @@ private:
 			} else {
 				out.append("    cpu.JSR_abs(0x");
 				out.append_hex(in.target, 4u, true);
-				// Convención del intérprete: se apila `PC+2` (dirección del último byte
-				// del JSR) y `RTS` suma 1; así el retorno es consistente con el fallback.
+				// ConvenciÃ³n del intÃ©rprete: se apila `PC+2` (direcciÃ³n del Ãºltimo byte
+				// del JSR) y `RTS` suma 1; asÃ­ el retorno es consistente con el fallback.
 				out.append(", 0x");
 				out.append_hex(static_cast<eng::u16>(in.addr + 2u), 4u, true);
 				out.append("); return;\n");
@@ -2419,9 +2419,9 @@ private:
 			}
 			if (sv_equal(m, "BRK")) {
 				// `CPU::BRK` empuja `PC+2`; el bloque **no mantiene el PC por
-				// instrucción**, así que hay que fijar el PC real de esta `BRK`
-				// antes de llamarla (si no, se apila una dirección de retorno
-				// incorrecta cuando `BRK` no es la 1ª instrucción del bloque).
+				// instrucciÃ³n**, asÃ­ que hay que fijar el PC real de esta `BRK`
+				// antes de llamarla (si no, se apila una direcciÃ³n de retorno
+				// incorrecta cuando `BRK` no es la 1Âª instrucciÃ³n del bloque).
 				out.append("    cpu.PC = 0x");
 				out.append_hex(in.addr, 4u, true);
 				out.append(";\n");
@@ -2431,8 +2431,8 @@ private:
 			out.append("(); return;\n");
 			return;
 		}
-		// Instrucción corriente: ciclos (+ penalización si lectura indexada) y
-		// llamada al método de CPU con su comentario.
+		// InstrucciÃ³n corriente: ciclos (+ penalizaciÃ³n si lectura indexada) y
+		// llamada al mÃ©todo de CPU con su comentario.
 		emit_base();
 		if (!no_cycles_ && op_read_indexed_penalty(in.opcode)) {
 			if (info.mode == AddrMode::AbsX) {
@@ -2458,7 +2458,7 @@ private:
 		if (!handled && fast_ram_ && info.mode == AddrMode::Zp && has_operand(in)) {
 			handled = emit_zp_inline(out, in); // acceso directo a zero-page
 		}
-		// Inmediatas con Z/N muertas (liveness): carga/operación directa sin `set_nz`.
+		// Inmediatas con Z/N muertas (liveness): carga/operaciÃ³n directa sin `set_nz`.
 		if (!handled && !cur_nz_live_ && info.mode == AddrMode::Imm && has_operand(in)) {
 			const eng::u8 v = static_cast<eng::u8>(in.operand);
 			if (sv_equal(m, "LDA")) {
@@ -2488,10 +2488,10 @@ private:
 		emit_yield(out, in, info);
 	}
 
-	/// Emite el **yield por deadline**: si el bloque cruzó el próximo evento del PPU
-	/// (`cpu.cycles >= cpu.deadline`), guarda el **PC estático** de la instrucción
+	/// Emite el **yield por deadline**: si el bloque cruzÃ³ el prÃ³ximo evento del PPU
+	/// (`cpu.cycles >= cpu.deadline`), guarda el **PC estÃ¡tico** de la instrucciÃ³n
 	/// siguiente y vuelve al despacho (el host resuelve NMI/IRQ y la frontera de
-	/// frame en esa instrucción exacta). Desactivado con `--no-cycles`.
+	/// frame en esa instrucciÃ³n exacta). Desactivado con `--no-cycles`.
 	void emit_yield(Dyn& out, const Instruction& in, const OpcodeInfo& info) const {
 		if (no_cycles_) {
 			return;
@@ -2501,19 +2501,19 @@ private:
 		out.append("; return; }\n");
 	}
 
-	/// Escribe en `out` la **ficha** que precede a la función `bb_<start>`.
+	/// Escribe en `out` la **ficha** que precede a la funciÃ³n `bb_<start>`.
 	///
-	/// Recorre el bloque para obtener su longitud y su última instrucción y de ahí
-	/// deduce: el rango de direcciones cubierto, cuántas instrucciones contiene,
-	/// cómo termina el flujo (cae, salta, llama, retorna, se detiene) y desde
-	/// dónde puede entrar la ejecución (reset/NMI/IRQ, rama, `JMP`, `JSR` o
-	/// continuación del bloque anterior).
+	/// Recorre el bloque para obtener su longitud y su Ãºltima instrucciÃ³n y de ahÃ­
+	/// deduce: el rango de direcciones cubierto, cuÃ¡ntas instrucciones contiene,
+	/// cÃ³mo termina el flujo (cae, salta, llama, retorna, se detiene) y desde
+	/// dÃ³nde puede entrar la ejecuciÃ³n (reset/NMI/IRQ, rama, `JMP`, `JSR` o
+	/// continuaciÃ³n del bloque anterior).
 	///
-	/// No genera código ni modifica el estado: solo consulta las tablas que dejó
+	/// No genera cÃ³digo ni modifica el estado: solo consulta las tablas que dejÃ³
 	/// preparadas `compute_block_metadata()`. La invoca `emit_blocks()`, una vez
 	/// por cada inicio de bloque.
 	///
-	/// \param start Dirección 6502 de inicio del bloque (debe ser un líder).
+	/// \param start DirecciÃ³n 6502 de inicio del bloque (debe ser un lÃ­der).
 	void emit_block_doc(Dyn& out, eng::u16 start, int bank) const {
 		eng::u16 pc = start;
 		eng::u16 last_addr = start;
@@ -2538,13 +2538,13 @@ private:
 
 		out.append("//\n// ");
 		append_block_name(out, bank, start);
-		out.append(" — bloque 6502 $");
+		out.append(" â€” bloque 6502 $");
 		out.append_hex(start, 4u, true);
 		out.append("..$");
 		out.append_hex(static_cast<eng::u16>(end - 1u), 4u, true);
 		out.append(" (");
 		out.append_u32(count);
-		out.append(count == 1u ? " instrucción)\n// Qué hace: " : " instrucciones)\n// Qué hace: ");
+		out.append(count == 1u ? " instrucciÃ³n)\n// QuÃ© hace: " : " instrucciones)\n// QuÃ© hace: ");
 
 		if (last == nullptr) {
 			out.append("bloque sin instrucciones.\n");
@@ -2563,9 +2563,9 @@ private:
 		} else if (sv_equal(last->mnemonic, "RTS")) {
 			out.append("ejecuta el tramo y retorna de subrutina (RTS).\n");
 		} else if (sv_equal(last->mnemonic, "RTI")) {
-			out.append("ejecuta el tramo y retorna de interrupción (RTI).\n");
+			out.append("ejecuta el tramo y retorna de interrupciÃ³n (RTI).\n");
 		} else if (sv_equal(last->mnemonic, "BRK")) {
-			out.append("ejecuta el tramo y detiene la ejecución (BRK).\n");
+			out.append("ejecuta el tramo y detiene la ejecuciÃ³n (BRK).\n");
 		} else if (last->mode == AddrMode::Rel) {
 			out.append("ejecuta el tramo; si ");
 			out.append(last->mnemonic);
@@ -2613,22 +2613,22 @@ private:
 		}
 		if (fallin_[start] != 0u) {
 			if (any) out.append(", ");
-			out.append("continuación del bloque anterior");
+			out.append("continuaciÃ³n del bloque anterior");
 			any = true;
 		}
 		if (!any) {
-			out.append("despacho directo por cpu.PC (sin referencias estáticas)");
+			out.append("despacho directo por cpu.PC (sin referencias estÃ¡ticas)");
 		}
 		out.append(".\n");
 		out.append("// Recursos: ninguno propio; usa CPU y su memoria (RAM/PPU/APU/mapper).\n");
 	}
 
-	/// Escribe la sección de *basic blocks*: primero las declaraciones anticipadas
-	/// de todas las funciones `bb_XXXX` y después cada función precedida de su
-	/// ficha (`emit_block_doc`). Dentro del bloque, cada instrucción se traduce con
-	/// `emit_one_instruction`; al final se emite la caída al bloque siguiente
+	/// Escribe la secciÃ³n de *basic blocks*: primero las declaraciones anticipadas
+	/// de todas las funciones `bb_XXXX` y despuÃ©s cada funciÃ³n precedida de su
+	/// ficha (`emit_block_doc`). Dentro del bloque, cada instrucciÃ³n se traduce con
+	/// `emit_one_instruction`; al final se emite la caÃ­da al bloque siguiente
 	/// (`goto` si es el mismo bloque, o `cpu.PC`/`return` si es otro).
-	/// \return `true` si el bloque que empieza en `start` lee la dirección `addr`
+	/// \return `true` si el bloque que empieza en `start` lee la direcciÃ³n `addr`
 	/// como operando de memoria (modos zp/abs y sus indexados).
 	[[nodiscard]] bool block_reads(eng::u16 start, eng::u16 addr) const {
 		eng::u16 pc = start;
@@ -2654,22 +2654,22 @@ private:
 		return false;
 	}
 
-	/// Emite, **después** de cargar la dirección `addr` en el registro `reg`
-	/// (`"cpu.A"`/`"cpu.X"`/`"cpu.Y"`), una suposición `N2A_ASSUME` con el hecho de
-	/// valores (`--facts`) de esa dirección.
+	/// Emite, **despuÃ©s** de cargar la direcciÃ³n `addr` en el registro `reg`
+	/// (`"cpu.A"`/`"cpu.X"`/`"cpu.Y"`), una suposiciÃ³n `N2A_ASSUME` con el hecho de
+	/// valores (`--facts`) de esa direcciÃ³n.
 	///
-	/// Se emite sobre el **registro** (p. ej. `cpu.A`) porque es la expresión que el
-	/// optimizador reutiliza después; hacerlo sobre `cpu.mem->read(addr)` **no sirve**:
-	/// `read()` no es una función pura y con `--fast-ram` la carga real ni siquiera usa
-	/// `read()` (va por `n2a_ram[]`), así que la suposición quedaría desconectada.
-	/// Si un hecho no se cumple en ejecución el resultado es indefinido, así que los
-	/// hechos deben venir validados por análisis/telemetría (`facts_from_run`).
+	/// Se emite sobre el **registro** (p. ej. `cpu.A`) porque es la expresiÃ³n que el
+	/// optimizador reutiliza despuÃ©s; hacerlo sobre `cpu.mem->read(addr)` **no sirve**:
+	/// `read()` no es una funciÃ³n pura y con `--fast-ram` la carga real ni siquiera usa
+	/// `read()` (va por `n2a_ram[]`), asÃ­ que la suposiciÃ³n quedarÃ­a desconectada.
+	/// Si un hecho no se cumple en ejecuciÃ³n el resultado es indefinido, asÃ­ que los
+	/// hechos deben venir validados por anÃ¡lisis/telemetrÃ­a (`facts_from_run`).
 	///
 	/// \param out Flujo de salida del `.cpp` generado.
-	/// \param addr Dirección 6502 leída (se busca un hecho con esa dirección).
-	/// \param reg  Expresión a la que se aplica el hecho: el registro recién cargado
-	///             (`"cpu.A"`, `"cpu.X"`, `"cpu.Y"`) o la expresión de memoria que el
-	///             código usa (`"n2a_ram[0x0020]"` con `--fast-ram`, o
+	/// \param addr DirecciÃ³n 6502 leÃ­da (se busca un hecho con esa direcciÃ³n).
+	/// \param reg  ExpresiÃ³n a la que se aplica el hecho: el registro reciÃ©n cargado
+	///             (`"cpu.A"`, `"cpu.X"`, `"cpu.Y"`) o la expresiÃ³n de memoria que el
+	///             cÃ³digo usa (`"n2a_ram[0x0020]"` con `--fast-ram`, o
 	///             `"cpu.mem->read(0x0020)"`).
 	void emit_fact_assume(Dyn& out, eng::u16 addr, eng::util::StringView reg) const {
 		for (eng::usize i = 0; i < facts_.size(); ++i) {
@@ -2713,13 +2713,13 @@ private:
 				break; // ya filtrado arriba; evita el aviso de switch
 			}
 			out.append(");\n");
-			return; // un hecho por dirección es suficiente
+			return; // un hecho por direcciÃ³n es suficiente
 		}
 	}
 
-	/// Nº de ejecuciones observado para el bloque que empieza en `addr` según un
+	/// NÂº de ejecuciones observado para el bloque que empieza en `addr` segÃºn un
 	/// hecho `Hot` (`--facts`). Permite marcar el bloque `hot`/`cold`.
-	/// \param addr Dirección de inicio del bloque.
+	/// \param addr DirecciÃ³n de inicio del bloque.
 	/// \return Ejecuciones, o `-1` si no hay dato de calor para ese bloque.
 	[[nodiscard]] int hot_count(eng::u16 addr) const {
 		for (eng::usize i = 0; i < facts_.size(); ++i) {
@@ -2733,7 +2733,7 @@ private:
 	/// Ciclos **base** estimados de un bloque (suma de `op_base_cycles`, sin
 	/// penalizaciones dependientes de datos). Se emite como `n2a_block_cycles`
 	/// para que el runtime pueda avanzar la PPU al ejecutar bloques generados.
-	/// \param start Dirección de inicio del bloque.
+	/// \param start DirecciÃ³n de inicio del bloque.
 	/// \return Ciclos base, saturado a 65535.
 	[[nodiscard]] eng::u16 block_base_cycles(eng::u16 start) const {
 		eng::u16 pc = start;
@@ -2755,7 +2755,7 @@ private:
 	}
 
 	void emit_blocks_for(Dyn& out, int bank) {
-		cur_bank_ = bank; // banco del bloque en emisión (encadenado de destinos)
+		cur_bank_ = bank; // banco del bloque en emisiÃ³n (encadenado de destinos)
 		out.append(bank < 0 ? "// ---- Basic blocks (ventana fija) ----\n\n"
 				    : "// ---- Basic blocks (banco conmutable) ----\n\n");
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -2773,10 +2773,10 @@ private:
 		}
 		out.append('\n');
 
-		// Orden de definición: bloques **calientes primero** (mejor localidad de
-		// I-fetch, crítico en A500 sin caché). Los fríos (`heat==0`) van al final
-		// (además de llevar `__attribute__((cold))`); sin dato de calor se mantiene
-		// el orden por dirección. `order`/`heat` van en paralelo.
+		// Orden de definiciÃ³n: bloques **calientes primero** (mejor localidad de
+		// I-fetch, crÃ­tico en A500 sin cachÃ©). Los frÃ­os (`heat==0`) van al final
+		// (ademÃ¡s de llevar `__attribute__((cold))`); sin dato de calor se mantiene
+		// el orden por direcciÃ³n. `order`/`heat` van en paralelo.
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> order {};
 		eng::util::Vector<int, eng::util::HeapAlloc> heat {};
 		for (eng::u32 a = 0; a < kSpace; ++a) {
@@ -2786,8 +2786,8 @@ private:
 			(void)order.push_back(static_cast<eng::u16>(a));
 			(void)heat.push_back(hot_count(static_cast<eng::u16>(a)));
 		}
-		// rank: 0 caliente (>0), 1 sin dato (-1), 2 frío (0). Orden estable con
-		// inserción: dentro de un rango, más calor primero y, si no, por dirección.
+		// rank: 0 caliente (>0), 1 sin dato (-1), 2 frÃ­o (0). Orden estable con
+		// inserciÃ³n: dentro de un rango, mÃ¡s calor primero y, si no, por direcciÃ³n.
 		const auto rank = [](int h) { return h > 0 ? 0 : (h == 0 ? 2 : 1); };
 		for (eng::usize i = 1u; i < order.size(); ++i) {
 			const eng::u16 ka = order[i];
@@ -2826,8 +2826,8 @@ private:
 					(void)bank_blocks_.push_back(bi);
 				}
 			}
-			// Calor del bloque (telemetría `--facts`): `hot`/`cold` guían al
-			// compilador (reordenado y `-Os` en los fríos). Sin dato, sin marca.
+			// Calor del bloque (telemetrÃ­a `--facts`): `hot`/`cold` guÃ­an al
+			// compilador (reordenado y `-Os` en los frÃ­os). Sin dato, sin marca.
 			const int heat = hot_count(start);
 			out.append("static void ");
 			if (heat > 0) {
@@ -2839,16 +2839,16 @@ private:
 			out.append("(CPU& cpu) {\n");
 			// (Sin etiquetas internas: las ramas vuelven al despacho por `cpu.PC`.)
 			if (chain_ && !prg_banked_) {
-				// Encadenado: el PC no se mantiene por instrucción, pero se fija al
-				// entrar en cada bloque para que el fallback a intérprete, el NMI y
-				// el diagnóstico vean la dirección real.
+				// Encadenado: el PC no se mantiene por instrucciÃ³n, pero se fija al
+				// entrar en cada bloque para que el fallback a intÃ©rprete, el NMI y
+				// el diagnÃ³stico vean la direcciÃ³n real.
 				out.append("    cpu.PC = 0x");
 				out.append_hex(start, 4u, true);
 				out.append(";\n");
 			}
-			// Punteros cacheados por bloque: `n2a_ram` (RAM emulada, dirección fija
+			// Punteros cacheados por bloque: `n2a_ram` (RAM emulada, direcciÃ³n fija
 			// dentro de `NESMemory`) y `n2a_prg` (`PRG_ROM`, `constexpr`) se quedan en
-			// registros de dirección durante todo el bloque, en vez de recargar
+			// registros de direcciÃ³n durante todo el bloque, en vez de recargar
 			// `cpu.mem`/recomputar la base en cada acceso directo.
 			if (fast_ram_) {
 				out.append("    [[maybe_unused]] eng::u8* const n2a_ram = cpu.mem->ram;\n");
@@ -2858,9 +2858,9 @@ private:
 			}
 			// Ciclos del bloque para el runtime cuando el codegen **no cuenta ciclos**
 			// (`--no-cycles`): se suman **una vez por bloque** al contador separado
-			// `cpu.block_cycles` (constante estática), **no** por instrucción. Así el
+			// `cpu.block_cycles` (constante estÃ¡tica), **no** por instrucciÃ³n. AsÃ­ el
 			// codegen **encadenado** reporta los ciclos acumulados de toda la cadena y la
-			// PPU avanza con timing correcto sin coste por instrucción. Se usa un contador
+			// PPU avanza con timing correcto sin coste por instrucciÃ³n. Se usa un contador
 			// distinto de `cpu.cycles` para **no** interactuar con el `deadline`.
 			if (no_cycles_) {
 				out.append("    cpu.block_cycles += ");
@@ -2894,7 +2894,7 @@ private:
 				// `n2a_rol_run`, que hace el desplazamiento entero con el carry en un
 				// registro (en 68000, `roxr`/`roxl`) y materializa los flags una vez.
 				// Solo con acceso directo a RAM (`--fast-ram`) y sin contabilidad de
-				// ciclos (`--no-cycles`), donde el estado por instrucción no se observa.
+				// ciclos (`--no-cycles`), donde el estado por instrucciÃ³n no se observa.
 				if ((in.opcode == 0x66u || in.opcode == 0x26u) && fast_ram_ && no_cycles_) {
 					const eng::u8 base = static_cast<eng::u8>(in.operand);
 					eng::u16 p2 = pc;
@@ -2924,9 +2924,9 @@ private:
 					}
 				}
 
-				// Liveness de Z/N: si la instrucción las escribe y se reescriben antes
+				// Liveness de Z/N: si la instrucciÃ³n las escribe y se reescriben antes
 				// de leerse, se suprimen las escrituras (menos accesos al estado).
-				// Solo con el perfil Amiga encadenado (`--chain`); sin él se mantiene
+				// Solo con el perfil Amiga encadenado (`--chain`); sin Ã©l se mantiene
 				// el comportamiento exacto anterior (host/tests).
 				cur_nz_live_ = !(chain_ && nz_dead_after(start, pc));
 				// Idioms multibyte (copia/const/compare/ADD/SUB 16 bits).
@@ -2941,14 +2941,14 @@ private:
 				}
 				emit_one_instruction(out, in, start);
 
-				// Suposiciones de valor **tras** la instrucción que lee la dirección,
-				// aplicadas a la expresión que el código usa después:
+				// Suposiciones de valor **tras** la instrucciÃ³n que lee la direcciÃ³n,
+				// aplicadas a la expresiÃ³n que el cÃ³digo usa despuÃ©s:
 				//   - cargas (`LDA/LDX/LDY zp/abs`)  -> el registro (`cpu.A/X/Y`);
 				//   - el resto (RMW `INC/DEC/ASL...`, `CMP`, `BIT`...) -> la **memoria**
 				//     (`n2a_ram[..]` con `--fast-ram`, si no `cpu.mem->read(..)`).
-				// Emitirlas antes sobre `cpu.mem->read(addr)` no servía: `read()` no es
-				// pura y con `--fast-ram` la carga real va por `n2a_ram[]`, así que la
-				// suposición quedaba desconectada del valor. Solo modos `Zp`/`Abs`
+				// Emitirlas antes sobre `cpu.mem->read(addr)` no servÃ­a: `read()` no es
+				// pura y con `--fast-ram` la carga real va por `n2a_ram[]`, asÃ­ que la
+				// suposiciÃ³n quedaba desconectada del valor. Solo modos `Zp`/`Abs`
 				// (en los indexados el efectivo es `operand + X/Y`, no `operand`).
 				const bool n2a_store_op =
 					in.opcode == 0x85u || in.opcode == 0x8Du || in.opcode == 0x86u ||
@@ -2978,10 +2978,10 @@ private:
 							}
 						}
 					} else if (in.operand < 0x2000u) {
-						// RAM interna: se usa la expresión **pura** que el codegen
-						// escribe/lee de verdad — el alias local `n2a_ram[...]` con
+						// RAM interna: se usa la expresiÃ³n **pura** que el codegen
+						// escribe/lee de verdad â€” el alias local `n2a_ram[...]` con
 						// `--fast-ram`, o `cpu.mem->ram[...]` si no. **No** se usa
-						// `cpu.mem->read(...)`: no es una función pura, así que g++ no
+						// `cpu.mem->read(...)`: no es una funciÃ³n pura, asÃ­ que g++ no
 						// propaga su valor a los accesos siguientes.
 						Dyn expr;
 						expr.append(fast_ram_ ? "n2a_ram[0x" : "cpu.mem->ram[0x");
@@ -3034,7 +3034,7 @@ private:
 				const eng::u16 next = static_cast<eng::u16>(last_addr + last->size);
 				if (!no_fallthrough && next < kSpace && has_instr_[next] != 0u) {
 					if (chain_ && !prg_banked_ && is_block(next)) {
-						// Encadenado: caída directa al bloque siguiente (llamada en cola).
+						// Encadenado: caÃ­da directa al bloque siguiente (llamada en cola).
 						out.append("    return ");
 						append_block_name(out, bank, next);
 						out.append("(cpu);\n");
@@ -3119,11 +3119,11 @@ private:
 		out.append("/// (`--ind-targets`). Si es `nullptr`, el codigo nativo se detiene.\n");
 		out.append("static void (*g_native_ind_miss)(N2A_State&, N2A_Bus&, eng::u16) = nullptr;\n\n");
 
-		// --- Entradas de región: reset/NMI/IRQ + destinos de JSR ---
+		// --- Entradas de regiÃ³n: reset/NMI/IRQ + destinos de JSR ---
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> entries {};
 		const auto add_entry = [&](eng::u16 a) {
-			// Una entrada de región solo necesita estar decodificada; puede no ser un
-			// líder estático (p. ej. destino de `JSR` alcanzado por telemetría).
+			// Una entrada de regiÃ³n solo necesita estar decodificada; puede no ser un
+			// lÃ­der estÃ¡tico (p. ej. destino de `JSR` alcanzado por telemetrÃ­a).
 			if (a < kSpace && has_instr_[a] != 0u) {
 				for (eng::usize i = 0; i < entries.size(); ++i) {
 					if (entries[i] == a) {
@@ -3144,9 +3144,9 @@ private:
 				}
 			}
 		}
-		// Puntos de **reanudación** de las cesiones (esperas de VBlank/NMI): cada uno
-		// es una entrada de región, para que `game_main` reanude en `r->pc` tras la
-		// cesión y **no** re-ejecute la inicialización.
+		// Puntos de **reanudaciÃ³n** de las cesiones (esperas de VBlank/NMI): cada uno
+		// es una entrada de regiÃ³n, para que `game_main` reanude en `r->pc` tras la
+		// cesiÃ³n y **no** re-ejecute la inicializaciÃ³n.
 		for (eng::u32 a = 0; a < kSpace; ++a) {
 			if (has_instr_[a] == 0u) {
 				continue;
@@ -3171,9 +3171,9 @@ private:
 			emit_native_region(out, entries[i]);
 		}
 
-		// --- Despachador de **reanudación**: tras una cesión, `game_main` reanuda en
-		// `r->pc` (punto guardado por la propia cesión) en vez de re-ejecutar `reset`
-		// (que repetiría la inicialización cada frame).
+		// --- Despachador de **reanudaciÃ³n**: tras una cesiÃ³n, `game_main` reanuda en
+		// `r->pc` (punto guardado por la propia cesiÃ³n) en vez de re-ejecutar `reset`
+		// (que repetirÃ­a la inicializaciÃ³n cada frame).
 		out.append("static void n2a_resume(N2A_State* r, N2A_Bus* m) {\n    switch (r->pc) {\n");
 		for (eng::usize i = 0; i < entries.size(); ++i) {
 			out.append("    case 0x");
@@ -3208,8 +3208,8 @@ private:
 		out.append("#endif\n");
 	}
 
-	/// Emite la **dirección efectiva** de un operando de memoria como expresión C (`u16`).
-	/// \param out Salida. \param in Instrucción (modo de memoria).
+	/// Emite la **direcciÃ³n efectiva** de un operando de memoria como expresiÃ³n C (`u16`).
+	/// \param out Salida. \param in InstrucciÃ³n (modo de memoria).
 	void d_ea(Dyn& out, const Instruction& in) const {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const eng::u16 o = in.operand;
@@ -3264,7 +3264,7 @@ private:
 		}
 	}
 
-	/// Emite el **valor leído** de un operando (inmediato o `rd(<dirección efectiva>)`).
+	/// Emite el **valor leÃ­do** de un operando (inmediato o `rd(<direcciÃ³n efectiva>)`).
 	void d_val(Dyn& out, const Instruction& in) const {
 		if (kOpcodeTable[in.opcode].mode == AddrMode::Imm) {
 			out.append("0x");
@@ -3277,7 +3277,7 @@ private:
 		out.append(")");
 	}
 
-	/// Emite el **cuerpo C** de una instrucción **no terminadora** del decompilado.
+	/// Emite el **cuerpo C** de una instrucciÃ³n **no terminadora** del decompilado.
 	void emit_decompile_instruction(Dyn& out, const Instruction& in) const {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
@@ -3291,8 +3291,8 @@ private:
 			out.append(reg);
 			out.append(");");
 		};
-		// Ciclos **exactos** (base + penalización de cruce de página en lecturas
-		// indexadas). El cruce es dinámico: `(base & 0xFF) + índice > 0xFF`.
+		// Ciclos **exactos** (base + penalizaciÃ³n de cruce de pÃ¡gina en lecturas
+		// indexadas). El cruce es dinÃ¡mico: `(base & 0xFF) + Ã­ndice > 0xFF`.
 		out.append("    tick(");
 		out.append_u32(op_base_cycles(in.opcode));
 		out.append("u");
@@ -3452,9 +3452,9 @@ private:
 		out.append('\n');
 	}
 
-	/// Emite una **región** (función C `f_XXXX`) del decompilado: BFS de bloques desde
-	/// `entry` y emisión en C plano con etiquetas/`goto` (fase 1: correcto; la
-	/// estructuración a bucles/`if` es una fase posterior, ver `docs/DECOMPILADOR.md`).
+	/// Emite una **regiÃ³n** (funciÃ³n C `f_XXXX`) del decompilado: BFS de bloques desde
+	/// `entry` y emisiÃ³n en C plano con etiquetas/`goto` (fase 1: correcto; la
+	/// estructuraciÃ³n a bucles/`if` es una fase posterior, ver `docs/DECOMPILADOR.md`).
 	/// Sucesor **incondicional** de un bloque (`fallthrough` o `JMP` directo); `0xFFFF` si el
 	/// bloque tiene salida condicional o retorno (su flujo no es determinista).
 	eng::u16 decomp_uncond_succ(eng::u16 b) const {
@@ -3607,7 +3607,7 @@ private:
 				}
 			}
 			// `term` solo se salta si es un **terminador** de control; si el bloque acaba en
-			// un líder (instrucción normal), esa última instrucción **sí** se emite.
+			// un lÃ­der (instrucciÃ³n normal), esa Ãºltima instrucciÃ³n **sÃ­** se emite.
 			const bool term_ctrl =
 				(term != nullptr) &&
 				(kOpcodeTable[term->opcode].mode == AddrMode::Rel ||
@@ -3616,12 +3616,40 @@ private:
 				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "RTS") ||
 				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "RTI") ||
 				 sv_equal(kOpcodeTable[term->opcode].mnemonic, "BRK"));
+			// **Fusion CMP#imm + rama**: si la instruccion inmediatamente anterior al terminador
+			// es un `CMP/CPX/CPY` inmediato y el terminador es una rama que lee sus flags, se
+			// infiere C directo (`if (A == n)`) y se OMITE el CMP (no se simulan flags). Es la
+			// "traduccion de intenciones" del decompilador: evita trabajo absurdo de flags.
+			const Instruction* prev = nullptr;
+			{
+				eng::u16 q = b;
+				while (q != p) {
+					const Instruction& in = instr_[q];
+					if (term != nullptr && q == term->addr && term_ctrl) { break; }
+					if (term != nullptr &&
+					    static_cast<eng::u16>(q + kOpcodeTable[in.opcode].size) == term->addr) {
+						prev = &in;
+					}
+					q = static_cast<eng::u16>(q + kOpcodeTable[in.opcode].size);
+				}
+			}
+			const Instruction* cmp = nullptr;
+			if (prev != nullptr && term != nullptr &&
+			    kOpcodeTable[term->opcode].mode == AddrMode::Rel && !native_vblank_wait(*term)) {
+				const char* pm = kOpcodeTable[prev->opcode].mnemonic;
+				if ((sv_equal(pm, "CMP") || sv_equal(pm, "CPX") || sv_equal(pm, "CPY")) &&
+				    kOpcodeTable[prev->opcode].mode == AddrMode::Imm) {
+					cmp = prev;
+				}
+			}
 			eng::u16 q = b;
 			while (q != p) {
 				const Instruction& in = instr_[q];
 				const OpcodeInfo& inf = kOpcodeTable[in.opcode];
 				if (term == nullptr || q != term->addr || !term_ctrl) {
-					emit_decompile_instruction(out, in);
+					if (cmp == nullptr || q != cmp->addr) {
+						emit_decompile_instruction(out, in);
+					}
 				}
 				q = static_cast<eng::u16>(q + inf.size);
 			}
@@ -3629,13 +3657,49 @@ private:
 			if (term != nullptr) {
 				const char* m = kOpcodeTable[term->opcode].mnemonic;
 				const AddrMode md = kOpcodeTable[term->opcode].mode;
-				if (md == AddrMode::Rel) {
-					// Sondeo de VBlank (`LDA $2002; BPL`) → **evento** del HAL: el
+				if (md == AddrMode::Rel && cmp != nullptr) {
+					// Rama fusionada con el CMP: condicion C directa sobre el registro.
+					const char* reg = sv_equal(kOpcodeTable[cmp->opcode].mnemonic, "CMP") ? "A"
+							  : (sv_equal(kOpcodeTable[cmp->opcode].mnemonic, "CPX") ? "X" : "Y");
+					out.append("    if (");
+					const eng::u16 n = cmp->operand;
+					if (sv_equal(m, "BEQ") || sv_equal(m, "BNE")) {
+						out.append(reg);
+						out.append(sv_equal(m, "BEQ") ? " == " : " != ");
+					} else if (sv_equal(m, "BCC") || sv_equal(m, "BCS")) {
+						out.append(reg);
+						out.append(sv_equal(m, "BCC") ? " < " : " >= ");
+					} else if (sv_equal(m, "BMI") || sv_equal(m, "BPL")) {
+						out.append("((u8)(");
+						out.append(reg);
+						out.append(" - ");
+						out.append_u32(n);
+						out.append("u) & 0x80u)");
+						out.append(sv_equal(m, "BMI") ? " != 0" : " == 0");
+						out.append(") { goto L_");
+						out.append_hex(term->target, 4u, true);
+						out.append("; }\n");
+						goto after_term_rel;
+					} else {
+						out.append("false");
+					}
+					out.append_u32(n);
+					out.append("u) { goto L_");
+					out.append_hex(term->target, 4u, true);
+					out.append("; }\n");
+				after_term_rel: ;
+					if (native_vis_[next] != 0u) {
+						out.append("    goto L_");
+						out.append_hex(next, 4u, true);
+						out.append(";\n");
+					}
+				} else if (md == AddrMode::Rel) {
+					// Sondeo de VBlank (`LDA $2002; BPL`) â†’ **evento** del HAL: el
 					// port no emula la PPU, espera al VBlank del Amiga.
 					if (native_vblank_wait(*term)) {
 						out.append("    hal_wait_vblank();\n");
 					} else {
-						// Ciclos exactos: base + 1 si tomada + 1 si cruza página (rama).
+						// Ciclos exactos: base + 1 si tomada + 1 si cruza pÃ¡gina (rama).
 						const bool pc = ((static_cast<eng::u16>(term->addr + 2u)) & 0xFF00u) !=
 								(term->target & 0xFF00u);
 						out.append("    if (");
@@ -3679,7 +3743,7 @@ private:
 					out.append("    tick(");
 					out.append_u32(op_base_cycles(term->opcode));
 					out.append("u);\n");
-					// **Pila emulada**: se apila la dirección de retorno (addr+2, como el
+					// **Pila emulada**: se apila la direcciÃ³n de retorno (addr+2, como el
 					// 6502) para que `SP`, `PHA/PLA/PHP/PLP` y la RAM de pila coincidan
 					// con el original. El control va por llamada C `f_target()`.
 					const eng::u16 ret = static_cast<eng::u16>(term->addr + 2u);
@@ -3733,7 +3797,7 @@ private:
 		out.append("static bool Cf=false, Zf=false, Nf=false, Vf=false, Df=false, If=false;\n");
 		out.append("static bool halted = false;\n");
 		// HAL: **modelo fiel del PPU del lado CPU** (registros y VRAM). El render
-		// (Blitter/Copper) es otra capa; para la *lógica* basta con estos registros y
+		// (Blitter/Copper) es otra capa; para la *lÃ³gica* basta con estos registros y
 		// `$2002` (VBlank/sprite-0/overflow con *clear-on-read*), OAM y DMA de OAM.
 		out.append("// --- HAL: PPU ($2000-$2007, $2002, $4014) + hooks ---\n");
 		out.append("static u8 ppu_ctrl=0, ppu_mask=0, ppu_status=0, ppu_oam_addr=0, ppu_latch=0;\n");
@@ -3897,8 +3961,8 @@ private:
 	/// Emite el **despacho de un `JMP (ind)`** (`$6C`) con los destinos observados
 	/// (`--ind-targets`) del sitio `site`. Reproduce el *page-wrap* del 6502
 	/// (`(ptr & 0xFF00) | ((ptr+1) & 0xFF)`), y salta con `goto L_xxxx`
-	/// (**intra-región**, porque un `JMP` es salto de cola y no debe crecer la pila C).
-	/// Si el destino no está entre los observados, cede al runtime
+	/// (**intra-regiÃ³n**, porque un `JMP` es salto de cola y no debe crecer la pila C).
+	/// Si el destino no estÃ¡ entre los observados, cede al runtime
 	/// (`g_native_ind_miss`) o se detiene (`halted`).
 	/// \param out  Salida.
 	/// \param site `PC` del `JMP ($zp)`.
@@ -3920,13 +3984,13 @@ private:
 		out.append(" default: if (g_native_ind_miss != nullptr) { g_native_ind_miss(*r, *m, n2a_t); } else { r->pc = n2a_t; r->halted = true; } return; } }\n");
 	}
 
-	/// Emite una **región** (función C++) del backend nativo: BFS de bloques desde
-	/// `entry` por aristas estáticas (caída/rama/`JMP`; el retorno de `JSR` continúa en la
-	/// región; el destino de `JSR` es otra región). Etiquetas `L_xxxx` + `goto`.
+	/// Emite una **regiÃ³n** (funciÃ³n C++) del backend nativo: BFS de bloques desde
+	/// `entry` por aristas estÃ¡ticas (caÃ­da/rama/`JMP`; el retorno de `JSR` continÃºa en la
+	/// regiÃ³n; el destino de `JSR` es otra regiÃ³n). Etiquetas `L_xxxx` + `goto`.
 	void emit_native_region(Dyn& out, eng::u16 entry) {
 		(void)native_vis_.resize(kSpace, 0u);
 		for (eng::u32 i = 0; i < kSpace; ++i) {
-			native_vis_[i] = 0u; // `resize` no reescribe; limpiar para cada región
+			native_vis_[i] = 0u; // `resize` no reescribe; limpiar para cada regiÃ³n
 		}
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> stack {};
 		const auto visit = [&](eng::u16 b) {
@@ -3935,10 +3999,10 @@ private:
 				(void)stack.push_back(b);
 			}
 		};
-		// Visita los **destinos observados** de un `JMP (ind)` (telemetría de
-		// `ind_targets`). No exigen ser `leader` estático: son inicios de instrucción
-		// vistos en ejecución, así que se emiten como etiquetas `L_xxxx` **en esta misma
-		// región** y el `JMP (ind)` se resuelve con un `switch` + `goto` intra-región
+		// Visita los **destinos observados** de un `JMP (ind)` (telemetrÃ­a de
+		// `ind_targets`). No exigen ser `leader` estÃ¡tico: son inicios de instrucciÃ³n
+		// vistos en ejecuciÃ³n, asÃ­ que se emiten como etiquetas `L_xxxx` **en esta misma
+		// regiÃ³n** y el `JMP (ind)` se resuelve con un `switch` + `goto` intra-regiÃ³n
 		// (un `JMP` es salto de cola: no debe crecer la pila de llamadas C).
 		const auto visit_ind = [&](eng::u16 site) {
 			for (eng::usize i = 0; i < ind_site_.size(); ++i) {
@@ -3985,7 +4049,7 @@ private:
 						visit(term->target);
 					}
 				} else if (sv_equal(m, "JSR")) {
-					visit(next); // retorno del JSR (continúa en la región)
+					visit(next); // retorno del JSR (continÃºa en la regiÃ³n)
 				} else if (!sv_equal(m, "RTS") && !sv_equal(m, "RTI") &&
 					   !sv_equal(m, "BRK")) {
 					visit(next); // Ultima corriente: cae al siguiente bloque
@@ -3994,7 +4058,7 @@ private:
 				visit(next);
 			}
 		}
-		// Orden ascendente para localidad de código.
+		// Orden ascendente para localidad de cÃ³digo.
 		for (eng::usize i = 1; i < stack.size(); ++i) {
 			const eng::u16 k = stack[i];
 			eng::usize j = i;
@@ -4008,8 +4072,8 @@ private:
 		out.append("static void n2a_r_");
 		out.append_hex(entry, 4u, true);
 		out.append("(N2A_State* __restrict r, N2A_Bus* __restrict m) {\n");
-		// Nº de aristas estáticas de la región que entran en `target`: para absorber
-		// idioms que cruzan un `BNE` solo si nadie más entra en el bloque intermedio.
+		// NÂº de aristas estÃ¡ticas de la regiÃ³n que entran en `target`: para absorber
+		// idioms que cruzan un `BNE` solo si nadie mÃ¡s entra en el bloque intermedio.
 		const auto predecessors_of = [&](eng::u16 target) -> int {
 			int count = 0;
 			for (eng::usize k = 0; k < stack.size(); ++k) {
@@ -4066,7 +4130,7 @@ private:
 			out.append("L_"); // la etiqueta va ANTES del idiom (que puede `continue`)
 			out.append_hex(b, 4u, true);
 			out.append(":\n");
-			native_x_known_ = false; // VSA de índices: se reinicia en cada bloque
+			native_x_known_ = false; // VSA de Ã­ndices: se reinicia en cada bloque
 			native_y_known_ = false;
 			native_a_known_ = false;
 			// Idiom 16 bits que cruza el `BNE`: `INC zp lo; BNE skip; INC zp lo+1`.
@@ -4159,15 +4223,15 @@ private:
 					out.append_hex(static_cast<eng::u16>(mid + 2u), 4u, true);
 					out.append(";\n");
 					native_vis_[mid] = 2u;
-					// El `DEC lo` (1ª instrucción del bloque skip) ya está hecho: se
-					// omitirá al emitir ese bloque.
+					// El `DEC lo` (1Âª instrucciÃ³n del bloque skip) ya estÃ¡ hecho: se
+					// omitirÃ¡ al emitir ese bloque.
 					native_skip_first_ = static_cast<eng::u16>(mid + 2u);
 					continue;
 				}
 			}
 			eng::u16 p = b;
 			if (b == native_skip_first_ && has_instr_[p] != 0u) {
-				// 1ª instrucción del bloque ya absorbida por un idiom (p. ej. `DEC lo`).
+				// 1Âª instrucciÃ³n del bloque ya absorbida por un idiom (p. ej. `DEC lo`).
 				p = static_cast<eng::u16>(p + kOpcodeTable[instr_[p].opcode].size);
 				native_skip_first_ = 0xFFFFu;
 			}
@@ -4187,7 +4251,7 @@ private:
 					native_x_known_ = native_y_known_ = native_a_known_ = false;
 					continue;
 				}
-				// Patrón (idioma PRNG): tirada de `ROR/ROL zp` sobre direcciones
+				// PatrÃ³n (idioma PRNG): tirada de `ROR/ROL zp` sobre direcciones
 				// consecutivas -> **un bucle** con el carry en una local, en vez de
 				// N rotaciones con acceso a memoria y flags por byte.
 				if ((in.opcode == 0x66u || in.opcode == 0x26u) && info.mode == AddrMode::Zp) {
@@ -4239,8 +4303,8 @@ private:
 				if (kOpcodeTable[term->opcode].mode == AddrMode::Rel) {
 					// Bucle de espera de VBlank/sprite-0 (`native_vblank_wait`): cede al
 					// runtime en vez de girar. Al ceder se guarda en `r->pc` el punto de
-					// **reanudación** (la continuación del bucle) para que `game_main`
-					// reanude ahí y **no** vuelva a ejecutar la inicialización.
+					// **reanudaciÃ³n** (la continuaciÃ³n del bucle) para que `game_main`
+					// reanude ahÃ­ y **no** vuelva a ejecutar la inicializaciÃ³n.
 					if (native_vblank_wait(*term)) {
 						out.append("    if (");
 						out.append(sv_equal(m, "BEQ") ? "r->z"
@@ -4318,7 +4382,7 @@ private:
 	}
 
 	/// Reconoce un **idiom multibyte sin ramas** (dentro de un bloque) y lo emite como una
-	/// operación de 16 bits, para que g++ use `move.w`/`add.w` en vez de byte a byte:
+	/// operaciÃ³n de 16 bits, para que g++ use `move.w`/`add.w` en vez de byte a byte:
 	///
 	///   - **copia 16 bits**: `LDA zp a; STA zp c; LDA zp a+1; STA zp c+1`
 	///     -> `*(u16*)&ram[c] = *(u16*)&ram[a]` (el orden de bytes se conserva).
@@ -4327,9 +4391,9 @@ private:
 	///
 	/// El estado final (A y flags) replica la secuencia byte a byte del 6502.
 	/// \param out  Salida.
-	/// \param p    Dirección de la primera instrucción.
-	/// \param next [salida] Dirección tras el idiom (`p+8`).
-	/// \return `true` si se emitió el idiom.
+	/// \param p    DirecciÃ³n de la primera instrucciÃ³n.
+	/// \param next [salida] DirecciÃ³n tras el idiom (`p+8`).
+	/// \return `true` si se emitiÃ³ el idiom.
 	[[nodiscard]] bool try_native_multibyte(Dyn& out, eng::u16 p, eng::u16& next) const {
 		const auto at = [&](eng::u16 a) -> const Instruction* {
 			return (a < kSpace && has_instr_[a] != 0u) ? &instr_[a] : nullptr;
@@ -4387,7 +4451,7 @@ private:
 				return true;
 			}
 		}
-		// --- Comparación 16 bits: LDA zp a; CMP #k0|zp m0; LDA zp a+1; SBC #k1|zp m1 ---
+		// --- ComparaciÃ³n 16 bits: LDA zp a; CMP #k0|zp m0; LDA zp a+1; SBC #k1|zp m1 ---
 		// (sin ramas; deja `C` = (a >= b) a 16 bits y `A`/`Z`/`N` del byte alto, como el 6502)
 		if (have4 && i0->opcode == 0xA5u && (i1->opcode == 0xC9u || i1->opcode == 0xC5u) &&
 		    i2->opcode == 0xA5u && (i3->opcode == 0xE9u || i3->opcode == 0xE5u)) {
@@ -4532,12 +4596,12 @@ private:
 		return false;
 	}
 
-	/// Emite una instrucción del backend nativo (salvo transferencias de control, que
+	/// Emite una instrucciÃ³n del backend nativo (salvo transferencias de control, que
 	/// resuelve `emit_native_region`). `r` es `N2A_State*`, `m` es `N2A_Bus*`.
 	void emit_native_instruction(Dyn& out, const Instruction& in) {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		const char* m = info.mnemonic;
-		// VSA (const-prop simple de A/X/Y): sigue valores conocidos a través de
+		// VSA (const-prop simple de A/X/Y): sigue valores conocidos a travÃ©s de
 		// `#imm`, `INX/DEX/INY/DEY` y transferencias; los invalida en cualquier otra
 		// escritura (y en `JSR`/saltos, donde el callee puede cambiarlos).
 		if (in.opcode == 0xA9u) {
@@ -4597,7 +4661,7 @@ private:
 		    sv_equal(m, "NOP")) {
 			return; // terminadores / no-op
 		}
-		// Expresión del operando efectivo (rvalue del byte).
+		// ExpresiÃ³n del operando efectivo (rvalue del byte).
 		const auto operand = [&]() {
 			if (info.mode == AddrMode::Imm) {
 				out.append("0x");
@@ -4613,7 +4677,7 @@ private:
 			}
 			if ((info.mode == AddrMode::AbsX || info.mode == AddrMode::AbsY) &&
 			    in.operand >= 0x8000u && in.operand <= 0xFF00u) {
-				// Índice de ROM con X/Y **conocido** (VSA): plegar a **literal**.
+				// Ãndice de ROM con X/Y **conocido** (VSA): plegar a **literal**.
 				const bool known = (info.mode == AddrMode::AbsX) ? native_x_known_ : native_y_known_;
 				const eng::u8 iv = (info.mode == AddrMode::AbsX) ? native_x_val_ : native_y_val_;
 				if (known) {
@@ -4623,7 +4687,7 @@ private:
 					out.append_hex(prg_[idx], 2u, true);
 					return;
 				}
-				// ROM indexada (índice de runtime): acceso directo al array constexpr.
+				// ROM indexada (Ã­ndice de runtime): acceso directo al array constexpr.
 				out.append("PRG_ROM[(0x");
 				out.append_hex(static_cast<eng::u32>(in.operand) - 0x8000u, 4u, true);
 				out.append("u + r->");
@@ -4787,7 +4851,7 @@ private:
 		if (sv_equal(m, "CLD")) { out.append("    r->d = false;\n"); return; }
 		if (sv_equal(m, "SED")) { out.append("    r->d = true;\n"); return; }
 		if (sv_equal(m, "CLV")) { out.append("    r->v = false;\n"); return; }
-		// --- Opcodes ilegales frecuentes (misma semántica que `CPU::*_impl`) ---
+		// --- Opcodes ilegales frecuentes (misma semÃ¡ntica que `CPU::*_impl`) ---
 		const auto ea = [&]() { emit_native_ea(out, in); };
 		if (sv_equal(m, "LAX")) {
 			out.append("    { const eng::u8 n2a_v = static_cast<eng::u8>(");
@@ -4852,7 +4916,7 @@ private:
 		// No alcanzable: `native_supported` filtra el resto.
 	}
 
-	/// Expresión de la **dirección efectiva** (u16) de una instrucción del backend nativo.
+	/// ExpresiÃ³n de la **direcciÃ³n efectiva** (u16) de una instrucciÃ³n del backend nativo.
 	void emit_native_ea(Dyn& out, const Instruction& in) const {
 		const OpcodeInfo& info = kOpcodeTable[in.opcode];
 		switch (info.mode) {
@@ -4904,20 +4968,20 @@ private:
 	}
 
 	/// Escribe el despacho y la entrada del programa: la firma `BlockFn`, las
-	/// tablas **dispersas** (bloques/ciclos + búsqueda binaria) para la ventana
+	/// tablas **dispersas** (bloques/ciclos + bÃºsqueda binaria) para la ventana
 	/// fija y por banco, el estado global `g_state`, `game_main()` y el `main()` de
 	/// host (excluido en Amiga o con `N2A_NO_HOST_MAIN`).
 	void emit_dispatch(Dyn& out) const {
 		out.append("// ---- Despacho y entrada ----\n\n");
 		out.append("/// Firma de un basic block: recibe el CPU (y su memoria) y muta el estado.\n");
 		out.append("using BlockFn = void (*)(CPU&);\n\n");
-		out.append("/// Entrada de despacho **dispersa**: dirección de inicio + ciclos base + bloque.\n");
+		out.append("/// Entrada de despacho **dispersa**: direcciÃ³n de inicio + ciclos base + bloque.\n");
 		out.append("/// Sustituye a la tabla densa `[0x10000]` (256 KB en 68000, casi toda a cero).\n");
 		out.append("struct BankBlock { eng::u16 start; eng::u16 cycles; BlockFn fn; };\n\n");
 		out.append("/// Estado global del juego (CPU + memoria).\n");
 		out.append("struct GameState { CPU cpu; NESMemory mem; };\n");
 		out.append("static GameState g_state;\n\n");
-		// --- Bloques de la ventana fija, ordenados por dirección ---
+		// --- Bloques de la ventana fija, ordenados por direcciÃ³n ---
 		{
 			eng::util::Vector<BlockInfo, eng::util::HeapAlloc> fs {};
 			for (eng::usize i = 0; i < fixed_blocks_.size(); ++i) {
@@ -4932,7 +4996,7 @@ private:
 				}
 				fs[j] = key;
 			}
-			out.append("/// Bloques de la ventana fija ($C000-$FFFF y NROM/CNROM), ordenados por dirección.\n");
+			out.append("/// Bloques de la ventana fija ($C000-$FFFF y NROM/CNROM), ordenados por direcciÃ³n.\n");
 			out.append("[[maybe_unused]] static const BankBlock kFixedBlocks");
 			out.append(fs.size() != 0u ? "[] = {\n" : "[1] = {};\n");
 			for (eng::usize i = 0; i < fs.size(); ++i) {
@@ -4951,7 +5015,7 @@ private:
 			out.append_u32(static_cast<eng::u32>(fs.size()));
 			out.append("u;\n\n");
 		}
-		out.append("/// Búsqueda **binaria** de la entrada de bloque fijo para `pc`.\n");
+		out.append("/// BÃºsqueda **binaria** de la entrada de bloque fijo para `pc`.\n");
 		out.append("[[maybe_unused]] static const BankBlock* n2a_fixed_entry(eng::u16 pc) {\n");
 		out.append("    eng::u16 lo = 0u;\n");
 		out.append("    eng::u16 hi = kFixedCount;\n");
@@ -4975,8 +5039,8 @@ private:
 		// --- Despacho por banco (ventana conmutable $8000-$BFFF, F9/B1b) ---
 		out.append("// Despacho por banco de la ventana conmutable $8000-$BFFF (F9/B1b).\n");
 		for (eng::u32 b = 0; b < prg_bank_count_; ++b) {
-			// Copia de los bloques del banco, **ordenada por dirección** (el
-			// runtime hace búsqueda binaria).
+			// Copia de los bloques del banco, **ordenada por direcciÃ³n** (el
+			// runtime hace bÃºsqueda binaria).
 			eng::util::Vector<BlockInfo, eng::util::HeapAlloc> sb {};
 			for (eng::usize i = 0; i < bank_blocks_.size(); ++i) {
 				if (bank_blocks_[i].bank == static_cast<eng::u8>(b)) {
@@ -5076,7 +5140,7 @@ private:
 		out.append("    }\n}\n\n");
 		out.append("#if !defined(__m68k__) && !defined(N2A_NO_HOST_MAIN)\n");
 		out.append("/// Entrada host para tests. En Amiga el runtime llama a game_main() y este\n");
-		out.append("/// símbolo queda excluido (por __m68k__ o por N2A_NO_HOST_MAIN).\n");
+		out.append("/// sÃ­mbolo queda excluido (por __m68k__ o por N2A_NO_HOST_MAIN).\n");
 		out.append("int main() { game_main(); return 0; }\n");
 		out.append("#endif\n");
 	}
