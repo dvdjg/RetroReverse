@@ -768,6 +768,25 @@ public:
 	/// mantener A/X/Y/flags en REGISTROS (con las globales no puede: `ram[]` puede aliase).
 	void set_flat(bool b) noexcept { flat_ = b; }
 
+	/// En modo **flat**, entra al NMI inline si `frame_event` lo marco (`g_nmi_pending`):
+	/// apila el puntero de retorno `&&L_nmiret_<n>` y salta al bloque del NMI (`L_<nmi_>`).
+	/// El `RTI` del NMI hara `goto *ret_lbl[--ret_sp]` de vuelta a la etiqueta aqui emitida,
+	/// de modo que A/X/Y/flags permanecen en registros (sin `call`/`ret` C al NMI).
+	/// \param out Buffer de salida. \param b Bloque de origen (solo para etiqueta unica).
+	void emit_nmi_enter(Dyn& out, eng::u16 b) {
+		const eng::u32 n = nmi_enter_seq_++;
+		// Se limpia `g_yield_req` para que el NMI corra HASTA COMPLETARSE: `ret_lbl` es una
+		// LOCAL de `n2a_run`; si el NMI cediera a mitad, al reanudar en otra llamada la pila
+		// de retorno se habria perdido (underflow). Tras el NMI se rearma el yield de frame.
+		out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
+		out.append_u32(n);
+		out.append("; goto L_");
+		out.append_hex(nmi_, 4u, true);
+		out.append("; }\nL_nmiret_");
+		out.append_u32(n);
+		out.append(": if (g_engine_mode) { g_yield_req = 1u; }\n");
+	}
+
 	/// Con `true`, elige automÃ¡ticamente el mejor backend: el **nativo** si la ROM lo
 	/// soporta (`native_ok()`) y, si no, el codegen por bloques con el perfil Amiga
 	/// (`--chain`/`--rom-direct`/`--fast-ram`, que el llamador debe activar). Pensado
@@ -918,6 +937,7 @@ private:
 	eng::u8 d_keep_flags_ = 0xFFu;
 	bool vblank_sync_ = false;   ///< Si `true`, frame boundary por VBlank (sin tick/frame por instruccion; ver `set_vblank_sync`).
 	bool flat_ = false;          ///< Si `true`, flatea el grafo a UNA funcion (goto computado para RTS) para A/X/Y en registros.
+	eng::u32 nmi_enter_seq_ = 0; ///< Contador de puntos de entrada al NMI inline (flat); etiquetas unicas.
 	mutable const char* native_reject_ = ""; ///< Motivo del Ãºltimo rechazo de `native_ok()` (diagnÃ³stico).
 	mutable eng::u16 native_reject_addr_ = 0; ///< DirecciÃ³n asociada al rechazo (p. ej. el `JSR`).
 	mutable eng::u32 idiom_hits_ = 0;         ///< Idioms multibyte aplicados (diagnÃ³stico).
@@ -3333,9 +3353,18 @@ private:
 		const auto setnz = [&](const char* reg) {
 			// DCE: si ni N ni Z estan vivos tras esta instruccion, no se fijan.
 			if ((d_keep_flags_ & 3u) == 0u) { return; }
-			out.append(" setnz(");
-			out.append(reg);
-			out.append(");");
+			if (flat_) {
+				// Flatten: flags INLINE. Una funcion `setnz` de fichero resuelve `Zf/Nf`
+				// lexicamente a los GLOBALES incluso al inlinearse -> no sincroniza con los
+				// locales de `n2a_run` (bucles infinitos). Emitido aqui, usa los locales.
+				out.append(" { const u8 _n2az = ");
+				out.append(reg);
+				out.append("; Zf = (_n2az == 0u); Nf = ((_n2az & 0x80u) != 0u); }");
+			} else {
+				out.append(" setnz(");
+				out.append(reg);
+				out.append(");");
+			}
 		};
 		// Ciclos **exactos** (base + penalizaciÃ³n de cruce de pÃ¡gina en lecturas
 		// indexadas). El cruce es dinÃ¡mico: `(base & 0xFF) + Ã­ndice > 0xFF`.
@@ -3424,7 +3453,9 @@ private:
 			d_val(out, in);
 			out.append("; const u16 t = (u16)");
 			out.append(reg);
-			out.append(" - (u16)v; Cf = (t < 0x100u); setnz((u8)t); }");
+			out.append(" - (u16)v; Cf = (t < 0x100u);");
+			setnz("(u8)t");
+			out.append(" }");
 		} else if (sv_equal(m, "BIT")) {
 			out.append("{ const u8 v = ");
 			d_val(out, in);
@@ -3438,7 +3469,9 @@ private:
 			d_ea(out, in);
 			out.append(inc ? ") + 1u); wr(" : ") - 1u); wr(");
 			d_ea(out, in);
-			out.append(", t); setnz(t); }");
+			out.append(", t);");
+			setnz("t");
+			out.append(" }");
 		} else if (sv_equal(m, "INX") || sv_equal(m, "INY") || sv_equal(m, "DEX") ||
 			   sv_equal(m, "DEY")) {
 			const char* reg = (sv_equal(m, "INX") || sv_equal(m, "DEX")) ? "X" : "Y";
@@ -3473,7 +3506,8 @@ private:
 				d_ea(out, in);
 				out.append(", t);");
 			}
-			out.append(" setnz(t); }");
+			setnz("t");
+			out.append(" }");
 		} else if (sv_equal(m, "CLC")) {
 			out.append("Cf = false;");
 		} else if (sv_equal(m, "SEC")) {
@@ -3641,8 +3675,12 @@ private:
 #ifdef N2A_TRACE_LABEL
 			out.append("g_label = 0x");
 			out.append_hex(b, 4u, true);
+			out.append("u;");
 #endif
 			out.append("\n");
+#ifdef N2A_TRACE_BLOCK
+			out.append("if (g_step_limit != 0u && ++g_steps > g_step_limit) { g_dbgA = A; g_dbgX = X; g_dbgY = Y; g_dbgZ = (u8)Zf; g_dbgC = (u8)Cf; if (hal_limit_hook) { hal_limit_hook(); } }\n");
+#endif
 			eng::u16 p = b;
 			const Instruction* term = nullptr;
 			for (;;) {
@@ -3790,6 +3828,7 @@ private:
 					// port no emula la PPU, espera al VBlank del Amiga.
 					if (native_vblank_wait(*term)) {
 						out.append("    hal_wait_vblank();\n");
+						if (flat_) { emit_nmi_enter(out, b); }
 					} else {
 						// Ciclos exactos: base + 1 si tomada + 1 si cruza pÃ¡gina (rama).
 						const bool pc = ((static_cast<eng::u16>(term->addr + 2u)) & 0xFF00u) !=
@@ -3825,6 +3864,7 @@ private:
 						out.append(vblank_sync_
 							? "    frame_event();\n"
 							: "    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
+						if (flat_ && vblank_sync_) { emit_nmi_enter(out, b); }
 					}
 					if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
@@ -3868,7 +3908,11 @@ private:
 					out.append_u32(op_base_cycles(term->opcode));
 					if (flat_) {
 						// Flatten: recuperar la direccion (pila NES) y saltar al retorno guardado.
-						out.append("u); SP = (u8)(SP + 2u); goto *ret_lbl[--ret_sp];\n");
+						// `RTS` ajusta SP (pop de 2); `RTI` NO: el NMI se modela como evento
+						// (sin push), igual que el modo no-flat, para que SP quede consistente.
+						out.append(sv_equal(m, "RTS")
+							? "u); SP = (u8)(SP + 2u); goto *ret_lbl[--ret_sp];\n"
+							: "u); goto *ret_lbl[--ret_sp];\n");
 					} else {
 						out.append("u);\n    return;\n");
 					}
@@ -3971,11 +4015,20 @@ private:
 		// frontera de bloque, guardando `g_resume` para reanudar. Con `g_engine_mode=0` el port
 		// se autogestiona (standalone, tests host).
 		out.append("static u8 g_engine_mode = 0, g_yield_req = 0;\n");
+		out.append("static u8 g_nmi_pending = 0; /* flat: `frame_event` marca NMI; `n2a_run` lo ejecuta inline */\n");
 		out.append("static u16 g_resume = 0;\n");
 		out.append("static void (*hal_frame_hook)(void) = 0;\n");
-		out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } f_");
-		out.append_hex(nmi_, 4u, true);
-		out.append("(); if (g_engine_mode) { g_yield_req = 1u; } }\n");
+		out.append("static void frame_event(void) { g_frame_deadline += 29780u; hal_vblank(); if (hal_frame_hook) { hal_frame_hook(); } ");
+		if (flat_) {
+			// Flatten: el NMI NO se llama como funcion (seria un call C que recargaria
+			// A/X/Y); se marca y `n2a_run` lo ejecuta inline mediante la pila de retorno.
+			out.append("g_nmi_pending = 1u; ");
+		} else {
+			out.append("f_");
+			out.append_hex(nmi_, 4u, true);
+			out.append("(); ");
+		}
+		out.append("if (g_engine_mode) { g_yield_req = 1u; } }\n");
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
 		// ejecuta), en vez de disparar el NMI de inmediato.
 		if (vblank_sync_) {
@@ -3995,6 +4048,9 @@ private:
 		out.append("static unsigned long g_steps = 0, g_step_limit = 0;\n");
 
 		out.append("static unsigned g_label = 0; /* diagnostico: ultima etiqueta ejecutada */\n");
+#ifdef N2A_TRACE_BLOCK
+		out.append("static u8 g_dbgA=0, g_dbgX=0, g_dbgY=0, g_dbgZ=0, g_dbgC=0; /* diagnostico: estado en el ultimo bloque */\n");
+#endif
 		out.append("static void (*hal_limit_hook)(void) = 0; /* diagnostico: corta al pasar g_steps */\n");
 		out.append("static __attribute__((always_inline)) inline u8 rd(u16 a) {\n");
 		// El contador de pasos (diagnostico) era un load+compare+branch por CADA lectura. Solo se
@@ -4008,7 +4064,10 @@ private:
 		out.append("static __attribute__((always_inline)) inline void wr(u16 a, u8 v) {\n");
 		out.append("    if (a < 0x2000u) { ram[a & 0x7FFu] = v; return; }\n");
 		out.append("    hal_ppu_write(a, v);\n}\n");
-		out.append("static void setnz(u8 v) { Zf = (v == 0); Nf = ((v & 0x80u) != 0); }\n\n");
+		// `setnz` DEBE ser `always_inline`: en flat, A/X/Y/flags son LOCALES de `n2a_run`;
+		// si fuera una funcion de fichero, escribiria los `Zf/Nf` GLOBALES y el codigo leeria
+		// los locales (desincronizados -> bucles que nunca terminan, p. ej. el copy a $2007).
+		out.append("static __attribute__((always_inline)) inline void setnz(u8 v) { Zf = (v == 0); Nf = ((v & 0x80u) != 0); }\n\n");
 		eng::util::Vector<eng::u16, eng::util::HeapAlloc> entries {};
 		const auto add_entry = [&](eng::u16 a) {
 			if (a < kSpace && has_instr_[a] != 0u) {
@@ -4043,6 +4102,7 @@ private:
 		}
 		(void)emitted_.resize(kSpace, 0u);
 		for (eng::u32 i = 0; i < kSpace; ++i) { emitted_[i] = 0u; }
+		nmi_enter_seq_ = 0;
 		if (flat_) {
 			// Flatten: UNA funcion con A/X/Y/flags LOCALES (registros) + pila de retorno.
 			out.append("[[gnu::used]] static void n2a_run(void) {\n");
@@ -4065,6 +4125,11 @@ private:
 			out.append("    if (g_resume != 0u) { const u16 n2a_r = g_resume; g_resume = 0u; u16 lo = 0u, hi = (u16)(sizeof(kRL)/sizeof(kRL[0]));\n");
 			out.append("        while (lo < hi) { const u16 mid = (u16)((lo + hi) / 2u); if (kRL[mid].a < n2a_r) { lo = (u16)(mid + 1u); } else { hi = mid; } }\n");
 			out.append("        if (lo < (u16)(sizeof(kRL)/sizeof(kRL[0])) && kRL[lo].a == n2a_r) { goto *kRL[lo].l; } }\n");
+			// Arranque: sin resume, entrar por el vector de RESET (el primer bloque emitido no
+			// tiene por que serlo; en no-flat el despachador llama a `f_<reset>`).
+			out.append("    if (g_resume == 0u) { goto L_");
+			out.append_hex(reset_, 4u, true);
+			out.append("; }\n");
 		}
 		for (eng::usize i = 0; i < entries.size(); ++i) {
 			emit_decompile_region(out, entries[i]);
