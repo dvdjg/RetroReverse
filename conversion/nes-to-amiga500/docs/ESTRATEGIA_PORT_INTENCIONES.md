@@ -352,3 +352,34 @@ interleaved** con `XLimitedPlayfield::add_draw(plan, tx*tileW, ty*block_planes_l
 
 **Resultado:** el port DK corre a **50 fps (PAL) en A1200 con el port encendido y margen**, sin
 optimizar más el codegen. El cuello era el andamiaje de re-blit completo del demo, no la traducción.
+
+## GAMEPLAY: referencia del original + comparación + ajustes
+
+**Método de captura de referencia** (`_scratch/host/`): `oracle_script.cpp` ejecuta el **juego real**
+(interprete `n2a::NesSystem`) con **input scripteado** (Start en el frame 90) y vuelca BMP de puntos
+singulares; `port_script.cpp` hace lo mismo con el port (host) para comparar el estado PPU. Capturas
+en `_scratch/ref/gameplay/oracle_*.bmp` (convertibles con ffmpeg a PNG).
+
+**Comparación oráculo vs port** (hashes de nametable/atributos/paleta/OAM):
+- Frames 60–320 (título/select): **idénticos** (nt/at/pl/oa).
+- Frame 400 (transición): el port **va unos frames por detrás** (divergencia de timing conocida).
+- Frame 500 (gameplay): nt/at/oa **idénticos**; solo difiere el **mirror de la paleta de sprites**
+  (`$3F10` etc., que el NES espeja a `$3F00`; el oráculo no lo espeja). La paleta del BG (0–15) coincide.
+
+**Bugs de render encontrados y corregidos en el demo** (`dk_port_xl`):
+1. **El demo fallaba al arrancar la partida**: el dirty inicial (1024 celdas del warmup) generaba
+   >128 jobs en el re-blit selectivo → desbordaba `kMaxBlitJobs` → el demo se detenía en el título
+   (`detail=0xE012`). Fix: drenar las sucias tras el `scene.fill` de init **y** fallback a fill
+   completo si hay >56 celdas cambiadas en un frame.
+2. **Paleta estática**: el demo horneaba `g_palette` solo en el init (paleta del título) → en gameplay
+   las plataformas salían **cian** en vez de magenta. Fix: re-hornear cuando cambia la paleta NES
+   (`$3F00-1F`).
+
+**Verificación visual** (`_scratch/out/dk_pal.png`): la partida se renderiza correcta (plataformas
+magenta, escaleras, marcador `000000`/`TOP-000000`, bonus `25⇔600`, DK, Mario), coincidiendo con
+`oracle_500`. Pendiente: sprites HW (`kSpritesOn=false`, DK/Mario son sprites NES) y los tiles del
+borde derecho (columnas extra del anillo).
+
+**fps en GAMEPLAY** (caso pesado): **23.98 emu = real ~48 fps** (295835 ciclos/frame = +0.8 ms sobre
+el port apagado). El juego añade poco; queda **justo por debajo de 50** (el trabajo del frame supera
+ligeramente el presupuesto del VBlank). Con el título era 49.9. Margen real: pequeño.
