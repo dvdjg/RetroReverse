@@ -331,3 +331,24 @@ la ROM lo pide (principio de diseño: la intención manda).
 **Conclusión de viabilidad:** el codegen **no** limita; el port tiene margen de sobra. El trabajo
 restante es hacer el **re-blit incremental** en el demo (re-blitear solo los metatiles cambiados por
 su posición visible, sin `fill_bank`/`scene.fill` completos).
+
+## RESUELTO: re-blit SELECTIVO → 50 fps reales con el port encendido
+
+Método elegido (mejor rendimiento, reutilizando el motor): en vez de `fill_bank`(512) +
+`scene.fill`(anillo completo), por cada metatile cambiado se emite **un solo `TileBlockCopy`
+interleaved** con `XLimitedPlayfield::add_draw(plan, tx*tileW, ty*block_planes_lines, tx, ty)`
+(el mismo contrato que usa `fill`), y se rellena el banco **solo de los metatiles NUEVOS**
+(`fill_bank_one`). El mapa (`g_cells`) es indexado por slot del anillo, así que la celda cambiada
+`(tx,ty)` coincide con su slot (para el título estático; con scroll se aplica el mapeo de `mapposx`).
+
+- **Herramientas**: CPU = mapa (ya se hacía); **Blitter** = 1 blit 16×16×4 planos por celda
+  cambiada (correcto y baratísimo); **Copper NO hace falta** (el compositor solo mueve punteros;
+  el engine no usa blits por Copper en el ciclo de escena).
+- **Medición (A1200, real = ×2)**: port ON + re-blit selectivo = **24.96 emu = ~49.9 fps**
+  (idéntico al port OFF = coste ~0). Antes (rebuild completo): 13.59 emu = 27 fps; incremental
+  parcial: ~17.5 emu = 35 fps.
+- **Validación visual** (regla de oro): captura del título con el re-blit selectivo = DONKEY KONG
+  azul + menú naranja + `©1981 NINTENDO CO.,LTD.` correctos (`_scratch/out/dk_inc.png`).
+
+**Resultado:** el port DK corre a **50 fps (PAL) en A1200 con el port encendido y margen**, sin
+optimizar más el codegen. El cuello era el andamiaje de re-blit completo del demo, no la traducción.
