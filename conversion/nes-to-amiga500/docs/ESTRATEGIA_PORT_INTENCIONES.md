@@ -507,3 +507,17 @@ veces por frame (de ahi las ~4032 escrituras RAM/frame; el port hace ~98 porque 
 primer back-edge). El port **diverge a codigo en \** tras la primera iteracion en vez de seguir el
 bucle -> camino de codigo distinto a investigar (siguiente paso). Las transiciones siguen ~5-10 frames por
 detras mientras no se cierre.
+
+## Maquina de referencia: A500 + 512K Slow
+
+Se fija **A500 (68000, 7 MHz) con 512K Chip + 512K Slow** como maquina de referencia. Runner:
+
+- out/run/dk_port_xl/A500_release/runner.uae: quickstart=a500,0, cpu_model=68000,
+  kickstart_rom_file=c:/Amiga/KICK_A500_31.rom, cycle_exact=false (medicion a plena velocidad);
+  el quickstart a500 ya incluye **512K Slow** por defecto (no anadir ogomem_size, rompe el boot).
+- Build: uild-demo.sh demos/nes/dk_port_xl --release (TARGET_MACHINE=A500 por defecto, 68000).
+- Perfil de memoria del engine equivalente: eng::amiga::game_memory_a500 (384K Chip + 448K Slow).
+
+**Medicion:** 142815 ciclos/frame = **49.67 fps** (1.007 campos/frame) con el port ON -> ~50 fps,.replace
+limitado por VBlank. El port cabe con holgura en el A500.
+
