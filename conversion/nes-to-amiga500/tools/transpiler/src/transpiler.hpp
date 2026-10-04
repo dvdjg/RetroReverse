@@ -3654,6 +3654,13 @@ private:
 					out.append("    tick(");
 					out.append_u32(op_base_cycles(term->opcode));
 					out.append("u);\n");
+					// Spin-yield: si el bloque es un bucle incondicional infinito (el busy-wait
+					// del juego, solo salible por NMI), disparar el NMI directamente y saltar al
+					// header del bucle, cuya entrada cede la REGION (evita el bucle de NMIs que
+					// causaba el yield a traves de una llamada anidada).
+					if (decomp_wait_loop(b)) {
+						out.append("    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
+					}
 					if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
 						out.append_hex(term->target, 4u, true);
