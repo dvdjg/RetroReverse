@@ -474,3 +474,20 @@ que el decompilador modele el **NMI/stack como el NES real** (push de 3 bytes al
 que los saca, y el timing de disparo del NMI alineado al scanline) para que los contadores del juego
 avancen igual. Es decir, el mismo límite de *sincronización PPU/NMI sub-instrucción* que ya consta
 en `TIMING_ROADMAP.md`.
+
+## Deriva de timing: comparador lockstep de escrituras (N2A_WTRACE) + BUG del SP
+
+Se anadio un **trace de escrituras a RAM** en port y oraculo (N2A_WTRACE), que diffea las secuencias
+(addr,val) frame a frame y localiza la primera divergencia. Hallazgos:
+
+1. **NMI espurio en el reset** (port disparaba NMI con \ bit7=0) -> gate por ppu_ctrl bit7.
+2. **Espera de VBlank incondicional** -> ahora condicional (espera solo si el flag de \ no esta).
+3. **BUG MAYOR del SP (arreglado)**: en modo flat, los locales de 
+2a_run (A/X/Y/SP/flags) se
+   reinicializaban en cada llamada y el yield de frontera hace eturn -> se PERDIA el estado al
+   reanudar (el SP volvia a \ en vez del \ del reset). Tras el save/restore (globals g_s*), la
+   secuencia de init COINCIDE con el oraculo (0 divergencias en 2363 escrituras).
+4. **Resta deriva en regimen estable** (frame 1 en adelante): el oraculo hace ~4032 escrituras RAM/
+   frame, el port ~98 -> gran diferencia de camino de codigo a investigar. Las transiciones siguen
+   ~5-10 frames por detras.
+
