@@ -406,3 +406,18 @@ ligeramente el presupuesto del VBlank). Con el título era 49.9. Margen real: pe
 está optimizado): el +0.85 ms es mitad NMI inherente (lógica de juego) y mitad re-blit del demo. Las
 vías serían (a) solapar `update` con el VBlank en el engine, o (b) abaratar el re-blit por-frame del
 marcador. El título (caso del test original) sí queda a 49.9.
+
+### Intento de solape VBlank (resultado NEGATIVO)
+
+Se probó reordenar el bucle de polling `run_frames_polling` a `wait_vblank() → update() → render()`
+(antes `update() → wait_vblank() → render()`), buscando que el trabajo del port cayera dentro del
+periodo de VBlank. **Neutro**: 24.46 emu (48.9) vs ~24.2 (48.4) — dentro del ruido; y el render
+justo tras el VBlank arriesga tearing. **Revertido** (el engine quedó intacto, `git diff` limpio).
+
+`wait_vblank_run` (`engine/src/platform/amiga/amiga.cpp:198`) sincroniza de verdad a la línea 311
+(VBlank), así que el frame debería cerrarse a 20 ms; sin embargo, con el juego activo se mide
+~20.44 ms y el `+0.44 ms` sigue al trabajo del port. El porqué exacto (¿el contador `0xb7e928`
+cuenta también ciclos de Blitter/Copper del re-blit? ¿el frame-lock absorbe el trabajo?) requiere
+un perfilado más profundo del engine. En términos absolutos el port usa **~2 % del frame** →
+**~98 % de margen**; lo que falta para clavar 50 en gameplay es un tema de *granularidad del
+frame-lock del engine*, no de codegen.
