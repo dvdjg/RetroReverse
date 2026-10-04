@@ -3826,10 +3826,16 @@ private:
 				} else if (md == AddrMode::Rel) {
 					// Sondeo de VBlank (`LDA $2002; BPL`) â†’ **evento** del HAL: el
 					// port no emula la PPU, espera al VBlank del Amiga.
-					if (native_vblank_wait(*term)) {
-						out.append("    hal_wait_vblank();\n");
-						if (flat_) { emit_nmi_enter(out, b); }
-					} else {
+				if (native_vblank_wait(*term)) {
+					// El idiom `LDA $2002; BPL` NO es una espera incondicional: solo espera si el
+					// flag de VBlank (bit7 de $2002) esta a 0. Si ya esta puesto, la rama cae
+					// (segun BPL/BMI) y el juego continua **sin** esperar (evita retrasar el reset).
+					// El flag lo pone `frame_event` (VBlank) y lo limpia la lectura de $2002.
+					out.append(sv_equal(m, "BMI")
+						? "    if ((ppu_status & 0x80u) != 0u) { hal_wait_vblank(); }\n"
+						: "    if ((ppu_status & 0x80u) == 0u) { hal_wait_vblank(); }\n");
+					if (flat_) { emit_nmi_enter(out, b); }
+				} else {
 						// Ciclos exactos: base + 1 si tomada + 1 si cruza pÃ¡gina (rama).
 						const bool pc = ((static_cast<eng::u16>(term->addr + 2u)) & 0xFF00u) !=
 								(term->target & 0xFF00u);
