@@ -8,6 +8,9 @@ note DK: bucle principal C7E1 (JSR F4ED) = LFSR/PRNG de 64 bits en $18-$1F; corr
 note     iteraciones/frame. Para mantener 50 fps NO se emula el spin (ver --driver wait/rng).
 note DK: la rutina de siembra del RNG (L_C9B1, $18=0F/$19=13) NO se alcanza en el port:
 note     la maquina de estados diverge antes de $0510=$38. Bug raiz pendiente de arreglar.
+note DK: el port queda 1 frame por detras del oraculo: su reset cede en la espera de VBlank
+note     (L_C7A8 -> hal_wait_vblank) antes del primer NMI; el oraculo no. Ademas $16/$17=FF/7F
+note     en el port vs 00/00. Localizado, no arreglado.
 
 # --- Ejemplos (comentados hasta implementar la directiva) -------------------------------
 # patch  BFFF EA        ; ejemplo: escribir 0xEA en el ultimo byte del PRG (prueba de patch)

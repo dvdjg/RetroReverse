@@ -674,6 +674,20 @@ public:
 	/// \param f Hecho a aÃ±adir (se copia).
 	void add_fact(const Fact& f) { (void)facts_.push_back(f); }
 
+	/// **Driver**: marca el bloque `a` como **busy-wait** (directiva `wait <addr>`). El codegen
+	/// lo trata como espera (cede la frontera de frame sin ejecutar el cuerpo) aunque la
+	/// deteccion automatica (`decomp_wait_loop`) no lo reconozca. Llamar antes de `generate()`.
+	void add_wait_block(eng::u16 a) { (void)driver_waits_.push_back(a); }
+	/// \return `true` si `a` esta marcado como busy-wait por el driver (`--driver`).
+	[[nodiscard]] bool driver_wait(eng::u16 a) const noexcept {
+		for (eng::usize i = 0u; i < driver_waits_.size(); ++i) {
+			if (driver_waits_[i] == a) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/// AÃ±ade un **punto de entrada** extra al desensamblado (p. ej. los PC ejecutados
 	/// observados por telemetrÃ­a: `opcode_hist ... <hot.txt>`). Completa el CFG cuando
 	/// el anÃ¡lisis estÃ¡tico no puede seguir un salto indirecto/tabla. Llamar **antes**
@@ -920,6 +934,9 @@ private:
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> ind_site_ {};     ///< Sitios de `JMP (ind)` (ver `add_ind_target`).
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> ind_target_ {};   ///< Destino observado paralelo a `ind_site_`.
 	eng::util::Vector<Fact, eng::util::HeapAlloc> facts_ {};            ///< Hechos de valores (ver `add_fact`).
+	/// **Driver** (`--driver`): bloques marcados como busy-wait por el integrador (ver
+	/// `add_wait_block`). El codegen los trata como espera aunque `decomp_wait_loop` no los detecte.
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> driver_waits_ {};
 
 	eng::usize count_ = 0;       ///< Instrucciones decodificadas.
 	eng::usize unknown_ = 0;     ///< Opcodes desconocidos encontrados.
@@ -3867,7 +3884,7 @@ private:
 					// del juego, solo salible por NMI), disparar el NMI directamente y saltar al
 					// header del bucle, cuya entrada cede la REGION (evita el bucle de NMIs que
 					// causaba el yield a traves de una llamada anidada).
-					if (decomp_wait_loop(b)) {
+					if (decomp_wait_loop(b) || driver_wait(b)) {
 						// VBlank: el busy-wait dispara el NMI directamente (frame boundary);
 						// ciclos: ceder al limite de frame por el contador.
 						out.append(vblank_sync_

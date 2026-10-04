@@ -549,6 +549,7 @@ struct RomPatch {
 /// `docs/DRIVERS_PORT.md` y se implementara encima de este mismo parser.
 struct DriverSpec {
 	eng::util::Vector<RomPatch, eng::util::HeapAlloc> patches {}; ///< Parcheos de ROM.
+	eng::util::Vector<eng::u16, eng::util::HeapAlloc> waits {};   ///< Bloques busy-wait (`wait`).
 };
 
 /// Carga un fichero de **driver** (`--driver`). Formato, una directiva por linea (`#` comenta,
@@ -594,6 +595,11 @@ bool load_driver(const char* path, DriverSpec& drv) {
 			m.append("[driver] ");
 			m.append(line);
 			n2a::out_line(m.view());
+		} else if (kind == "wait") {
+			eng::u16 a = 0;
+			if (parse_hex(next_token(line), a)) {
+				(void)drv.waits.push_back(a);
+			}
 		}
 	}
 	return true;
@@ -633,17 +639,19 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts, cons
 		n2a::err_line("error: no se pudo leer la ROM");
 		return false;
 	}
+	DriverSpec drv;
 	if (driver != nullptr) {
-		DriverSpec drv;
 		if (!load_driver(driver, drv)) {
 			n2a::err_line("error: no se pudo leer el fichero de driver (--driver)");
 			return false;
 		}
-		const eng::u32 n = apply_rom_patches(bytes, drv);
+		const eng::u32 np = apply_rom_patches(bytes, drv);
 		Dyn m;
 		m.append("--driver: ");
-		m.append_u32(n);
-		m.append(" bytes de ROM parcheados");
+		m.append_u32(np);
+		m.append(" bytes de ROM parcheados, ");
+		m.append_u32(static_cast<eng::u32>(drv.waits.size()));
+		m.append(" bloques busy-wait");
 		n2a::out_line(m.view());
 	}
 	n2a::Transpiler tp;
@@ -676,6 +684,7 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts, cons
 	tp.set_decompile(g_decompile);
 	tp.set_vblank_sync(g_vblank);
 	tp.set_flat(g_flat);
+	for (eng::usize i = 0u; i < drv.waits.size(); ++i) { tp.add_wait_block(drv.waits[i]); }
 	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
 		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
 	}
