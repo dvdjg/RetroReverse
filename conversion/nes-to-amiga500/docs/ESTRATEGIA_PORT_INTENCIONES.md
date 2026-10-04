@@ -299,3 +299,35 @@ Medido con `measure-fps.mjs` en A1200, aislando capas (port OFF/ON, rebuild ON/O
 + `fill_bank` + `scene.fill` completos). Ese cambio recupera ~15 ms → ~45 fps; el ~10 % restante
 (port+timer) lo cubre el paso 4 (fusión/DCE) o el ajuste del bucle del engine. El profiler de
 bloques del host (253 bloques/frame, `_scratch/host/port_histo.cpp`) confirma que el port ejecuta poco.
+
+## AFINADO: el port es ~GRATIS; el coste es el re-blit del demo, y el scroll era artificial
+
+Medido A1200 (real = ×2 emu), `dk_port_xl`, tras `--flat`:
+
+| Escenario | emu fps | **real fps** |
+|---|---|---|
+| Port ON + update/re-blit DESACTIVADO | 24.77-24.96 | **~49.5-50** |
+| Port ON + rebuild incremental + re-blit | ~17.5 | ~35 |
+
+**Hallazgos:**
+1. **El port (flat) es esencialmente GRATIS**: con el re-blit desactivado el demo da ~50 fps reales,
+   **idéntico al port apagado**. Su trabajo cabe entero en el VBlank → **hay muchísimo margen**.
+2. El coste (~30 %) es el **re-blit del demo** (`fill_bank` + `scene.fill` del anillo completo) cuando
+   la pantalla cambia; `update_world_from_dirty()` en sí (drenar la cola) es gratis.
+3. **`dirty-on-change`**: el HAL `$2007` ahora solo marca sucia una celda si el valor CAMBIA (antes
+   cada escritura marcaba dirty → el port re-subía 256 bytes/frame de una pantalla estática →
+   rebuild completo cada frame). Recuperó ~30 %.
+4. **Cola de dirty** (`nt_dirty_q`): pop O(1) en vez del escaneo O(0x1000) por frame del modelo
+   bitmap.
+5. **El port ensucia el nametable ~1 vez cada 120 frames** (dibujado inicial de 1024 celdas;
+   `_scratch/host/port_dirty.cpp`). El título de DK **no scrollea** (`scroll_x=0`).
+
+**Corrección de intención (importante):** el demo tenía `kScrollTest` con un **paso artificial** de
+2 px/frame (benchmark de rendimiento). Eso producía un scroll horizontal **sin sentido**. Ahora el
+scroll sigue los **registros del PPU de la ROM** (`n2a_ppu_scroll_x/y`, de `$2005/$2006`): con la
+intención en 0, la pantalla es estática. El scroll hardware XYlimited solo debe engancharse cuando
+la ROM lo pide (principio de diseño: la intención manda).
+
+**Conclusión de viabilidad:** el codegen **no** limita; el port tiene margen de sobra. El trabajo
+restante es hacer el **re-blit incremental** en el demo (re-blitear solo los metatiles cambiados por
+su posición visible, sin `fill_bank`/`scene.fill` completos).

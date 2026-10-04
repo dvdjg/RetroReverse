@@ -3960,6 +3960,9 @@ private:
 		// **Inferencia de intenciones**: celdas del nametable/atributo **sucias** (escritas por
 		// el juego desde el ultimo frame). El app las traduce a `Layer.set_tile`/`set_attr`.
 		out.append("static u8 nt_dirty[0x1000];\n");
+		// **Cola de celdas sucias**: evita el escaneo O(0x1000) de `n2a_ppu_dirty_pop` por frame.
+		// Al cambiar una celda se encola una vez (marcada en `nt_dirty`); el pop es O(1).
+		out.append("static u16 nt_dirty_q[0x1000]; static u16 nt_dirty_n = 0u, nt_dirty_head = 0u;\n");
 		// Mando NES ($4016/$4017): `n2a_pad` = botones activos (bit0=A,1=B,2=Select,3=Start,
 		// 4=Up,5=Down,6=Left,7=Right); `n2a_pad_shift` = registro de desplazamiento. El app fija
 		// los botones con `n2a_set_pad` cada frame.
@@ -3986,7 +3989,7 @@ private:
 		// $0000-$1FFF (CHR) se IGNORAN: en este modelo el CHR es ROM (tablas de patrones de solo
 		// lectura) y enrutarlas a `vram[x & 0xFFF]` machacaba la nametable/atributos (DK escribe
 		// $03C0-$03FF y borraba la tabla de atributos en `vram[0x3C0]`).
-		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x >= 0x2000u && x < 0x3F00u) { vram[x & 0xFFFu] = v; nt_dirty[x & 0xFFFu] = 1u; } else if (x >= 0x3F00u) { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
+		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x >= 0x2000u && x < 0x3F00u) { const u16 _i = (u16)(x & 0xFFFu); if (vram[_i] != v) { vram[_i] = v; if (!nt_dirty[_i]) { nt_dirty[_i] = 1u; nt_dirty_q[nt_dirty_n++] = _i; } } } else if (x >= 0x3F00u) { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
 		out.append("    case 0x4014u: { const u8* s = ram + ((u16)v << 8); for (int i = 0; i < 256; ++i) { oam[i] = s[i]; } } break;\n");
 		out.append("    case 0x4016u: if (v & 1u) { n2a_pad_shift = n2a_pad; } break;\n");
 		out.append("    default: break;\n    }\n}\n");
@@ -3997,7 +4000,7 @@ private:
 		out.append("static u8 n2a_ppu_ctrl(void) { return ppu_ctrl; }\n");
 		out.append("static u8 n2a_ppu_mask(void) { return ppu_mask; }\n");
 		out.append("// Celdas de nametable/atributo sucias (intencion: Layer.set_tile/set_attr).\n");
-		out.append("static int n2a_ppu_dirty_pop(u16* addr, u8* val) { for (u16 i = 0; i < 0x1000u; ++i) { if (nt_dirty[i]) { *addr = i; *val = vram[i]; nt_dirty[i] = 0u; return 1; } } return 0; }\n");
+		out.append("static int n2a_ppu_dirty_pop(u16* addr, u8* val) { if (nt_dirty_head >= nt_dirty_n) { nt_dirty_head = 0u; nt_dirty_n = 0u; return 0; } const u16 i = nt_dirty_q[nt_dirty_head++]; *addr = i; *val = vram[i]; nt_dirty[i] = 0u; return 1; }\n");
 		out.append("static u8 n2a_ppu_vram(u16 a) { return vram[a & 0xFFFu]; }\n");
 		out.append("// Sprites (intencion: SpriteScene) y paleta (intencion: palette.set).\n");
 		out.append("static u8 n2a_ppu_oam(u8 i) { return oam[i]; }\n");
