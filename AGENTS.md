@@ -181,3 +181,16 @@ Un pixel equivocado puede venir del BG, de los atributos/subpaletas, de los spri
 path de composición (Blitter/X-limited/Copper). Antes de tocar el render, volcar el **estado
 observable** del PPU (nametable, atributos, paleta, OAM) del port y compararlo con el oráculo
 celda a celda. Sólo cuando el estado coincide, el problema es de render.
+
+### 4. `FramePlan`: vaciar ANTES de llenar (no "cuando falle el add")
+`FramePlan::add_*` marca el plan `m_ok = false` al alcanzar `max_blit_jobs` (128) y devuelve
+`false`. Pero `execute_frame_plan` **rechaza** un plan no-ok -> si se vacía "cuando el add falla",
+el lote ya está marcado no-ok y se **pierde** (en DK: los 128 primeros blits, la mitad superior).
+Regla: llevar un contador propio y llamar a `execute_frame_plan` **antes** de llegar al tope
+(p. ej. a 64), luego `clear()`. Ver `dk_port/src/main.cpp` (`add_mt_job`/`m_batch`).
+
+### 5. Pattern table base: mirar `$2000` (bits 3 y 4)
+El BG y los sprites leen de pattern tables distintas según `$2000`: bit 4 = base del BG
+(`$0000`/`$1000`), bit 3 = base de sprites. DK pone el BG en **`$1000`**. Ignorarlo hace que el
+render lea los tiles incorrectos (el logo "correcto" del nametable se pinta con los gráficos
+de la tabla de sprites). Aplica al port (`hal`) y a cualquier render que decodifique CHR.
