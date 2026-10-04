@@ -711,3 +711,39 @@ antes que el oraculo). **Ya no es "1 iteracion y muere"**: la maquina de estados
 crece indefinidamente; (b) alinear la **primera** frontera (reset) con el oraculo (cortar en el
 mismo punto de instruccion); (c) modelar el **LFSR O(1)** para el estado estable (pixel-perfect
 sin pagar el spin completo); (d) re-medir A500.
+
+### [2] Verificacion avanzada + `rng` O(1) IMPLEMENTADO
+
+**Medida de la deriva (punto 1, hecho)**: la **primera divergencia logica** (ignorando el churn
+del LFSR `$18-$1F` y la pila `$100-$1FF`) es **siempre el indice 2089**, **constante** a 1, 2, 3,
+5, 8 y 12 frames. **NO crece**: es un desfase de fase **acotado** en la frontera del reset, no una
+deriva acumulativa. Consecuencia: el estado observable del PPU **converge**.
+
+**Estado del PPU a frame 60 (oraculo vs port)**:
+- `nametable`: **IDENTICO** (30/30 lineas). `attr`: **IDENTICO** (64/64). `oam_sum`: **IDENTICO**.
+  `ctrl`: identico. `mask`: identico en f60. **El render es correcto.**
+- Unicas divergencias (12 lineas de RAM): `$18-$1F` (**estado del LFSR**), `$38`, la **pila**
+  `$1F0-$1FF`, y estado de juego derivado del RNG (`$690-$69F`, `$6F0`). **Todo es el PRNG y lo
+  que lo lee.**
+
+**`rng` O(1) IMPLEMENTADO** (`--driver` directiva `rng <lfsr> <base> <len>`):
+- Parser (`main.cpp`): `DriverSpec.rngs`; `RngSpec{lfsr,base,len}`.
+- Codegen (`transpiler.hpp`): en el **back-edge del spin**, si el cuerpo del bucle (`JMP` target)
+  contiene un `JSR` a una rutina LFSR marcada, **avanza el LFSR K pasos en O(log K)** con
+  exponenciacion GF(2)^64 (`n2a_lfsr_step`/`n2a_lfsr_advance`), siendo
+  `K = (g_frame_deadline - g_cyc) / iter`; `iter` = ciclos del cuerpo + back-edge + rutina LFSR
+  (con el camino tomado de la rama del feedback) = **75 en DK**. `g_cyc += K*iter` -> frontera.
+- **Verificado**: el port hace **285 avances LFSR/frame** (~ oraculo 275) en **5 llamadas O(log K)
+  totales** (CPU~0). El `rng` **no genera** las ~2200 escrituras/frame de churn del LFSR (por
+  diseno), asi que la traza de escrituras ya no es la metrica; la metrica es el **estado**.
+- **Efecto**: `mask` pasa a **coincidir** con el oraculo (antes divergia). El nametable/attr ya
+  coincidian.
+
+**BLOQUEANTE restante (pre-existente)**: el LFSR **no se siembra** (`$18-$1F` queda a `FF 7F...`
+vs `1E 18 24 14...` del oraculo) porque la rutina de siembra `L_C9B1` **no se alcanza**: es el bug
+de **maquina de estados / frontera del reset**. El `rng` O(1) es **correcto** pero inerte mientras
+el LFSR arranque a 0. Arreglar el reset (punto 2) es prerequisito para que el `rng` complete la
+pixel-perfectness del estado estable.
+
+**Instrumento de verificacion**: `_scratch/host/{oracle_wt1,port_wt1,oracle_wtframes,
+port_nmiframes,port_dbglfsr}.cpp` + `cmp_state.sh` (nametable/attr), `oracle_frame`/`port_dump`.

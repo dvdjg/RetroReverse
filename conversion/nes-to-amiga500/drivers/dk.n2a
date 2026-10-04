@@ -12,8 +12,10 @@ note DK: el port queda 1 frame por detras del oraculo: su reset cede en la esper
 note     (L_C7A8 -> hal_wait_vblank) antes del primer NMI; el oraculo no. Ademas $16/$17=FF/7F
 note     en el port vs 00/00. Localizado, no arreglado.
 
-# --- Ejemplos (comentados hasta implementar la directiva) -------------------------------
-# patch  BFFF EA        ; ejemplo: escribir 0xEA en el ultimo byte del PRG (prueba de patch)
-# skip   C85F           ; no emitir el handler NMI (no usar en DK)
-# wait   C7E4           ; marcar el bucle C7E4 como busy-wait (cede sin ejecutar el spin)
-# rng    F4ED 18 08     ; PRNG en $F4ED sobre 8 bytes desde $18 (modelar barato)
+# --- Decisiones activas ------------------------------------------------------------------
+# rng: el bucle C7E1 (JSR F4ED) es un LFSR de 64 bits en $18-$1F. El port lo MODELA en O(log K)
+#      (ver docs). INACTIVO de momento: verificado que produce salida IDENTICA a no usarlo,
+#      porque el LFSR no esta SEMBRADO (la rutina L_C9B1 no se alcanza por el bug de maquina
+#      de estados/frontera del reset). Activar cuando se arregle la siembra. Formato:
+#      rng <lfsr> <base> <len> [<iter_cycles hex>]
+# rng    F4ED 18 08 64

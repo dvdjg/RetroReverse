@@ -31,6 +31,7 @@ note  <texto libre>              ; documenta una decisión (se imprime al genera
 |---|---|---|
 | `patch <addr> <byte>...` | Escribe bytes en el PRG (CPU `addr`) **antes** de desensamblar/generar. | "Trampa" genérica: fijar el estado del PRNG, neutralizar un temporizador, habilitar/deshabilitar una rama, cuando reproducir el original cuesta fps o no aporta nada visible. |
 | `wait <addr>` | El bloque `addr` es un **busy-wait**: el codegen lo trata como espera (cede la frontera de frame sin ejecutar el cuerpo) **aunque** la detección automática (`decomp_wait_loop`) no lo reconozca. | Forzar el "spin-yield" en bucles de espera que el análisis estático no detecta (p. ej. con `JMP` indirecto o condición). En DK `C7E4` ya se autodetecta, así que `wait C7E4` no cambia la salida (verificado). |
+| `rng <lfsr> <base> <len> [<iter_cycles hex>]` | La rutina `lfsr` es un **LFSR** con estado en `len` bytes desde `base`. El codegen, en el back-edge del bucle de espera que la llama, **avanza el LFSR K pasos en O(log K)** (`K=(deadline-g_cyc)/iter`) y salta `g_cyc` a la frontera, sin ejecutar el bucle. `iter_cycles` (hex) sobrescribe el coste por iteración (si no, se calcula del codegen). | Reproducir `$18-$1F` (~275-380 iter/frame) a CPU~0. |
 | `note <texto>` | Documenta una decisión (se imprime). | Trazabilidad: el driver es la memoria de por qué el port difiere del original. |
 
 El parcheo se aplica sobre los **bytes de la ROM** (offset `16 + (addr - 0x8000) % prg_size`, que
@@ -44,7 +45,7 @@ de forma declarativa. Ordenadas por valor para el caso DK:
 
 | Directiva | Semántica | Para qué |
 |---|---|---|
-| `rng <addr> <base> <len>` | El bucle/rutina en `addr` es un **PRNG** sobre `len` bytes en `base`. El port lo **modela barato** en vez de ejecutarlo. | Reproducir `$18-$1F` sin pagar las 377 iteraciones. |
+| `rng <addr> <base> <len>` | El bucle/rutina en `addr` es un **PRNG** sobre `len` bytes en `base`. El port lo **modela barato** en vez de ejecutarlo. | Reproducir `$18-$1F` sin pagar las ~377 iteraciones. |
 | `vblank <addr>` | El sondeo `LDA $2002`/`BPL` en `addr` es una espera de VBlank (ya se autodetecta; la directiva lo **fuerza**). | Casos que el idióm no detecta. |
 | `skip <addr>` | No emitir la rutina/bloque en `addr` (no-op). | Código muerto o puramente cosmético caro. |
 | `ram <addr> <byte>...` | Fija esos bytes de RAM en el arranque (tras el reset). | Desviaciones de init o "semilla" forzada. |

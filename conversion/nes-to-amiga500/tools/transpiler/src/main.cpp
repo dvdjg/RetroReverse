@@ -547,9 +547,20 @@ struct RomPatch {
 /// parcheos de ROM (`patch`) y notas de documentacion (`note`). El resto de directivas
 /// (`wait`/`skip`/`vblank`/`rng`/`ram`/`frame_cycles`) esta especificado en
 /// `docs/DRIVERS_PORT.md` y se implementara encima de este mismo parser.
+/// Directiva **`rng`**: marca la rutina LFSR/PRNG del juego (`addr`) que corre en un bucle de
+/// espera, con su estado en `len` bytes a partir de `base` (CPU). El codegen modela el avance
+/// de K iteraciones en O(1) en vez de ejecutar el bucle (que en DK son ~377 iter/frame).
+struct RngSpec {
+	eng::u16 lfsr = 0; ///< Direccion de la rutina LFSR (p. ej. `F4ED`).
+	eng::u16 base = 0; ///< Direccion base del estado del LFSR en RAM (p. ej. `0x18`).
+	eng::u8 len = 0;   ///< Longitud del estado en bytes (p. ej. 8).
+	eng::u32 iter_cycles = 0; ///< Ciclos del bucle completo (JSR LFSR + JMP) por iteracion.
+};
+
 struct DriverSpec {
 	eng::util::Vector<RomPatch, eng::util::HeapAlloc> patches {}; ///< Parcheos de ROM.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> waits {};   ///< Bloques busy-wait (`wait`).
+	eng::util::Vector<RngSpec, eng::util::HeapAlloc> rngs {};     ///< LFSR modelados (`rng`).
 };
 
 /// Carga un fichero de **driver** (`--driver`). Formato, una directiva por linea (`#` comenta,
@@ -599,6 +610,18 @@ bool load_driver(const char* path, DriverSpec& drv) {
 			eng::u16 a = 0;
 			if (parse_hex(next_token(line), a)) {
 				(void)drv.waits.push_back(a);
+			}
+		} else if (kind == "rng") {
+			RngSpec r {};
+			eng::u16 base = 0;
+			eng::u16 len = 0;
+			if (parse_hex(next_token(line), r.lfsr) && parse_hex(next_token(line), base) &&
+			    parse_hex(next_token(line), len)) {
+				r.base = base;
+				r.len = static_cast<eng::u8>(len);
+				eng::u16 ic = 0;
+				if (parse_hex(next_token(line), ic)) { r.iter_cycles = ic; }
+				(void)drv.rngs.push_back(r);
 			}
 		}
 	}
@@ -685,6 +708,9 @@ bool transpile_rom(const char* rom, const char* out_cpp, const char* facts, cons
 	tp.set_vblank_sync(g_vblank);
 	tp.set_flat(g_flat);
 	for (eng::usize i = 0u; i < drv.waits.size(); ++i) { tp.add_wait_block(drv.waits[i]); }
+	for (eng::usize i = 0u; i < drv.rngs.size(); ++i) {
+		tp.add_rng_model(drv.rngs[i].lfsr, drv.rngs[i].base, drv.rngs[i].len, drv.rngs[i].iter_cycles);
+	}
 	if (g_pc_trace != nullptr && !load_pc_trace(g_pc_trace, tp)) {
 		n2a::err_line("error: no se pudo leer la traza de PC (--pc-trace)");
 	}

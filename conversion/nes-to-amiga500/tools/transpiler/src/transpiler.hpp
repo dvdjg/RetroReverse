@@ -688,6 +688,37 @@ public:
 		return false;
 	}
 
+	/// **Driver** (`--driver`): marca la rutina LFSR en `lfsr` con el estado en `len` bytes desde
+	/// `base` como **PRNG modelable** (`rng <lfsr> <base> <len>`). El codegen, al llegar al
+	/// spin-yield que la llama, la avanza K pasos en O(1) (lineal sobre GF(2)^64) en vez de
+	/// ejecutar el bucle (~377 iter/frame en DK). Llamar antes de `generate()`.
+	void add_rng_model(eng::u16 lfsr, eng::u16 base, eng::u8 len, eng::u32 iter_cycles = 0u) {
+		RngModel m {};
+		m.lfsr = lfsr;
+		m.base = base;
+		m.len = len;
+		m.iter_cycles = iter_cycles;
+		(void)rng_models_.push_back(m);
+	}
+	/// \return El indice del LFSR modelado que coincide con `base`/`len` (o -1 si no hay).
+	[[nodiscard]] int rng_model_for_base(eng::u16 base, eng::u8 len) const noexcept {
+		for (eng::usize i = 0u; i < rng_models_.size(); ++i) {
+			if (rng_models_[i].base == base && rng_models_[i].len == len) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	/// \return `true` si la rutina `lfsr` esta marcada como PRNG modelable por el driver.
+	[[nodiscard]] bool is_rng_routine(eng::u16 lfsr) const noexcept {
+		for (eng::usize i = 0u; i < rng_models_.size(); ++i) {
+			if (rng_models_[i].lfsr == lfsr) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/// AÃ±ade un **punto de entrada** extra al desensamblado (p. ej. los PC ejecutados
 	/// observados por telemetrÃ­a: `opcode_hist ... <hot.txt>`). Completa el CFG cuando
 	/// el anÃ¡lisis estÃ¡tico no puede seguir un salto indirecto/tabla. Llamar **antes**
@@ -944,6 +975,16 @@ private:
 	/// **Driver** (`--driver`): bloques marcados como busy-wait por el integrador (ver
 	/// `add_wait_block`). El codegen los trata como espera aunque `decomp_wait_loop` no los detecte.
 	eng::util::Vector<eng::u16, eng::util::HeapAlloc> driver_waits_ {};
+
+	/// **Driver** (`rng`): PRNG modelable (ver `add_rng_model`). El codegen avanza el LFSR
+	/// descrito por `len` bytes desde `base` K pasos en O(1) en el spin-yield.
+	struct RngModel {
+		eng::u16 lfsr = 0; ///< Rutina LFSR (`JSR` destino).
+		eng::u16 base = 0; ///< Base del estado en RAM.
+		eng::u8 len = 0;   ///< Bytes de estado.
+		eng::u32 iter_cycles = 0; ///< Ciclos por iteracion (0 = calcular del codegen).
+	};
+	eng::util::Vector<RngModel, eng::util::HeapAlloc> rng_models_ {};
 
 	eng::usize count_ = 0;       ///< Instrucciones decodificadas.
 	eng::usize unknown_ = 0;     ///< Opcodes desconocidos encontrados.
@@ -3622,6 +3663,33 @@ private:
 		return c;
 	}
 
+	/// Suma de **ciclos base** de la secuencia **lineal** de instrucciones desde `b` hasta el
+	/// primer terminador, **sin** cortar en lideres intermedios (a diferencia de
+	/// `decomp_block_cycles`). Necesario para medir una rutina de flujo recto (p. ej. el LFSR
+	/// `F4ED`, donde cada `ROR` es un lider pero no hay ramas hasta el `RTS`).
+	/// \param b Direccion inicial. \param stop Primer terminador duro (`JMP/RTS/RTI/BRK`);
+	/// las ramas condicionales (Rel) tambien cortan.
+	/// \return Ciclos base de la secuencia (0 si `b` no es instruccion).
+	eng::u32 decomp_linear_cycles(eng::u16 b, eng::u16 stop) const {
+		if (b >= kSpace || has_instr_[b] == 0u) { return 0u; }
+		eng::u16 p = b;
+		eng::u32 c = 0u;
+		for (;;) {
+			if (has_instr_[p] == 0u) { break; }
+			const Instruction& in = instr_[p];
+			const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+			c += op_base_cycles(in.opcode);
+			p = static_cast<eng::u16>(p + inf.size);
+			if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+			    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+			    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+				break;
+			}
+			if (stop != 0xFFFFu && p >= stop) { break; }
+		}
+		return c;
+	}
+
 	void emit_decompile_region(Dyn& out, eng::u16 entry) {
 		(void)native_vis_.resize(kSpace, 0u);
 		for (eng::u32 i = 0; i < kSpace; ++i) {
@@ -3925,13 +3993,76 @@ private:
 					// header del bucle, cuya entrada cede la REGION (evita el bucle de NMIs que
 					// causaba el yield a traves de una llamada anidada).
 					if (decomp_wait_loop(b) || driver_wait(b)) {
-						// VBlank: el busy-wait dispara el NMI directamente (frame boundary); solo
-						// cruza la frontera cuando `g_cyc` la ha alcanzado (si no, el reset cederia
-						// antes de agotar el presupuesto y la maquina de estados iria por delante).
-						// Sin VBlank: se cede al alcanzar el limite de frame por el contador.
-						if (vblank_sync_) {
-							// Flat lleva `g_cyc` (suma por bloque); el spin lo mantiene al dia
-							// porque pasa por el header cada iteracion.
+						// **PRNG modelado** (`rng`): si el bucle de espera llama a una rutina LFSR
+						// marcada, en vez de ejecutar el spin K veces, avanzar el LFSR K pasos en
+						// O(log K) y saltar `g_cyc` a la frontera (CPU~0). El `JSR` de esta iteracion
+						// ya ejecuto 1 paso; aqui se completan los K-1 restantes.
+						int lfsr_target = -1;
+						if (vblank_sync_ && flat_ && !rng_models_.empty()) {
+							// El `JSR` a la rutina LFSR esta en el **cuerpo del bucle** (el destino
+							// del `JMP`, p. ej. C7E1), no en el bloque del back-edge (C7E4: JMP C7E1).
+							const eng::u16 body = term->target;
+							for (eng::u16 q2 = body; q2 < kSpace && has_instr_[q2] != 0u; q2 = static_cast<eng::u16>(q2 + kOpcodeTable[instr_[q2].opcode].size)) {
+								if (q2 != body && leaders_[q2] != 0u) { break; }
+								for (eng::usize ri = 0u; ri < rng_models_.size(); ++ri) {
+									if (sv_equal(kOpcodeTable[instr_[q2].opcode].mnemonic, "JSR") &&
+									    instr_[q2].target == rng_models_[ri].lfsr) {
+										lfsr_target = static_cast<int>(ri);
+										break;
+									}
+								}
+								if (lfsr_target >= 0) { break; }
+							}
+						}
+						if (lfsr_target >= 0) {
+							const RngModel& rm = rng_models_[static_cast<eng::usize>(lfsr_target)];
+							// Una iteracion completa = cuerpo del bucle (JSR a la rutina LFSR) +
+							// bloque del back-edge (JMP) + la propia rutina LFSR. La rutina puede
+							// tener una rama condicional (el feedback del LFSR): se suma tambien el
+							// camino tomado (destino de la primera rama de la rutina).
+							eng::u32 lfsr_c = decomp_block_cycles(rm.lfsr);
+							for (eng::u16 q3 = rm.lfsr; q3 < kSpace && has_instr_[q3] != 0u; q3 = static_cast<eng::u16>(q3 + kOpcodeTable[instr_[q3].opcode].size)) {
+								const OpcodeInfo& oi = kOpcodeTable[instr_[q3].opcode];
+								if (oi.mode == AddrMode::Rel) {
+									lfsr_c += decomp_block_cycles(instr_[q3].target);
+									break;
+								}
+								if (sv_equal(oi.mnemonic, "JMP") || sv_equal(oi.mnemonic, "JSR") ||
+								    sv_equal(oi.mnemonic, "RTS") || sv_equal(oi.mnemonic, "RTI") ||
+								    sv_equal(oi.mnemonic, "BRK")) {
+									break;
+								}
+								if (q3 != rm.lfsr && leaders_[q3] != 0u) { break; }
+							}
+							const eng::u32 iter = (rm.iter_cycles != 0u)
+								? rm.iter_cycles
+								: (decomp_block_cycles(term->target) + decomp_block_cycles(b) + lfsr_c);
+							const eng::u32 ic = (iter != 0u) ? iter : 1u;
+							out.append("    if (g_cyc >= g_frame_deadline) { frame_event();\n");
+							out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
+							out.append_u32(nmi_enter_seq_++);
+							out.append("; ++g_nmi_fires; goto L_");
+							out.append_hex(nmi_, 4u, true);
+							out.append("; } else { goto L_nmiskip_");
+							out.append_u32(nmi_enter_seq_ - 1u);
+							out.append("; }\nL_nmiret_");
+							out.append_u32(nmi_enter_seq_ - 1u);
+							out.append(": if (g_engine_mode) { g_yield_req = 1u; }\nL_nmiskip_");
+							out.append_u32(nmi_enter_seq_ - 1u);
+							out.append(": ; } else { const u32 k = (g_frame_deadline - g_cyc) / ");
+							out.append_u32(ic);
+							out.append("u; if (k > 0u) { n2a_lfsr_advance(0x");
+							out.append_hex(rm.base, 4u, true);
+							out.append("u, ");
+							out.append_u32(static_cast<eng::u32>(rm.len));
+							out.append("u, k); } g_cyc += k * ");
+							out.append_u32(ic);
+							out.append("u; }\n");
+						} else if (vblank_sync_) {
+							// VBlank: el busy-wait dispara el NMI directamente (frame boundary); solo
+							// cruza la frontera cuando `g_cyc` la ha alcanzado (si no, el reset cederia
+							// antes de agotar el presupuesto y la maquina de estados iria por delante).
+							// Sin VBlank: se cede al alcanzar el limite de frame por el contador.
 							out.append(flat_
 								? "    if (g_cyc >= g_frame_deadline) { frame_event();\n"
 								: "    frame_event();\n");
@@ -4141,6 +4272,25 @@ private:
 				: "static void hal_wait_vblank(void) { frame_event(); }\n");
 		} else {
 			out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
+		}
+		// **PRNG modelado** (`rng` del driver): avance masivo O(log K) del LFSR. El estado son
+		// `len` bytes en `base` (little-endian: byte 0 = LSB). Cada paso es el mapa lineal
+		// `S' = M*S` sobre GF(2)^64: `feedback = bit1(byte0) XOR bit1(byte1); S = (S>>1)|(fb<<63)`.
+		// `n2a_lfsr_advance(steps)` aplica `M^steps` efectuando la exponenciacion sobre la
+		// representacion (64 palabras = imagenes de la base). Coste ~64*log2(K) XOR/frame.
+		if (!rng_models_.empty()) {
+			out.append("// LFSR modelado (driver `rng`): primitivas GF(2)^64 (ver transpiler emit_decompile).\n");
+			out.append("typedef unsigned long long n2a_u64;\n");
+			out.append("static n2a_u64 n2a_lfsr_step(n2a_u64 s) { const n2a_u64 fb = ((s >> 1) ^ (s >> 9)) & 1ull; return (s >> 1) | (fb << 63); }\n");
+			out.append("static void n2a_lfsr_advance(u16 base, u8 len, unsigned long steps) {\n");
+			out.append("    n2a_u64 s = 0ull; for (u8 i = 0; i < len && i < 8u; ++i) { s |= ((n2a_u64)ram[(base + i) & 0x7FFu]) << (8u * i); }\n");
+			out.append("    n2a_u64 m[64]; for (int b = 0; b < 64; ++b) { m[b] = n2a_lfsr_step(1ull << b); }\n");
+			out.append("    n2a_u64 r[64]; for (int b = 0; b < 64; ++b) { r[b] = 1ull << b; }\n");
+			out.append("    unsigned long k = steps; while (k != 0ul) {\n");
+			out.append("        if (k & 1ul) { n2a_u64 out = 0ull; for (int b = 0; b < 64; ++b) { if ((s >> b) & 1ull) { out ^= r[b]; } } s = out; }\n");
+			out.append("        n2a_u64 nm[64]; for (int b = 0; b < 64; ++b) { n2a_u64 col = 0ull; n2a_u64 v = m[b]; for (int c = 0; c < 64; ++c) { if ((v >> c) & 1ull) { col ^= m[c]; } } nm[b] = col; }\n");
+			out.append("        for (int b = 0; b < 64; ++b) { m[b] = nm[b]; } k >>= 1; }\n");
+			out.append("    for (u8 i = 0; i < len && i < 8u; ++i) { ram[(base + i) & 0x7FFu] = (u8)((s >> (8u * i)) & 0xFFu); }\n}\n");
 		}
 		// VBlank (A1200): `tick` solo acumula ciclos (modelo hibrido); el frame lo marca el
 		// busy-wait/`hal_wait_vblank`. Modelo de ciclos completo si no esta activo (PC/fidelidad).
