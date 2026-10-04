@@ -620,3 +620,22 @@ Conclusion: el pacing por ciclos **solo** no sirve. El arreglo correcto = **paci
 saltar el spin** (wait) **+ modelar el LFSR** (ng). El 	ick por instruccion es caro; habria
 que contarlo por **bloque** o en el bucle. Estado bueno restaurado: **49.75 fps** (fix b, sin
 presupuesto).
+
+### [2] Intento de pacing barato (contador local + check por bloque) - revertido
+
+Se intento: cyc en registro local de 
+2a_run (	ick -> cyc += n), save/restore en
+g_sCyc, y comprobacion del presupuesto en la **entrada de cada bloque** (if (cyc >=
+g_frame_deadline) { cyc -= deadline; frame_event(); g_yield_req=1; }). Al quitar g_cyc (global)
+en flat, se rompieron referencias (probes/diagnostico) -> **revertido**.
+
+**Plan preciso** (no implementado):
+1. Mantener **g_cyc global** como espejo del local cyc (para diagnostico), o actualizar los
+   probes. El contador real es el registro local.
+2. Check de presupuesto por bloque -> frontera de frame = 29780 exactos (init de frame 1 incluido).
+3. Para el **estado estable**: saltar el spin con wait (no ejecutar el cuerpo) + ng (modelar
+   el LFSR en O(1)) -> CPU~0 y pixel-perfect a 50 fps.
+4. Re-medir y validar transiciones.
+
+Estado actual (bueno): fix (b), demo A500 **49.75 fps**, drivers/dk.n2a + --driver (patch/wait/
+note) + docs/DRIVERS_PORT.md.
