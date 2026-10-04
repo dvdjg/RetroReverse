@@ -4027,11 +4027,14 @@ private:
 		if (flat_) {
 			// Flatten: el NMI NO se llama como funcion (seria un call C que recargaria
 			// A/X/Y); se marca y `n2a_run` lo ejecuta inline mediante la pila de retorno.
-			out.append("g_nmi_pending = 1u; ");
+			// **Gate por `ppu_ctrl` bit 7**: el NES real solo dispara el NMI si esta habilitado;
+			// sin esto el reset (que pone $2000 bit7=0) recibia un NMI espurio en su espera de
+			// VBlank -> divergencia de RAM desde el frame 1.
+			out.append("g_nmi_pending = (u8)((ppu_ctrl & 0x80u) ? 1u : 0u); ");
 		} else {
-			out.append("++g_nmi_fires; f_");
+			out.append("if (ppu_ctrl & 0x80u) { ++g_nmi_fires; f_");
 			out.append_hex(nmi_, 4u, true);
-			out.append("(); ");
+			out.append("(); } ");
 		}
 		out.append("if (g_engine_mode) { g_yield_req = 1u; } }\n");
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
@@ -4066,8 +4069,16 @@ private:
 		out.append("    if (a < 0x2000u) { return ram[a & 0x7FFu]; }\n");
 		out.append("    if (a >= 0x8000u) { return PRG_ROM[(a - 0x8000u) & (kPrgSize - 1u)]; }\n");
 		out.append("    return hal_ppu_read(a);\n}\n");
+#ifdef N2A_WTRACE
+		out.append("static u16 n2a_wt_a[65536]; static u8 n2a_wt_v[65536]; static unsigned n2a_wt_n = 0u;\n");
+		out.append("static void n2a_wt_log(u16 a, u8 v) { if (n2a_wt_n < 65536u) { n2a_wt_a[n2a_wt_n] = a; n2a_wt_v[n2a_wt_n] = v; ++n2a_wt_n; } }\n");
+#endif
 		out.append("static __attribute__((always_inline)) inline void wr(u16 a, u8 v) {\n");
+#ifdef N2A_WTRACE
+		out.append("    if (a < 0x2000u) { n2a_wt_log(a, v); ram[a & 0x7FFu] = v; return; }\n");
+#else
 		out.append("    if (a < 0x2000u) { ram[a & 0x7FFu] = v; return; }\n");
+#endif
 		out.append("    hal_ppu_write(a, v);\n}\n");
 		// `setnz` DEBE ser `always_inline`: en flat, A/X/Y/flags son LOCALES de `n2a_run`;
 		// si fuera una funcion de fichero, escribiria los `Zf/Nf` GLOBALES y el codigo leeria

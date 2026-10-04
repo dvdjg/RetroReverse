@@ -1,5 +1,13 @@
 #pragma once
 
+#ifdef N2A_WTRACE
+// Trace de escrituras a RAM (diagnostico: comparar oraculo vs port para localizar divergencias).
+namespace n2a_wt { inline unsigned short a[1u << 20]; inline unsigned char v[1u << 20]; inline unsigned n = 0u; }
+static inline void n2a_wt_log(unsigned short a, unsigned char v) {
+	if (n2a_wt::n < (1u << 20)) { n2a_wt::a[n2a_wt::n] = a; n2a_wt::v[n2a_wt::n] = v; ++n2a_wt::n; }
+}
+#endif
+
 /// \file nes_runtime.hpp
 /// Runtime mínimo del nodo NES→Amiga 500: memoria de consola (`NESMemory`) y CPU
 /// 6502 (`CPU`) que ejecutan el código generado por el transpilador.
@@ -158,6 +166,9 @@ struct NESMemory {
 	/// \param addr  Dirección destino de 16 bits.
 	/// \param value Byte a escribir.
 	void write(eng::u16 addr, eng::u8 value) {
+#ifdef N2A_WTRACE
+		if (addr < 0x2000u) { n2a_wt_log(addr, value); }
+#endif
 		if (addr < 0x2000u) {
 			ram[addr & 0x7FFu] = value;
 			return;
