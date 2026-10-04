@@ -3681,12 +3681,19 @@ private:
 		// **Inferencia de intenciones**: celdas del nametable/atributo **sucias** (escritas por
 		// el juego desde el ultimo frame). El app las traduce a `Layer.set_tile`/`set_attr`.
 		out.append("static u8 nt_dirty[0x1000];\n");
+		// Mando NES ($4016/$4017): `n2a_pad` = botones activos (bit0=A,1=B,2=Select,3=Start,
+		// 4=Up,5=Down,6=Left,7=Right); `n2a_pad_shift` = registro de desplazamiento. El app fija
+		// los botones con `n2a_set_pad` cada frame.
+		out.append("static u8 n2a_pad = 0, n2a_pad_shift = 0;\n");
+		out.append("static void n2a_set_pad(u8 v) { n2a_pad = v; }\n");
 		out.append("static u8 hanam = 0; // hook del app: 0 = no inferir intenciones\n");
 		out.append("static u8 (*hal_ppu_read_hook)(u16) = 0;\n");
 		out.append("static void (*hal_vblank_hook)(void) = 0;\n");
 		out.append("static u8 hal_ppu_read(u16 a) {\n");
 		out.append("    if (hal_ppu_read_hook != 0) { return hal_ppu_read_hook(a); }\n");
 		out.append("    if ((a & 7u) == 2u) { const u8 r = ppu_status; ppu_status = (u8)(ppu_status & 0x7Fu); ppu_latch = 0; return r; }\n");
+		// Mando: devuelve el bit bajo del registro de desplazamiento y lo desplaza (relleno de 1s).
+		out.append("    if (a == 0x4016u || a == 0x4017u) { const u8 r = (u8)(n2a_pad_shift & 1u); n2a_pad_shift = (u8)((n2a_pad_shift >> 1) | 0x80u); return r; }\n");
 		out.append("    return 0;\n}\n");
 		out.append("static void hal_ppu_write(u16 a, u8 v) {\n");
 		out.append("    switch (a) {\n");
@@ -3702,6 +3709,7 @@ private:
 		// $03C0-$03FF y borraba la tabla de atributos en `vram[0x3C0]`).
 		out.append("    case 0x2007u: { const u16 x = (u16)(ppu_addr & 0x3FFFu); if (x >= 0x2000u && x < 0x3F00u) { vram[x & 0xFFFu] = v; nt_dirty[x & 0xFFFu] = 1u; } else if (x >= 0x3F00u) { palette[(x - 0x3F00u) & 0x1Fu] = v; } ppu_addr = (u16)(ppu_addr + ((ppu_ctrl & 0x04u) ? 32u : 1u)); } break;\n");
 		out.append("    case 0x4014u: { const u8* s = ram + ((u16)v << 8); for (int i = 0; i < 256; ++i) { oam[i] = s[i]; } } break;\n");
+		out.append("    case 0x4016u: if (v & 1u) { n2a_pad_shift = n2a_pad; } break;\n");
 		out.append("    default: break;\n    }\n}\n");
 		// --- Intenciones para el app (traducir a motores del engine) ---
 		out.append("// Scroll del BG (intencion: Layer.scroll_to).\n");
