@@ -661,3 +661,53 @@ gasta la mayor parte del frame en el spin (RNG).
 
 Restriccion descubierta: cualquier **yield por bloque** debe caer solo en bloques presentes en
 kRL (o ampliar kRL a todos los bloques), porque g_resume se resuelve por esa tabla.
+
+### [2] Verificacion con trazas + pacing por bloque (IMPLEMENTADO; nucleo confirmado)
+
+**Instrumento**: probes `_scratch/host/oracle_wt1.cpp` (oraculo, N2A_WTRACE) y `port_wt1.cpp`
+(port), que volcan la traza de escrituras a RAM de los **primeros N frames acumulados**.
+
+**Confirmacion del nucleo** (port con el fix (b), antes del pacing):
+
+| frames | oraculo cum | port cum |
+|---|---|---|
+| 1 | 2363 (init) | **2699** (init + 336 de la 1a iteracion del spin) |
+| 2 | 5534 | 2829 |
+| 6 | 21125 | 3189 |
+
+- Las **2363 escrituras del frame 1 del oraculo = init puro**; el port hace init + **336 mas** =
+  **exactamente una iteracion del spin** (JMP C7E1 -> JSR F4ED -> JMP C7E1). `g_resume` cae en
+  `L_C7E4` (el punto del JSR), y el NMI se ejecuta (verificado: `g_nmi_fires`).
+- **Despues del frame 1 el port casi no hace nada**: 130, 90, 90... escrituras/frame (casi todas
+  el churn del LFSR) vs 3171+ del oraculo. **El port queda muerto tras la primera cesion**: no se
+  observa la siembra del RNG ni las transiciones. Eso explica que la siembra `L_C9B1` "no se
+  alcance": el port no ejecuta ningun frame de juego post-init.
+
+**Fix implementado** (`transpiler.hpp`): **modelo de ciclos por bloque** para flat + `--vblank`.
+- En la entrada de cada bloque: `g_cyc += <suma de ciclos base del bloque>` (1 suma por bloque,
+  no `tick` por instruccion). Helper `decomp_block_cycles(b)`.
+- `hal_wait_vblank` (flat): `g_cyc = g_frame_deadline; frame_event();` (salta a la frontera en
+  O(1) en vez de disparar el evento de inmediato) -> el VBlank del reset cuenta.
+- Spin boundary (`JMP` de bucle infinito): `if (g_cyc >= g_frame_deadline) { frame_event(); NMI }`
+  -> **deja de ceder en la 1a iteracion**; corre el spin contabilizando ciclos hasta el VBlank
+  como el oraculo.
+
+**Resultado medido (traza)**: el port pasa de 2699 a ~4289 escrituras logicas en 6 frames; la
+**logica de juego diverge en la escritura 2089** (contra 4122 del oraculo): el port escribe
+`$0010=0x10,$0000=0x31,$0001=0x03,$0330...` (una **segunda tanda de init de PPU**, ~1 frame
+antes que el oraculo). **Ya no es "1 iteracion y muere"**: la maquina de estados corre de verdad.
+
+**Nucleo del desfase restante = DERIVA de la frontera de frame (~+33 ciclos)**:
+- El port corta en la escritura 2089; el oraculo en la 2087. El port ejecuta **exactamente 2
+  iteraciones de LFSR (72 ciclos) entre dos fronteras**; el oraculo, **2 iteraciones de 36 + 1 de
+  30 = 102 ciclos**, porque en el **reset** el oraculo corta **a mitad de un ciclo del spin** (a
+  "32000" = 29886 ciclos = 23 ciclos dentro de la 1a iteracion de 33), mientras el port corta en
+  un **limite de instruccion** (>= 29780). Esa deriva (~33 ciclos/frame) retrasa el port; al
+  cabo de varios frames divergen `$0000/$0007` (PPU) y se re-inicia el PPU.
+- 29886 = presupuesto del reset del oraculo; 29780 = limite del **estado estable** del port. Los
+  dos no coinciden en la frontera de reset.
+
+**Siguiente**: (a) medir si la divergencia se **satura** (deriva constante = aceptable-ish) o
+crece indefinidamente; (b) alinear la **primera** frontera (reset) con el oraculo (cortar en el
+mismo punto de instruccion); (c) modelar el **LFSR O(1)** para el estado estable (pixel-perfect
+sin pagar el spin completo); (d) re-medir A500.

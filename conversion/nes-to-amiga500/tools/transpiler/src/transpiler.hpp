@@ -3597,6 +3597,31 @@ private:
 		return false;
 	}
 
+	/// Suma de **ciclos base** de las instrucciones del bloque `b` (terminador incluido), para
+	/// el **modelo de ciclos por bloque** del port (`g_cyc += n` una vez por bloque en vez de un
+	/// `tick(n)` por instruccion, que en 68000 costaria mas que el propio codigo). No incluye la
+	/// penalizacion de rama tomada ni el cruce de pagina (se anaden en el punto de rama).
+	/// \param b Direccion inicial del bloque.
+	/// \return Ciclos base acumulados (0 si `b` no es un bloque con instrucciones).
+	eng::u32 decomp_block_cycles(eng::u16 b) const {
+		if (b >= kSpace || has_instr_[b] == 0u) { return 0u; }
+		eng::u16 p = b;
+		eng::u32 c = 0u;
+		for (;;) {
+			if (has_instr_[p] == 0u || (p != b && leaders_[p] != 0u)) { break; }
+			const Instruction& in = instr_[p];
+			const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+			c += op_base_cycles(in.opcode);
+			p = static_cast<eng::u16>(p + inf.size);
+			if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+			    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+			    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+				break;
+			}
+		}
+		return c;
+	}
+
 	void emit_decompile_region(Dyn& out, eng::u16 entry) {
 		(void)native_vis_.resize(kSpace, 0u);
 		for (eng::u32 i = 0; i < kSpace; ++i) {
@@ -3705,6 +3730,14 @@ private:
 			out.append("u;");
 #endif
 			out.append("\n");
+			// **Modelo de ciclos por bloque** (flat + `--vblank`): una suma por bloque para que
+			// `g_cyc` refleje los ciclos ejecutados sin un `tick` por instruccion (caro en 68000).
+			// Lo consume la frontera de frame del busy-wait (spin) y de `hal_wait_vblank`.
+			if (vblank_sync_) {
+				out.append("    g_cyc += ");
+				out.append_u32(decomp_block_cycles(b));
+				out.append("u;\n");
+			}
 #ifdef N2A_TRACE_BLOCK
 			out.append("if (g_step_limit != 0u && ++g_steps > g_step_limit) { g_dbgA = A; g_dbgX = X; g_dbgY = Y; g_dbgZ = (u8)Zf; g_dbgC = (u8)Cf; if (hal_limit_hook) { hal_limit_hook(); } }\n");
 #endif
@@ -3892,12 +3925,32 @@ private:
 					// header del bucle, cuya entrada cede la REGION (evita el bucle de NMIs que
 					// causaba el yield a traves de una llamada anidada).
 					if (decomp_wait_loop(b) || driver_wait(b)) {
-						// VBlank: el busy-wait dispara el NMI directamente (frame boundary);
-						// ciclos: ceder al limite de frame por el contador.
-						out.append(vblank_sync_
-							? "    frame_event();\n"
-							: "    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
-						if (flat_ && vblank_sync_) { emit_nmi_enter(out, b); }
+						// VBlank: el busy-wait dispara el NMI directamente (frame boundary); solo
+						// cruza la frontera cuando `g_cyc` la ha alcanzado (si no, el reset cederia
+						// antes de agotar el presupuesto y la maquina de estados iria por delante).
+						// Sin VBlank: se cede al alcanzar el limite de frame por el contador.
+						if (vblank_sync_) {
+							// Flat lleva `g_cyc` (suma por bloque); el spin lo mantiene al dia
+							// porque pasa por el header cada iteracion.
+							out.append(flat_
+								? "    if (g_cyc >= g_frame_deadline) { frame_event();\n"
+								: "    frame_event();\n");
+							if (flat_) {
+								out.append("    if (g_nmi_pending) { g_nmi_pending = 0u; g_yield_req = 0u; ret_lbl[ret_sp++] = &&L_nmiret_");
+								out.append_u32(nmi_enter_seq_++);
+								out.append("; ++g_nmi_fires; goto L_");
+								out.append_hex(nmi_, 4u, true);
+								out.append("; } else { goto L_nmiskip_");
+								out.append_u32(nmi_enter_seq_ - 1u);
+								out.append("; }\nL_nmiret_");
+								out.append_u32(nmi_enter_seq_ - 1u);
+								out.append(": if (g_engine_mode) { g_yield_req = 1u; }\nL_nmiskip_");
+								out.append_u32(nmi_enter_seq_ - 1u);
+								out.append(": ; }\n");
+							}
+						} else {
+							out.append("    if (g_cyc + 2000u < g_frame_deadline) { g_cyc = g_frame_deadline; frame_event(); }\n");
+						}
 					}
 					if (native_vis_[term->target] != 0u) {
 						out.append("    goto L_");
@@ -4079,7 +4132,13 @@ private:
 		// Sondeo de VBlank: **espera** al evento (avanza los ciclos a la frontera y lo
 		// ejecuta), en vez de disparar el NMI de inmediato.
 		if (vblank_sync_) {
-			out.append("static void hal_wait_vblank(void) { frame_event(); }\n");
+			// Flat: `g_cyc` es la cuenta de ciclos por bloque; la espera de VBlank del juego
+			// (reset/init y `hal_wait_vblank` del sondeo) salta a la frontera += 29780 en O(1)
+			// y dispara el evento (VBlank+NMI). Non-flat: el modelo de ciclos no lleva cuenta,
+			// asi que el evento se dispara directamente.
+			out.append(flat_
+				? "static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n"
+				: "static void hal_wait_vblank(void) { frame_event(); }\n");
 		} else {
 			out.append("static void hal_wait_vblank(void) { g_cyc = g_frame_deadline; frame_event(); }\n");
 		}
