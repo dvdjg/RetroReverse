@@ -421,3 +421,19 @@ cuenta también ciclos de Blitter/Copper del re-blit? ¿el frame-lock absorbe el
 un perfilado más profundo del engine. En términos absolutos el port usa **~2 % del frame** →
 **~98 % de margen**; lo que falta para clavar 50 en gameplay es un tema de *granularidad del
 frame-lock del engine*, no de codegen.
+
+### Medición por línea de raster: el trabajo SÍ cabe en el frame
+
+Instrumentando `update()` con `backend.current_raster_line()` (inicio/fin), en gameplay el trabajo
+del demo+port va de la **línea 312 (VBlank) a la ~29** → **~29 líneas ≈ 1.86 ms**, holgadamente
+dentro del frame de 20 ms. Es decir, el trabajo **no** desborda el frame; el `+0.44 ms` que separa
+20.44 de 20.0 **no es la duración del update**. La instrumentación se revirtió (demo limpio).
+
+**Conclusión #2:** el frame-lock del engine no es un `update → wait` simple; el contador de ciclos
+sube con el trabajo del port aunque el trabajo termine en la línea 29. Determinar si el contador
+incluye ciclos de Blitter/Copper del re-blit (o si el *accounting* del frame los arrastra) requiere
+trabajo de engine más profundo. En cualquier caso, **el port está holgadamente dentro del frame**.
+
+**Conclusión #1:** abaratar el re-blit (marcador) atacaría ~0.4 ms, pero el NMI del port (0.44 ms,
+lógica de juego con HAL ya optimizado) seguiría sumando por el mismo mecanismo. El límite es el
+frame-lock, no el coste del codegen.
