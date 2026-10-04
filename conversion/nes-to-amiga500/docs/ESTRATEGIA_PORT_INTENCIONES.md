@@ -115,6 +115,19 @@ en hardware real o emulador a velocidad plena**. Palancas: (1) **spin-yield** de
 (2) codegen rápido (estado en registros/locales, sin `g_label`/yield por instrucción, `-m68020`),
 (3) menos bounds-checks en `rd/wr`. La métrica que decide es ciclos/frame medidos en hardware.
 
+## Optimización: intentos y lecciones (2026)
+
+- **Spin-yield por "ciclo de 2 bloques" (heurístico en runtime): DESCARTADO.** Falsos positivos en
+  bucles de inicialización (con salida condicional) → el juegо no escribe la nametable. La versión
+  ingenua que fuerza `g_cyc = deadline-1` en el bucle principal **cuelga** (repite el `frame_event`
+  cada iteración → bucle de NMIs). **Detección correcta a implementar:** bucle **incondicional
+  infinito** (ciclo de bloques cuyo terminador es `JMP` incondicional, sin salida condicional) —
+  solo salible por NMI; ahí sí ceder al límite de frame (one-shot por frame).
+- **`-m68020` para A1200: NO arranca** (el runtime/startup del engine no es 68020-limpio). El build
+  vuelve a `-m68000`. Pendiente: limpiar el startup/shim para 68020 y reactivar (mejor codegen).
+- **Medición no-warp puede estar limitada por el emulador cycle-exact** (host); conviene medir en
+  hardware real o afinar el emulador antes de concluir cifras finas.
+
 ## Pasos recomendados (orden)
 
 1. **Input** (joystick→`$4016`) — barato, desbloquea jugable y medir fps con gameplay.
