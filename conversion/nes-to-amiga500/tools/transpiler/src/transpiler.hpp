@@ -3450,6 +3450,44 @@ private:
 	/// Emite una **región** (función C `f_XXXX`) del decompilado: BFS de bloques desde
 	/// `entry` y emisión en C plano con etiquetas/`goto` (fase 1: correcto; la
 	/// estructuración a bucles/`if` es una fase posterior, ver `docs/DECOMPILADOR.md`).
+	/// Sucesor **incondicional** de un bloque (`fallthrough` o `JMP` directo); `0xFFFF` si el
+	/// bloque tiene salida condicional o retorno (su flujo no es determinista).
+	eng::u16 decomp_uncond_succ(eng::u16 b) const {
+		eng::u16 p = b;
+		const Instruction* term = nullptr;
+		for (;;) {
+			if (has_instr_[p] == 0u || (p != b && leaders_[p] != 0u)) { break; }
+			const Instruction& in = instr_[p];
+			const OpcodeInfo& inf = kOpcodeTable[in.opcode];
+			term = &in;
+			p = static_cast<eng::u16>(p + inf.size);
+			if (inf.mode == AddrMode::Rel || sv_equal(inf.mnemonic, "JMP") ||
+			    sv_equal(inf.mnemonic, "JSR") || sv_equal(inf.mnemonic, "RTS") ||
+			    sv_equal(inf.mnemonic, "RTI") || sv_equal(inf.mnemonic, "BRK")) {
+				break;
+			}
+		}
+		if (term == nullptr) { return 0xFFFFu; }
+		const char* m = kOpcodeTable[term->opcode].mnemonic;
+		if (kOpcodeTable[term->opcode].mode == AddrMode::Rel) { return 0xFFFFu; }
+		if (sv_equal(m, "JMP")) { return term->target; }
+		if (sv_equal(m, "JSR")) { return p; }
+		if (sv_equal(m, "RTS") || sv_equal(m, "RTI") || sv_equal(m, "BRK")) { return 0xFFFFu; }
+		return p;
+	}
+
+	/// \return `true` si el bloque `b` esta en un **bucle incondicional infinito** (solo salible
+	/// por NMI): es el busy-wait de la NES (`JSR prng; JMP spin`). Sigue los sucesores
+	/// incondicionales; si vuelve a `b`, lo es.
+	bool decomp_wait_loop(eng::u16 b) const {
+		eng::u16 c = decomp_uncond_succ(b);
+		for (int i = 0; i < 16 && c != 0xFFFFu; ++i) {
+			if (c == b) { return true; }
+			c = decomp_uncond_succ(c);
+		}
+		return false;
+	}
+
 	void emit_decompile_region(Dyn& out, eng::u16 entry) {
 		(void)native_vis_.resize(kSpace, 0u);
 		for (eng::u32 i = 0; i < kSpace; ++i) {
@@ -3539,9 +3577,16 @@ private:
 			out.append_hex(b, 4u, true);
 			out.append(": if (g_yield_req) { g_resume = 0x");
 			out.append_hex(b, 4u, true);
-			out.append("u; g_yield_req = 0u; return; } g_label = 0x");
+			// `g_label` (diagnostico de "ultima etiqueta") se OMITE en builds de velocidad: es un
+			// store a global por bloque (~3000/frame) sin valor en produccion. Se recupera con
+			// `-DN2A_TRACE_LABEL` (transpilador) para depuracion.
+			out.append("u; g_yield_req = 0u; return; } ");
+#ifdef N2A_TRACE_LABEL
+			out.append("g_label = 0x");
 			out.append_hex(b, 4u, true);
-			out.append("u;\n");
+			out.append("u; ");
+#endif
+			out.append("\n");
 			eng::u16 p = b;
 			const Instruction* term = nullptr;
 			for (;;) {

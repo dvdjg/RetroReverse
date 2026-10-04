@@ -117,12 +117,14 @@ en hardware real o emulador a velocidad plena**. Palancas: (1) **spin-yield** de
 
 ## Optimización: intentos y lecciones (2026)
 
-- **Spin-yield por "ciclo de 2 bloques" (heurístico en runtime): DESCARTADO.** Falsos positivos en
-  bucles de inicialización (con salida condicional) → el juegо no escribe la nametable. La versión
-  ingenua que fuerza `g_cyc = deadline-1` en el bucle principal **cuelga** (repite el `frame_event`
-  cada iteración → bucle de NMIs). **Detección correcta a implementar:** bucle **incondicional
-  infinito** (ciclo de bloques cuyo terminador es `JMP` incondicional, sin salida condicional) —
-  solo salible por NMI; ahí sí ceder al límite de frame (one-shot por frame).
+- **Spin-yield: la DETECCIÓN funciona; el YIELD necesita rediseño.** Implementado
+  `decomp_wait_loop` (sigue sucesores incondicionales: un ciclo sin salida condicional = bucle
+  infinito solo salible por NMI). Detecta bien el busy-wait de DK (`JMP C7E1`) y emite el
+  `g_cyc = deadline-1` solo ahí. **Pero cuelga**: el `frame_event` (NMI) se dispara cada iteración
+  porque el yield de la función **anidada** (`f_F4ED`, llamada desde el bucle) **consume
+  `g_yield_req`** y sólo retorna de ESA función; la región `f_C79E` sigue y vuelve a forzar. El
+  mecanismo de yield resumible es por-función; un spin-yield correcto necesita **ceder a nivel de
+  REGIÓN** (p. ej. contador de profundidad de retorno), no consumir `g_yield_req` en el anidado.
 - **`-m68020` para A1200: NO arranca** (el runtime/startup del engine no es 68020-limpio). El build
   vuelve a `-m68000`. Pendiente: limpiar el startup/shim para 68020 y reactivar (mejor codegen).
 - **Medición no-warp puede estar limitada por el emulador cycle-exact** (host); conviene medir en
