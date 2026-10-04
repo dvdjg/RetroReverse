@@ -85,6 +85,28 @@ cero”, sino **KB creciente + casos**.
   COLOR16-31). **Posición/paleta pendientes de calibrar** (se ve un sprite desplazado); queda tras
   `kSpritesOn=false` en el demo XL.
 
+## Medición real en A1200 (sin warp) — 2026
+
+Secuencia en tiempo real (emulador `cpu_cycle_exact`, 68EC020 @14,32 MHz): el motor avanzó
+**0 → 26 frames en ~8 s ≈ 3,3 fps**. Es decir, el port actual está **~15–18× por encima del
+presupuesto de 60 fps** (238k ciclos/frame → usa ~4M).
+
+**Diagnóstico:** el cuello **NO es el render** (BG por Blitter/Copper, sprites HW, todo DMA). Es la
+**lógica del port**, y el principal culpable es el **busy-wait del bucle principal**: DK hace
+`JSR F4ED; JMP C7E1` (spin) hasta que llega el NMI. En el port, ese spin ejecuta **miles de
+iteraciones por frame** (avanzando `tick` hasta el deadline). La NES "espera" así porque no tiene
+HALT; un port nativo **no debe** re-ejecutar el spin.
+
+**Optimización clave (prioritaria):** detectar el **bucle de espera** (spin sin I/O cuyo único
+efecto es esperar el NMI) y **ceder directamente al límite de frame** (`g_cyc = g_frame_deadline`),
+en vez de iterar. Coste: cambia el estado del PRNG que el spin actualiza (divergencia cósmética
+ya medida). Es la palanca #1 para acercarse a 60 fps. Otras: estado en locales/registros,
+`-m68020`, eliminar bounds-checks en `rd/wr` del HAL.
+
+**Conclusión revisada:** 60 fps en A1200 **exige optimizar el port** (no es automático). El modelo
+de intenciones ya libera el render; ahora hay que atacar la **ejecución de la lógica** (spin-yield
++ codegen rápido). Recomendado medir de nuevo tras el spin-yield: es la métrica que decide.
+
 ## Pasos recomendados (orden)
 
 1. **Input** (joystick→`$4016`) — barato, desbloquea jugable y medir fps con gameplay.
