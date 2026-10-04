@@ -566,3 +566,26 @@ la máquina de estados diverge **antes** de escribir `$0510=$38`. Conteo del RNG
 todos los frames probados. **Siguiente investigación**: localizar el primer punto donde el estado
 interno del juego (p. ej. `$0510`, `$44`, `$58`) diverge del oráculo frame a frame.
 
+
+## Driver de port por juego (`--driver`) — IMPLEMENTADO (v1)
+
+Nuevo fichero de **decisiones de port por juego** que el generador no puede inferir (¿el bucle es
+espera o trabajo? ¿el PRNG importa? ¿esta rutina se salta?). Spec completa en
+[`DRIVERS_PORT.md`](DRIVERS_PORT.md); ejemplo en [`../drivers/dk.n2a`](../drivers/dk.n2a).
+
+- **v1 implementado**: `patch <addr> <byte>...` (parchea el PRG antes de desensamblar/generar:
+  offset `16 + (addr-0x8000) % prg_size`) y `note <texto>` (documenta, se imprime).
+- **Planificadas** (especificadas): `wait`, `rng`, `vblank`, `skip`, `ram`, `speed`,
+  `frame_cycles`. Objetivo: que las "trampas" para mantener 50 fps sean declarativas y
+  reconstruibles, en vez de parches ad-hoc.
+- **Criterio**: preferir **modelar** (`rng`) sobre **saltar** (`skip`); todo `patch` con su `note`;
+  un driver **no debe esconder un bug** (arreglar el port primero).
+
+## Runner por defecto (KICK 1.3): el demo NO arranca en 1.3
+
+La plantilla del runner (`config/mcp-amiga-c-debug.uae`) usa **KICK13.rom (A500 1.3)**. Con ella el
+demo **no alcanza el estado "running"**: la resolucion de `g_eng_run_status` falla porque el canal
+lateral no responde. Con **KICK_A500_31 (3.1)** el demo arranca y mide **49.67 fps**. La ROM 1.3 es
+valida (`exec.library`, 256 KB) y el engine declara soporte 1.3 (OpenLibrary `dos.library` v0,
+`trackdisk.device` KS1.3), sin API 2.0+ evidente -> huele a **mecanismo de arranque/boot** (ficheros
+de la extension / arranque desde `dh0`) mas que a incompatibilidad de API. **Pendiente**.
